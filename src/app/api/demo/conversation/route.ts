@@ -175,21 +175,21 @@ function buildFrameZeroReply(known: KnownFields) {
 
 function buildFrameSystem(frameIndex: number): string {
   const ctx: Record<number, string> = {
-    1: "The traveler is picking from flight options. Help them choose fast and highlight the best value or speed.",
-    2: "The traveler is picking a hotel near the client office. Help them decide quickly.",
-    3: "The traveler is reviewing a compliance report flagging a visa requirement and a hotel budget exception. Keep it clear.",
-    4: "The traveler is choosing a travel bundle. A is fully compliant, B saves money, C is strategic. Be decisive and helpful.",
-    5: "The traveler is reviewing the approval email draft. Offer any last tweaks.",
-    6: "The manager rejected the hotel. A compliant lower-cost alternative is on screen. Make the pivot feel easy.",
-    7: "The trip is approved. The traveler is running through their pre-travel checklist. Keep the energy high.",
-    8: "Live travel mode with real-time flight, weather, and hotel status. Keep them informed and calm.",
-    9: "A thunderstorm caused a disruption and rebooking happened automatically. Reassure the traveler it is handled.",
-    10: "The only rebooking option is over budget. An emergency exception email is ready. Make the next step obvious.",
-    11: "The traveler just landed and is picking transport to the hotel. Give a quick helpful nudge.",
-    12: "The traveler is snapping a restaurant receipt for expenses. Make it feel effortless.",
-    13: "Emergency contacts are on screen. Be calm and reassuring.",
-    14: "The trip is wrapping up and final spend is summarized. End on a positive note.",
-    15: "The trip is archived. Close it out with warmth.",
+    2: "The traveler is picking from flight options. Help them choose fast and highlight the best value or speed.",
+    3: "The traveler is picking a hotel near the client office. Help them decide quickly.",
+    4: "The traveler is reviewing a compliance report flagging a visa requirement and a hotel budget exception. Keep it clear.",
+    5: "The traveler is choosing a travel bundle. A is fully compliant, B saves money, C is strategic. Be decisive and helpful.",
+    6: "The traveler is reviewing the approval email draft. Offer any last tweaks.",
+    7: "The manager rejected the hotel. A compliant lower-cost alternative is on screen. Make the pivot feel easy.",
+    8: "The trip is approved. The traveler is running through their pre-travel checklist. Keep the energy high.",
+    9: "Live travel mode with real-time flight, weather, and hotel status. Keep them informed and calm.",
+    10: "A thunderstorm caused a disruption and rebooking happened automatically. Reassure the traveler it is handled.",
+    11: "The only rebooking option is over budget. An emergency exception email is ready. Make the next step obvious.",
+    12: "The traveler just landed and is picking transport to the hotel. Give a quick helpful nudge.",
+    13: "The traveler is snapping a restaurant receipt for expenses. Make it feel effortless.",
+    14: "Emergency contacts are on screen. Be calm and reassuring.",
+    15: "The trip is wrapping up and final spend is summarized. End on a positive note.",
+    16: "The trip is archived. Close it out with warmth.",
   };
   const description = ctx[frameIndex] ?? "The traveler is interacting with their AI travel concierge.";
   return `You are Lockey, a warm and energetic AI travel concierge. ${description} Reply in 1 to 2 sentences. Be helpful, friendly, and direct. No filler phrases and no em dashes.`;
@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (frameIndex === 0) {
+  if (frameIndex === 1) {
     try {
       const updatedKnown = await extractFrameZeroKnownFields(messages, sanitizeKnownFields(incomingKnown));
       const reply = buildFrameZeroReply(updatedKnown);
