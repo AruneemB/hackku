@@ -69,15 +69,6 @@ Policy Budget Caps:
 
 Return ONLY a JSON object matching this structure:
 {
-  "visa": {
-    "destinationCountry": "string (ISO 2-letter code)",
-    "citizenship": "string (e.g. US)",
-    "visaRequired": boolean,
-    "visaType": "string | null",
-    "stayLimitDays": number,
-    "notes": "string",
-    "applicationUrl": "string | null"
-  },
   "hotelNightlyCapUsd": number,
   "flightCapUsd": number,
   "mealAllowancePerDayUsd": number,
@@ -86,7 +77,7 @@ Return ONLY a JSON object matching this structure:
   "mascotSummary": "A friendly summary of the findings, including visa status and whether the trip is in compliance."
 }
 
-Ensure the JSON is valid and includes all fields. The "visa" field should exactly match the Visa Requirements provided above. 
+Ensure the JSON is valid and includes all fields. 
 If costs are provided, compare them against the policy caps to determine "requiresManagerApproval" and "approvalReason".`;
 }
 
