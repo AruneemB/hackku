@@ -14,21 +14,6 @@
 //   Mascot narrates each transition.
 // ============================================================
 
-// TODO: "use client"
-// TODO: import { useState, useEffect } from "react"
-// TODO: import { FlightSearchStatus } from "@/components/flights/FlightSearchStatus"
-// TODO: import { HotelMap } from "@/components/hotels/HotelMap"
-// TODO: import { PolicySummary } from "@/components/policy/PolicySummary"
-// TODO: import { BundleSelector } from "@/components/trip/BundleSelector"
-// TODO: import { useTrip } from "@/hooks/useTrip"
-// TODO: import { useMascot } from "@/hooks/useMascot"
-
-// TODO: export default function PlanningPage({ params }: { params: { id: string } }) {
-//   // const { trip } = useTrip(params.id)
-//   // const [step, setStep] = useState<"flights" | "hotels" | "policy" | "bundles">("flights")
-//   // Render current step component, advance to next on completion
-// }
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
