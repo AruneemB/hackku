@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMascot } from "@/hooks/useMascot";
 
-interface AlternativeFlight {
+export interface AlternativeFlight {
   flightNumber: string;
   carrier: string;
   departureTime: string;
@@ -13,7 +13,7 @@ interface AlternativeFlight {
   destination: string;
 }
 
-interface ExceptionDraft {
+export interface ExceptionDraft {
   subject: string;
   body: string;
 }
@@ -22,38 +22,25 @@ interface CrisisAlertProps {
   tripId: string;
   delayMinutes: number;
   isCancelled: boolean;
+  alternativeFlight: AlternativeFlight | null;
+  isOverBudget: boolean;
+  exceptionDraft: ExceptionDraft | null;
   onRebooked?: () => void;
 }
 
-export function CrisisAlert({ tripId, delayMinutes, isCancelled, onRebooked }: CrisisAlertProps) {
+export function CrisisAlert({
+  tripId,
+  delayMinutes,
+  isCancelled,
+  alternativeFlight,
+  isOverBudget,
+  exceptionDraft,
+  onRebooked,
+}: CrisisAlertProps) {
   const mascot = useMascot();
-  const [alternative, setAlternative] = useState<AlternativeFlight | null>(null);
-  const [isOverBudget, setIsOverBudget] = useState(false);
-  const [exceptionDraft, setExceptionDraft] = useState<ExceptionDraft | null>(null);
-  const [loading, setLoading] = useState(true);
   const [sendingException, setSendingException] = useState(false);
   const [exceptionSent, setExceptionSent] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-
-  useEffect(() => {
-    fetch(`/api/trips/${tripId}/crisis?delayMinutes=${delayMinutes}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setAlternative(data.alternative ?? null);
-        setIsOverBudget(data.isOverBudget ?? false);
-        setExceptionDraft(data.exceptionDraft ?? null);
-        setLoading(false);
-
-        const reason = isCancelled
-          ? "Your flight has been cancelled."
-          : `Your flight is delayed by ${delayMinutes} minutes, which will cause you to miss your connection.`;
-        mascot.say(
-          `Kelli, urgent update. ${reason} I've found an alternative and I'm ready to help you rebook.`,
-          "urgent"
-        );
-      })
-      .catch(() => setLoading(false));
-  }, [tripId, delayMinutes, isCancelled]);
 
   const handleConfirmRebook = () => {
     setConfirmed(true);
@@ -65,7 +52,7 @@ export function CrisisAlert({ tripId, delayMinutes, isCancelled, onRebooked }: C
     if (!exceptionDraft) return;
     setSendingException(true);
     try {
-      await fetch(`/api/trips/${tripId}/approve`, {
+      await fetch(`/api/trips/${tripId}/exception`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject: exceptionDraft.subject, body: exceptionDraft.body }),
@@ -93,23 +80,19 @@ export function CrisisAlert({ tripId, delayMinutes, isCancelled, onRebooked }: C
         <p className="mt-2 text-red-200 text-sm">{disruptionDesc}</p>
       </div>
 
-      {loading && (
-        <p className="text-red-300 text-sm animate-pulse">Finding your alternatives…</p>
-      )}
-
       {/* Alternative flight card */}
-      {!loading && alternative && (
+      {alternativeFlight && (
         <div className="w-full max-w-xl bg-red-900 border border-red-700 rounded-xl p-5">
           <h2 className="text-lg font-semibold text-white mb-3">Alternative Found</h2>
           <div className="flex justify-between items-center text-sm text-red-200 mb-1">
-            <span>{alternative.carrier} · {alternative.flightNumber}</span>
-            <span className="text-white font-semibold">${alternative.priceUsd}</span>
+            <span>{alternativeFlight.carrier} · {alternativeFlight.flightNumber}</span>
+            <span className="text-white font-semibold">${alternativeFlight.priceUsd}</span>
           </div>
           <div className="text-xs text-red-300">
-            {alternative.origin} → {alternative.destination}
+            {alternativeFlight.origin} → {alternativeFlight.destination}
           </div>
           <div className="text-xs text-red-300">
-            Departs: {new Date(alternative.departureTime).toLocaleString()} · Arrives: {new Date(alternative.arrivalTime).toLocaleString()}
+            Departs: {new Date(alternativeFlight.departureTime).toLocaleString()} · Arrives: {new Date(alternativeFlight.arrivalTime).toLocaleString()}
           </div>
 
           {isOverBudget && (
@@ -132,7 +115,7 @@ export function CrisisAlert({ tripId, delayMinutes, isCancelled, onRebooked }: C
       )}
 
       {/* No alternative — escalation */}
-      {!loading && !alternative && (
+      {!alternativeFlight && (
         <div className="w-full max-w-xl bg-red-900 border border-red-700 rounded-xl p-5 text-center">
           <p className="text-red-200 text-sm mb-3">No automated alternative available. Please contact the airline directly.</p>
           <div className="text-white font-semibold">American Airlines: 1-800-433-7300</div>

@@ -1,7 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { useLiveTracking } from "@/hooks/useLiveTracking";
+import { useMascot } from "@/hooks/useMascot";
 import { CrisisAlert } from "./CrisisAlert";
+import type { AlternativeFlight, ExceptionDraft } from "./CrisisAlert";
 import type { Trip } from "@/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -16,15 +19,56 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled: "text-red-400",
 };
 
+interface CrisisPayload {
+  alternative: AlternativeFlight | null;
+  isOverBudget: boolean;
+  exceptionDraft: ExceptionDraft | null;
+}
+
 export function LiveDashboard({ trip }: { trip: Trip }) {
   const { flightStatus, weather, isInCrisis, delayMinutes, isCancelled, gate } = useLiveTracking(trip);
+  const mascot = useMascot();
+
+  const [crisisPayload, setCrisisPayload] = useState<CrisisPayload | null>(null);
+  const fetchedCrisis = useRef(false);
+
+  useEffect(() => {
+    if (!isInCrisis || fetchedCrisis.current) return;
+    fetchedCrisis.current = true;
+
+    fetch(`/api/trips/${trip._id}/crisis?delayMinutes=${delayMinutes}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setCrisisPayload({
+          alternative: data.alternative ?? null,
+          isOverBudget: data.isOverBudget ?? false,
+          exceptionDraft: data.exceptionDraft ?? null,
+        });
+        if (data.mascotMessage) {
+          mascot.say(data.mascotMessage, "urgent");
+        }
+      })
+      .catch(() => {
+        setCrisisPayload({ alternative: null, isOverBudget: false, exceptionDraft: null });
+      });
+  }, [isInCrisis, delayMinutes, trip._id]);
 
   if (isInCrisis) {
+    if (!crisisPayload) {
+      return (
+        <div className="fixed inset-0 z-50 bg-red-950 text-white flex items-center justify-center">
+          <p className="text-red-300 text-sm animate-pulse">Detecting disruption…</p>
+        </div>
+      );
+    }
     return (
       <CrisisAlert
         tripId={trip._id}
         delayMinutes={delayMinutes}
         isCancelled={isCancelled}
+        alternativeFlight={crisisPayload.alternative}
+        isOverBudget={crisisPayload.isOverBudget}
+        exceptionDraft={crisisPayload.exceptionDraft}
       />
     );
   }
