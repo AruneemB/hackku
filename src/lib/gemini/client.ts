@@ -10,6 +10,9 @@ export function getGeminiChat(systemPrompt?: string) {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const result = await embeddingModel.embedContent(text)
+  const result = await embeddingModel.embedContent({
+    content: { parts: [{ text }], role: "user" },
+    outputDimensionality: 768,
+  })
   return result.embedding.values
 }

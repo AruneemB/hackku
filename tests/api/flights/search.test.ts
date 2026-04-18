@@ -64,8 +64,8 @@ describe("POST /api/flights/search", () => {
     const data = await res.json();
 
     expect(res.status).toBe(400);
-    expect(data.errors).toContain("windowDays must be a positive number.");
-    expect(data.errors).toContain("radiusMiles must be a non-negative number.");
+    expect(data.errors).toContain("windowDays must be an integer between 1 and 7.");
+    expect(data.errors).toContain("radiusMiles must be between 0 and 300.");
   });
 
   it("should call runFairGrid and return results on success", async () => {

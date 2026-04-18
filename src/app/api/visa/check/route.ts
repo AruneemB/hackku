@@ -1,3 +1,7 @@
+import { NextRequest, NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/mongodb/client";
+import VisaRequirement from "@/lib/mongodb/models/VisaRequirement";
+
 // ============================================================
 // API ROUTE: Visa Check
 // OWNER: Track C (Data & Integrations)
@@ -19,32 +23,57 @@
 //   "notes": "Schengen Area — no visa for US citizens up to 90 days",
 //   "applicationUrl": null
 // }
-//
-// RESPONSE (200, visa required example — Japan):
-// {
-//   "destinationCountry": "JP",
-//   "visaRequired": false,
-//   "stayLimitDays": 90,
-//   "notes": "US citizens can visit Japan without a visa for up to 90 days."
-// }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import VisaRequirement from "@/lib/mongodb/models/VisaRequirement"
+export async function POST(req: NextRequest) {
+  try {
+    await connectToDatabase();
+    
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 }
+      );
+    }
 
-// TODO: export async function POST(req: NextRequest) {
-//   // const { destinationCountry, citizenship } = await req.json()
-//   // const doc = await VisaRequirement.findOne({ destinationCountry, citizenship })
-//   // if (!doc) return 404
-//   // return NextResponse.json(doc)
-// }
+    const { destinationCountry, citizenship } = body;
 
-import { NextResponse } from "next/server";
+    // Input Validation
+    if (!destinationCountry || typeof destinationCountry !== "string") {
+      return NextResponse.json(
+        { error: "destinationCountry is required and must be a string." },
+        { status: 400 }
+      );
+    }
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
-}
+    if (!citizenship || typeof citizenship !== "string") {
+      return NextResponse.json(
+        { error: "citizenship is required and must be a string." },
+        { status: 400 }
+      );
+    }
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+    const doc = await VisaRequirement.findOne({
+      destinationCountry,
+      citizenship,
+    });
+
+    if (!doc) {
+      return NextResponse.json(
+        { error: "Visa requirement record not found for this destination and citizenship." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(doc);
+  } catch (error) {
+    console.error("Error checking visa requirements:", error);
+    return NextResponse.json(
+      { error: "Internal server error while checking visa requirements." },
+      { status: 500 }
+    );
+  }
 }
