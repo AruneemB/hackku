@@ -16,10 +16,11 @@
 //   (created by scripts/create-vector-index.ts)
 // ============================================================
 
-// TODO: import clientPromise from "@/lib/mongodb/client"
-// TODO: import { generateEmbedding } from "@/lib/gemini/client"
-// TODO: import { geminiModel } from "@/lib/gemini/client"
-// TODO: import { buildPolicySummaryPrompt } from "@/lib/gemini/prompts"
+import clientPromise from "@/lib/mongodb/client";
+import { generateEmbedding, geminiModel } from "@/lib/gemini/client";
+import { buildPolicySummaryPrompt } from "@/lib/gemini/prompts";
+import { Trip } from "@/types/trip";
+import { PolicyFindings } from "@/types/policy";
 
 // TODO: export async function queryPolicyForTrip(trip: Trip): Promise<PolicyFindings> {
 //   // Step 1: Generate query embedding
