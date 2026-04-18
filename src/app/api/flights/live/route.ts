@@ -40,7 +40,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (process.env.ALLOW_FLIGHT_STATUS_WRITE !== "true") {
+    return NextResponse.json({ error: "disabled" }, { status: 403 });
+  }
   const update = await req.json();
+  if (!update?.flightNumber || !update?.status) {
+    return NextResponse.json({ error: "flightNumber and status required" }, { status: 400 });
+  }
   await writeFlightStatus(update);
   return NextResponse.json({ success: true });
 }
