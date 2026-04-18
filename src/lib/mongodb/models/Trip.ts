@@ -27,8 +27,11 @@ const ReceiptSubSchema = new Schema(
     },
     total: { type: Number, required: true },
     currency: { type: String, required: true },
+    originalAmount: { type: Types.Decimal128, default: null },
     date: { type: Date, required: true },
     sanitized: { type: Boolean, default: false },
+    extractedByAI: { type: Boolean, default: true },
+    imageUrl: { type: String, default: null },
   },
   { _id: false }
 );
@@ -51,7 +54,7 @@ const TripSchema = new Schema(
     },
     destination: {
       city: { type: String, required: true },
-      country: { type: String, required: true }, // ISO 3166-1 alpha-2
+      country: { type: String, required: true },
       officeLat: { type: Number, required: true },
       officeLng: { type: Number, required: true },
     },
@@ -79,7 +82,6 @@ const TripSchema = new Schema(
   { timestamps: true }
 );
 
-// Indexes
 TripSchema.index({ userId: 1 });
 TripSchema.index({ status: 1 });
 TripSchema.index({ "destination.country": 1 });

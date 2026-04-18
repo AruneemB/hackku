@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Trip, TripBundle, TripStatus } from "@/types/trip";
 import type { Flight } from "@/types/flight";
+import type { Hotel } from "@/types/hotel";
 
 export function useTrip(tripId: string) {
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -91,5 +92,22 @@ export function useTrip(tripId: string) {
     }
   };
 
-  return { trip, isLoading, error, selectBundle, updateStatus, updateFlights, refresh: fetchTrip };
+  const updateHotels = async (hotels: Hotel[]): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/trips/${tripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotels }),
+      })
+      if (!response.ok) throw new Error("Failed to update hotels")
+      const updatedTrip = await response.json()
+      setTrip(updatedTrip)
+      return true
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+      return false
+    }
+  }
+
+  return { trip, isLoading, error, selectBundle, updateStatus, updateFlights, updateHotels, refresh: fetchTrip };
 }

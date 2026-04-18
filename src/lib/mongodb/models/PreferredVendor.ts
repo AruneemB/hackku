@@ -50,7 +50,6 @@ const PreferredVendorSchema = new Schema(
   { timestamps: true }
 );
 
-// Enable geospatial queries
 PreferredVendorSchema.index({ location: "2dsphere" });
 PreferredVendorSchema.index({ type: 1, country: 1 });
 

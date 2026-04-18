@@ -14,25 +14,62 @@
 //     checkIn: "2025-09-14", checkOut: "2025-09-19" })
 // ============================================================
 
-// TODO: interface HotelSearchParams {
-//   city: string;
-//   country: string;
-//   checkIn: string;    // YYYY-MM-DD
-//   checkOut: string;
-//   maxResultsPerNight?: number; // cap for demo
-// }
+import { findVendorsNearOffice } from "./geoSearch"
+import type { Hotel } from "@/types"
 
-// TODO: export async function searchHotels(params: HotelSearchParams): Promise<Hotel[]> {
-//   // Option A: SerpAPI Google Hotels
-//   // Option B: Return preferred vendors from MongoDB + supplement with API results
-//
-//   // EXAMPLE RETURN:
-//   // [
-//   //   { id: "hotel_marriott_milan", name: "Marriott Milan",
-//   //     nightlyRateUsd: 185, preferred: true, distanceFromOfficeKm: 0.8 },
-//   //   { id: "hotel_nh_collection", name: "NH Collection Milano",
-//   //     nightlyRateUsd: 159, preferred: false, distanceFromOfficeKm: 2.1 },
-//   //   { id: "hotel_bulgari", name: "Bulgari Hotel Milano",
-//   //     nightlyRateUsd: 890, preferred: false, distanceFromOfficeKm: 1.2 }
-//   // ]
-// }
+export interface HotelSearchParams {
+  city: string
+  country: string
+  checkIn: string       // YYYY-MM-DD
+  checkOut: string      // YYYY-MM-DD
+  officeLat: number
+  officeLng: number
+  hotelNightlyCapUsd: number
+  radiusKm?: number
+}
+
+export async function searchHotels(params: HotelSearchParams): Promise<Hotel[]> {
+  const {
+    country, checkIn, checkOut,
+    officeLat, officeLng,
+    hotelNightlyCapUsd,
+    radiusKm = 25,
+  } = params
+
+  const checkInDate = new Date(checkIn)
+  const checkOutDate = new Date(checkOut)
+  const nights = Math.max(
+    1,
+    Math.round((checkOutDate.getTime() - checkInDate.getTime()) / 86_400_000)
+  )
+
+  const vendors = await findVendorsNearOffice({
+    lat: officeLat,
+    lng: officeLng,
+    radiusKm,
+    country,
+    type: "hotel",
+  })
+
+  return vendors.map((v) => {
+    const distKm = Math.round((v.distMeters / 1000) * 100) / 100
+    const over = v.nightlyRateUsd > hotelNightlyCapUsd
+
+    return {
+      id: v._id.toString(),
+      name: v.name,
+      location: v.location,
+      address: v.address ?? "",
+      distanceFromOfficeKm: distKm,
+      nightlyRateUsd: v.nightlyRateUsd,
+      amenities: v.amenities ?? { freeBreakfast: false, wifi: false, gym: false, parking: false },
+      preferred: true,
+      overPolicyCap: over,
+      excessAboveCapUsd: over ? Math.round((v.nightlyRateUsd - hotelNightlyCapUsd) * 100) / 100 : 0,
+      checkIn: checkInDate,
+      checkOut: checkOutDate,
+      totalCostUsd: Math.round(v.nightlyRateUsd * nights * 100) / 100,
+      source: "preferred_vendors_db",
+    } satisfies Hotel
+  })
+}

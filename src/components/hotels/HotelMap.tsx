@@ -6,8 +6,8 @@
 //   locations using GeoJSON coordinates. Preferred vendors are
 //   highlighted with a star marker.
 //
-//   Recommended library: react-leaflet (lightweight, free, OSM tiles)
-//   Alternative: Google Maps JS SDK (requires API key)
+//   Uses react-leaflet with OpenStreetMap tiles (no API key).
+//   Loaded via next/dynamic (ssr: false) to avoid SSR crash.
 //
 // PROPS:
 //   hotels: Hotel[]
@@ -15,19 +15,24 @@
 //   officeLng: number
 // ============================================================
 
-// TODO: "use client"
-// TODO: import type { Hotel } from "@/types"
-// For Leaflet: import dynamic from "next/dynamic" (avoids SSR issues)
+"use client"
 
-// TODO: interface HotelMapProps {
-//   hotels: Hotel[];
-//   officeLat: number;
-//   officeLng: number;
-// }
+import dynamic from "next/dynamic"
+import type { Hotel } from "@/types"
 
-// TODO: export function HotelMap({ hotels, officeLat, officeLng }: HotelMapProps) {
-//   // Center map on officeLat/officeLng
-//   // Pin for office: 🏢 blue marker
-//   // Pin for each hotel: ⭐ gold if preferred, 📍 gray if not
-//   // Click pin → shows HotelCard popup
-// }
+export interface HotelMapProps {
+  hotels: Hotel[]
+  officeLat: number
+  officeLng: number
+}
+
+// Dynamically import the inner map so Leaflet never runs on the server
+const HotelMapInner = dynamic(() => import("./HotelMapInner"), { ssr: false })
+
+export function HotelMap(props: HotelMapProps) {
+  return (
+    <div className="w-full h-72 rounded-xl overflow-hidden border border-gray-800">
+      <HotelMapInner {...props} />
+    </div>
+  )
+}

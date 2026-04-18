@@ -14,6 +14,7 @@ type MascotState = {
   visibleLength: number;
   tone: ToneKey;
   isSpeaking: boolean;
+  isThinking: boolean;
 };
 
 const listeners = new Set<() => void>();
@@ -23,6 +24,7 @@ let mascotState: MascotState = {
   visibleLength: 0,
   tone: "neutral",
   isSpeaking: false,
+  isThinking: false,
 };
 
 let fallbackTimer: number | null = null;
@@ -248,7 +250,7 @@ async function say(text: string, newTone?: ToneKey) {
   clearSpeechWork();
 
   const tone = newTone ?? mascotState.tone;
-  setMascotState({ speech: text, visibleLength: 0, tone, isSpeaking: true });
+  setMascotState({ speech: text, visibleLength: 0, tone, isSpeaking: true, isThinking: false });
 
   const ok = await speakWithElevenLabs(text, tone);
   if (!ok) await speakWithBrowser(text, tone);
@@ -258,10 +260,14 @@ function setTone(tone: ToneKey) {
   setMascotState({ tone });
 }
 
+function setThinking(isThinking: boolean) {
+  setMascotState({ isThinking });
+}
+
 function stopSpeaking() {
   if (typeof window === "undefined") return;
   clearSpeechWork();
-  setMascotState({ isSpeaking: false, visibleLength: mascotState.speech.length });
+  setMascotState({ isSpeaking: false, isThinking: false, visibleLength: mascotState.speech.length });
 }
 
 export function useMascot() {
@@ -278,5 +284,5 @@ export function useMascot() {
     };
   }, []);
 
-  return { ...state, say, setTone, stopSpeaking };
+  return { ...state, say, setTone, setThinking, stopSpeaking };
 }

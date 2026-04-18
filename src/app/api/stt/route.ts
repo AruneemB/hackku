@@ -1,53 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+const ALLOWED_MIME_TYPES = new Set([
+  "audio/webm", "audio/wav", "audio/mpeg", "audio/mp4", "audio/ogg",
+]);
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(req: NextRequest) {
   const { audio, mimeType } = (await req.json()) as { audio: string; mimeType: string };
 
-  if (!audio) {
+  if (typeof audio !== "string" || !audio) {
     return NextResponse.json({ error: "No audio data" }, { status: 400 });
   }
 
   const audioMime = (mimeType || "audio/webm").split(";")[0];
+  if (!ALLOWED_MIME_TYPES.has(audioMime)) {
+    return NextResponse.json({ error: "Unsupported audio type" }, { status: 400 });
+  }
+
+  const approxBytes = Math.ceil((audio.length * 3) / 4);
+  if (approxBytes > MAX_AUDIO_BYTES) {
+    return NextResponse.json({ error: "Audio payload too large" }, { status: 413 });
+  }
 
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "Kelli Travel Concierge",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${audioMime};base64,${audio}`,
-                },
-              },
-              {
-                type: "text",
-                text: "Transcribe this audio exactly as the person said it. Return only the spoken words — no labels, no punctuation edits, no commentary. If inaudible or empty, return an empty string.",
-              },
-            ],
-          },
-        ],
-      }),
-    });
+    const result = await model.generateContent([
+      { inlineData: { mimeType: audioMime, data: audio } },
+      "Transcribe this audio exactly as the person said it. Return only the spoken words — no labels, no punctuation edits, no commentary. If inaudible or empty, return an empty string.",
+    ]);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[stt] OpenRouter error:", res.status, errText);
-      return NextResponse.json({ error: "Transcription failed" }, { status: 500 });
-    }
-
-    const data = (await res.json()) as { choices: { message: { content: string } }[] };
-    const text = data.choices?.[0]?.message?.content?.trim() ?? "";
+    const text = result.response.text().trim();
     return NextResponse.json({ text });
   } catch (err) {
     console.error("[stt] error:", err);
