@@ -12,33 +12,44 @@
 //   → save to trip.receipts[]
 // ============================================================
 
-// TODO: import { geminiModel } from "./client"
-// TODO: import type { GeminiReceiptExtraction } from "@/types"
+import { geminiModel } from "./client"
+import type { GeminiReceiptExtraction } from "@/types"
 
-// TODO: export async function extractReceiptData(
-//   base64Image: string,
-//   mimeType: string   // e.g. "image/jpeg"
-// ): Promise<GeminiReceiptExtraction> {
-//
-//   // Build the multimodal prompt:
-//   // const prompt = `You are a receipt scanner. Extract from this image:
-//   //   merchant name, total amount, currency, date.
-//   //   Also flag if any credit card numbers or SSNs are visible (hasPII: true).
-//   //   Return ONLY valid JSON in this shape:
-//   //   { merchant, amount, currency, date, hasPII, confidence }`
-//
-//   // Pass the image as an inline part:
-//   // const imagePart = { inlineData: { data: base64Image, mimeType } }
-//   // const result = await geminiModel.generateContent([prompt, imagePart])
-//   // return JSON.parse(result.response.text())
-//
-//   // EXAMPLE RETURN:
-//   // {
-//   //   "merchant": "Ristorante Da Enzo",
-//   //   "amount": "43.50",
-//   //   "currency": "EUR",
-//   //   "date": "15/09/2025",
-//   //   "hasPII": false,
-//   //   "confidence": 0.97
-//   // }
-// }
+const RECEIPT_PROMPT = `You are a receipt OCR scanner. Extract from this receipt image:
+- merchant: the business name
+- amount: the total charged (number only, no symbol)
+- currency: ISO 4217 code (e.g. USD, EUR, JPY) — infer from locale/symbol if not explicit
+- date: the transaction date as shown
+- category: one of "meal", "transport", "hotel", or "other" — infer from the merchant name/type
+- hasPII: true if credit card numbers, SSNs, or CVVs are visible
+- confidence: 0.0–1.0
+
+Return ONLY a JSON object, no markdown, no explanation. Example:
+{"merchant":"Ristorante Da Enzo","amount":"43.50","currency":"EUR","date":"15/09/2025","category":"meal","hasPII":false,"confidence":0.97}`
+
+export async function extractReceiptData(
+  base64Image: string,
+  mimeType: string,
+  attempt = 0
+): Promise<GeminiReceiptExtraction> {
+  try {
+    const imagePart = { inlineData: { data: base64Image, mimeType } }
+    const result = await geminiModel.generateContent([RECEIPT_PROMPT, imagePart])
+    const text = result.response.text().trim()
+    const jsonText = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")
+    return JSON.parse(jsonText) as GeminiReceiptExtraction
+  } catch (err: unknown) {
+    const apiErr = err as { status?: number; errorDetails?: { "@type": string; retryDelay?: string }[] }
+    if (apiErr?.status === 429 && attempt < 2) {
+      const retryInfo = apiErr.errorDetails?.find(
+        (d) => d["@type"] === "type.googleapis.com/google.rpc.RetryInfo"
+      )
+      const delaySecs = parseInt(retryInfo?.retryDelay ?? "99", 10) || 99
+      // Only retry for short per-minute limits; bail immediately on daily quota exhaustion
+      if (delaySecs > 10) throw new Error("Gemini quota exhausted — try again later or upgrade your API key.")
+      await new Promise((resolve) => setTimeout(resolve, (delaySecs + 1) * 1000))
+      return extractReceiptData(base64Image, mimeType, attempt + 1)
+    }
+    throw err
+  }
+}

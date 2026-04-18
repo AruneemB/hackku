@@ -46,6 +46,7 @@ export interface GeminiReceiptExtraction {
   amount: string;
   currency: string;
   date: string;        // raw string from image, normalized later
+  category: "meal" | "transport" | "hotel" | "other";
   hasPII: boolean;     // true if card/SSN detected
   confidence: number;  // 0-1
 }

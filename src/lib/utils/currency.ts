@@ -10,24 +10,28 @@
 //   and Decimal128 safely.
 // ============================================================
 
-// TODO: import { Decimal128 } from "mongodb"
+import { Decimal128 } from "mongodb"
 
-// TODO: export function toDecimal128(value: number | string): Decimal128 {
-//   // Converts number or string to MongoDB Decimal128
-//   // return Decimal128.fromString(String(value))
-// }
+export function toDecimal128(value: number | string): Decimal128 {
+  return Decimal128.fromString(Number(value).toFixed(2))
+}
 
-// TODO: export function fromDecimal128(value: Decimal128 | undefined): string {
-//   // Serializes Decimal128 to string for JSON
-//   // return value?.toString() ?? "0.00"
-// }
+export function fromDecimal128(value: Decimal128 | undefined): string {
+  return value?.toString() ?? "0.00"
+}
 
-// TODO: export function convertCurrency(
-//   amount: number,
-//   fromCurrency: string,
-//   toCurrency: string
-// ): Promise<number> {
-//   // Convert receipt amount to USD for storage
-//   // Use a free exchange rate API (e.g. open.er-api.com)
-//   // EXAMPLE: convertCurrency(43.50, "EUR", "USD") → 47.23
-// }
+export async function convertCurrency(
+  amount: number,
+  fromCurrency: string,
+  toCurrency = "USD"
+): Promise<number> {
+  if (fromCurrency.toUpperCase() === toCurrency.toUpperCase()) return amount
+  const res = await fetch(
+    `https://open.er-api.com/v6/latest/${fromCurrency.toUpperCase()}`
+  )
+  if (!res.ok) throw new Error(`Exchange rate fetch failed: ${res.status}`)
+  const data = await res.json()
+  const rate = data.rates?.[toCurrency.toUpperCase()]
+  if (!rate) throw new Error(`No rate for ${fromCurrency} → ${toCurrency}`)
+  return Math.round(amount * rate * 100) / 100
+}

@@ -17,18 +17,18 @@
 //   const response = await chat.sendMessage("What is the Milan hotel cap?")
 // ============================================================
 
-// TODO: import { GoogleGenerativeAI } from "@google/generative-ai"
-// TODO: const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-// TODO: export const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-pro" })
-// TODO: export const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
-//
-// TODO: export function getGeminiChat(systemPrompt?: string) {
-//   // Returns a new chat session with optional system instruction
-//   // return geminiModel.startChat({ systemInstruction: systemPrompt })
-// }
-//
-// TODO: export async function generateEmbedding(text: string): Promise<number[]> {
-//   // Used by scripts/seed-mongodb.ts to embed policy handbook excerpts
-//   // and by lib/policy/vectorSearch.ts to embed the user's query
-//   // EXAMPLE RETURN: [0.012, -0.345, 0.789, ...] (768 floats)
-// }
+import { GoogleGenerativeAI } from "@google/generative-ai"
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+
+export const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+export const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
+
+export function getGeminiChat(systemPrompt?: string) {
+  return geminiModel.startChat({ systemInstruction: systemPrompt })
+}
+
+export async function generateEmbedding(text: string): Promise<number[]> {
+  const result = await embeddingModel.embedContent(text)
+  return result.embedding.values
+}
