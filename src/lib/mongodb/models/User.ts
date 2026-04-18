@@ -13,8 +13,28 @@
 // EXAMPLE DOC → see src/types/user.ts
 // ============================================================
 
-// TODO: import mongoose, { Schema, model, models } from "mongoose"
-// TODO: const PassportSchema = new Schema({ number, expiry: Date, country })
-// TODO: const UserSchema = new Schema({ name, email, citizenship, passport,
-//         department, managerId, homeAirports: [String] }, { timestamps: true })
-// TODO: export default models.User || model("User", UserSchema)
+import { Schema, model, models } from "mongoose";
+
+const PassportSchema = new Schema(
+  {
+    number: { type: String, required: true },
+    expiry: { type: Date, required: true },
+    country: { type: String, required: true },
+  },
+  { _id: false }
+);
+
+const UserSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    citizenship: { type: String, required: true },
+    passport: { type: PassportSchema, required: true },
+    department: { type: String, required: true },
+    managerId: { type: Schema.Types.ObjectId, ref: "User" },
+    homeAirports: [{ type: String }],
+  },
+  { timestamps: true }
+);
+
+export default models.User || model("User", UserSchema);

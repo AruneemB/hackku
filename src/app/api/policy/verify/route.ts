@@ -37,3 +37,13 @@
 //   // PATCH trip.policyFindings = findings
 //   // Return findings
 // }
+
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "scaffold" });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "scaffold" });
+}

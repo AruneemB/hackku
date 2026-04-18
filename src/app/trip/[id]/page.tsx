@@ -24,3 +24,12 @@
 //   // }
 //   // redirect(`/trip/${params.id}/${ROUTES[trip.status]}`)
 // }
+
+export default function TripHubPage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <p className="text-xl text-gray-500">Trip Hub — scaffold in progress</p>
+    </main>
+  );
+}
+

@@ -28,3 +28,12 @@
 //   // const [step, setStep] = useState<"flights" | "hotels" | "policy" | "bundles">("flights")
 //   // Render current step component, advance to next on completion
 // }
+
+export default function PlanningPage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <p className="text-xl text-gray-500">Planning — scaffold in progress</p>
+    </main>
+  );
+}
+

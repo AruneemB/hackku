@@ -26,3 +26,12 @@
 //   // Render: ReceiptScanner → TripSummary → Archive button
 //   // Privacy summary section at bottom (Frame 16)
 // }
+
+export default function PostTripPage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <p className="text-xl text-gray-500">Post Trip — scaffold in progress</p>
+    </main>
+  );
+}
+

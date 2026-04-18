@@ -23,3 +23,12 @@
 //   // Send approval email on mount (if not already sent)
 //   // Render ApprovalStatus or RejectionRecovery based on trip.approvalThread.status
 // }
+
+export default function ApprovalPage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <p className="text-xl text-gray-500">Approval — scaffold in progress</p>
+    </main>
+  );
+}
+
