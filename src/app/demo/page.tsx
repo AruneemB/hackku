@@ -2271,6 +2271,29 @@ export default function DemoPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
 
+  // Ensure visa info is available at frame 7 even if frame 3 was skipped
+  useEffect(() => {
+    if (!isProgressHydrated || currentIndex !== 7 || visaInfo !== null) return;
+    const country = tripData?.country ?? DEMO_DEFAULTS.country;
+    if (visaFetchedForRef.current === country) return;
+    visaFetchedForRef.current = country;
+    let cancelled = false;
+
+    fetch("/api/demo/visa-lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ country }),
+    })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: DemoVisaInfo | null) => {
+        if (!cancelled && data) setVisaInfo(data);
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated, visaInfo]);
+
   // Fetch real flights when entering frame 1 (flight picker)
   useEffect(() => {
     if (!isProgressHydrated) return;
