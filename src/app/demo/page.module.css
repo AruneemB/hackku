@@ -627,6 +627,60 @@
   font-size: 13px;
 }
 
+.flightPickerSimple {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.flightPickerIntro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(159, 171, 183, 0.22);
+  border-radius: 14px;
+  background: rgba(159, 171, 183, 0.05);
+}
+
+.flightPickerIntroRoute {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cc-text-primary);
+}
+
+.flightPickerIntroMeta {
+  font-size: 13px;
+  color: var(--cc-body, #5a6672);
+}
+
+.flightPickerSelection {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cc-accent);
+}
+
+.flightPickerReturns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flightPickerReturnsTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cc-body, #5a6672);
+}
+
+.returnOptionsStandalone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* ── Map ── */
 
 .mapWrap {
@@ -1834,3 +1888,299 @@
     radial-gradient(circle, var(--roadmap-line-color) 0 1.6px, transparent 1.7px)
     center top / var(--roadmap-line-width) 8px repeat-y;
 }
+
+/* ── Flight Picker V2 (redesigned) ── */
+
+.fpWrap { display: flex; flex-direction: column; gap: 16px; }
+
+.fpHeader { display: flex; flex-direction: column; gap: 3px; }
+
+.fpRoute {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--cc-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.fpHeaderMeta { font-size: 13px; color: var(--cc-body, #5a6672); }
+
+.fpSection { display: flex; flex-direction: column; gap: 8px; }
+
+.fpSectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--cc-body, #5a6672);
+}
+
+.fpCards { display: flex; flex-direction: column; gap: 10px; }
+
+.fpFlightGroup { display: flex; flex-direction: column; gap: 6px; }
+
+.fpReturnsInline {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fpReturnInlineLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cc-body, #5a6672);
+}
+
+.fpReturnRows {
+  border: 1px solid rgba(159, 171, 183, 0.22);
+  border-radius: 12px;
+  background: rgba(159, 171, 183, 0.03);
+  overflow: hidden;
+}
+
+.fpReturnRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid rgba(159, 171, 183, 0.13);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 100ms ease;
+}
+
+.fpReturnRow:last-child { border-bottom: none; }
+
+.fpReturnRow:hover { background: rgba(159, 171, 183, 0.07); }
+
+.fpReturnRowSelected { background: rgba(243, 91, 79, 0.04); }
+.fpReturnRowSelected:hover { background: rgba(243, 91, 79, 0.06); }
+
+.fpRadioDot {
+  position: relative;
+  flex-shrink: 0;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(159, 171, 183, 0.5);
+  transition: border-color 150ms ease;
+}
+
+.fpRadioDotSelected { border-color: var(--cc-accent); }
+
+.fpRadioInner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cc-accent);
+}
+
+.fpReturnRowBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fpReturnRowTimeLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fpReturnTime {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cc-text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fpReturnRowTimeLine .fpReturnTime:first-child {
+  width: 66px;
+  text-align: left;
+}
+
+.fpReturnRowTimeLine .fpReturnTime:last-child {
+  width: 74px;
+  text-align: right;
+}
+
+.fpReturnRowBottom {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fpReturnRowMeta {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--cc-body, #5a6672);
+}
+
+.fpReturnRowPrice {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cc-accent);
+}
+
+.fpCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid rgba(159, 171, 183, 0.3);
+  border-radius: 14px;
+  background: rgba(159, 171, 183, 0.06);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.fpCard:hover {
+  border-color: rgba(243, 91, 79, 0.3);
+  background: rgba(243, 91, 79, 0.04);
+}
+
+.fpCardSelected {
+  border-color: var(--cc-accent);
+  background: rgba(243, 91, 79, 0.07);
+}
+
+.fpCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.fpAirline {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cc-body, #5a6672);
+}
+
+.fpTimes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fpTimeVal {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--cc-text-primary);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.fpArrowWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fpArrowLine {
+  flex: 1;
+  height: 1px;
+  background: rgba(159, 171, 183, 0.45);
+}
+
+.fpArrowPlane {
+  font-size: 11px;
+  color: var(--cc-accent);
+  flex-shrink: 0;
+}
+
+.fpAirports {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -2px;
+}
+
+.fpAirport {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cc-body, #5a6672);
+  letter-spacing: 0.03em;
+}
+
+.fpAirportRight { text-align: right; }
+
+.fpCardBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(159, 171, 183, 0.18);
+}
+
+.fpStopsMeta { font-size: 13px; color: var(--cc-body, #5a6672); }
+
+.fpFromPrice {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cc-accent);
+}
+
+/* Return sub-cards */
+
+.fpReturnCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid rgba(159, 171, 183, 0.25);
+  border-radius: 12px;
+  background: rgba(159, 171, 183, 0.04);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.fpReturnCard:hover {
+  border-color: rgba(243, 91, 79, 0.25);
+  background: rgba(243, 91, 79, 0.03);
+}
+
+.fpReturnCardSelected {
+  border-color: var(--cc-accent);
+  background: rgba(243, 91, 79, 0.06);
+}
+
+.fpReturnTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fpReturnNum {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cc-text-primary);
+}
+
+.fpReturnPrice {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cc-accent);
+}
+
+.fpReturnMeta { font-size: 13px; color: var(--cc-body, #5a6672); }
