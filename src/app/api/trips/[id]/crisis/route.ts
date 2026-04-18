@@ -121,7 +121,10 @@ export async function GET(req: NextRequest, context: CrisisRouteContext) {
       const jsonStart = text.indexOf("{");
       const jsonEnd = text.lastIndexOf("}");
       if (jsonStart !== -1 && jsonEnd !== -1) {
-        exceptionDraft = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+        const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+        if (typeof parsed?.subject === "string" && typeof parsed?.body === "string") {
+          exceptionDraft = { subject: parsed.subject, body: parsed.body };
+        }
       }
     } catch {
       exceptionDraft = {
