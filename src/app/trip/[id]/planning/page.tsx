@@ -76,7 +76,7 @@ export default function PlanningPage() {
       destination: destinationIata,
       targetDeparture: new Date(trip.dates.departure).toISOString().split("T")[0],
       targetReturn: new Date(trip.dates.return).toISOString().split("T")[0],
-      windowDays: 2,
+      windowDays: 5,
       radiusMiles: 100
     });
   }, [trip, hasSearched, search]);
