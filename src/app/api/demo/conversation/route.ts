@@ -3,12 +3,13 @@ import { geminiModel } from "@/lib/gemini/client";
 import type { ToneKey } from "@/lib/elevenlabs/tones";
 
 type ConversationMessage = { role: "user" | "assistant"; content: string };
-type FieldKey = "city" | "country" | "departure" | "return" | "passportExpiry" | "purpose";
+type FieldKey = "city" | "country" | "originCity" | "departure" | "return" | "passportExpiry" | "purpose";
 type KnownFields = Partial<Record<FieldKey, string>>;
 
 const REQUIRED_FIELDS: FieldKey[] = [
   "city",
   "country",
+  "originCity",
   "departure",
   "return",
   "passportExpiry",
@@ -37,12 +38,14 @@ function describeTripBasics(known: KnownFields): string {
       ? `${known.city}, ${known.country}`
       : known.city ?? "";
 
+  const fullRoute = known.originCity ? `${known.originCity} to ${destination}` : destination;
+
   if (destination && known.departure && known.return) {
-    return `I have ${destination} from ${known.departure} to ${known.return}.`;
+    return `I have ${fullRoute} from ${known.departure} to ${known.return}.`;
   }
 
   if (destination) {
-    return `I have ${destination}.`;
+    return `I have ${fullRoute}.`;
   }
 
   return "";
@@ -91,6 +94,14 @@ function buildFrameZeroReply(known: KnownFields) {
   if (!known.return) {
     return {
       mascotMessage: `${summary} I still need your return date. What day are you coming back?`.trim(),
+      extractedData: null,
+      isComplete: false,
+    };
+  }
+
+  if (!known.originCity) {
+    return {
+      mascotMessage: `${summary} Which city are you flying from?`.trim(),
       extractedData: null,
       isComplete: false,
     };
@@ -163,13 +174,16 @@ Today is ${today}. Default missing years to ${year}. If a month/day date would c
 
 Rules:
 - Return JSON only.
-- Use exactly these keys: city, country, departure, return, passportExpiry, purpose.
+- Use exactly these keys: city, country, originCity, departure, return, passportExpiry, purpose.
 - Every value must be either a string or null.
 - Normalize all dates to YYYY-MM-DD.
 - If the traveler gives month and year only, use the first of that month.
 - If the traveler gives only a year, use January 1 of that year.
 - If the traveler gives departure and return without years, infer both years together consistently.
-- Infer country as ISO alpha-2 when the city makes it unambiguous, for example Milan -> IT.
+- "city" is the DESTINATION — where the traveler is flying TO (e.g. "Milan", "Orlando", "Tokyo").
+- "country" is the destination country as ISO alpha-2 (e.g. Milan -> IT, Orlando -> US).
+- "originCity" is the ORIGIN — where the traveler is departing FROM (e.g. "Chicago", "New York").
+- If the traveler says "from X to Y", then originCity = X and city = Y.
 - Use the latest explicit traveler-provided correction if a field changes.
 - Preserve already confirmed values unless the traveler clearly corrected them.
 
