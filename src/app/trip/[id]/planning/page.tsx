@@ -106,7 +106,11 @@ export default function PlanningPage() {
   }, [tripId, trip?.destination.city, say, setThinking]);
 
   const handleSelectHotel = async (hotel: Hotel) => {
-    await updateHotels([hotel]);
+    const ok = await updateHotels([hotel]);
+    if (!ok) {
+      say("I had trouble saving your hotel selection. Please try again.", "empathetic");
+      return;
+    }
     say("Perfect! Let me check your travel policy compliance.", "neutral");
     setStep("policy");
   };

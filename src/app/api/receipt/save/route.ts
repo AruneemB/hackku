@@ -23,25 +23,31 @@ const PLACEHOLDER_TRIP_ID = "PLACEHOLDER_TRIP_ID_000000000000"
 
 export async function POST(req: NextRequest) {
   try {
-    const { merchant, category, totalUsd, currency, originalAmount, date } =
+    const { tripId: bodyTripId, merchant, category, totalUsd, currency, originalAmount, date } =
       await req.json()
 
-    if (!merchant || !totalUsd) {
-      return NextResponse.json(
-        { error: "merchant and totalUsd are required" },
-        { status: 400 }
-      )
+    if (typeof merchant !== "string" || !merchant.trim()) {
+      return NextResponse.json({ error: "merchant is required" }, { status: 400 })
     }
+    const parsedTotal = parseFloat(totalUsd)
+    if (!Number.isFinite(parsedTotal) || parsedTotal < 0) {
+      return NextResponse.json({ error: "totalUsd must be a non-negative number" }, { status: 400 })
+    }
+    const parsedDate = date ? new Date(date) : null
+    if (parsedDate && isNaN(parsedDate.getTime())) {
+      return NextResponse.json({ error: "date is not a valid date string" }, { status: 400 })
+    }
+    const tripId = typeof bodyTripId === "string" && bodyTripId.trim() ? bodyTripId.trim() : PLACEHOLDER_TRIP_ID
 
     const now = new Date()
     const doc = {
-      tripId: PLACEHOLDER_TRIP_ID,
-      merchant,
+      tripId,
+      merchant: merchant.trim(),
       category: category ?? "other",
-      total: toDecimal128(totalUsd),
+      total: toDecimal128(parsedTotal),
       currency: currency ?? "USD",
-      originalAmount: toDecimal128(originalAmount ?? totalUsd),
-      date: date ? new Date(date) : now,
+      originalAmount: toDecimal128(parseFloat(originalAmount ?? String(parsedTotal))),
+      date: parsedDate ?? now,
       sanitized: true,
       extractedByAI: true,
       imageUrl: null,
@@ -53,7 +59,7 @@ export async function POST(req: NextRequest) {
     const result = await db.collection("receipts").insertOne(doc)
 
     return NextResponse.json(
-      { id: result.insertedId.toString(), tripId: PLACEHOLDER_TRIP_ID },
+      { id: result.insertedId.toString(), tripId },
       { status: 201 }
     )
   } catch (err) {

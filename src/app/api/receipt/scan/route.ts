@@ -36,11 +36,16 @@ export async function POST(req: NextRequest) {
     const raw = await extractReceiptData(base64Data, mimeType)
     const clean = sanitizeReceiptData(raw)
 
-    let totalUsd = parseFloat(clean.amount)
+    const parsedAmount = parseFloat(clean.amount)
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      return NextResponse.json({ error: "Invalid amount in receipt" }, { status: 422 })
+    }
+
+    let totalUsd = parsedAmount
     try {
-      totalUsd = await convertCurrency(parseFloat(clean.amount), clean.currency, "USD")
+      totalUsd = await convertCurrency(parsedAmount, clean.currency, "USD")
     } catch {
-      // Conversion failed — fall back to original amount and note it
+      // Conversion failed — fall back to original amount
     }
 
     return NextResponse.json({
@@ -49,7 +54,7 @@ export async function POST(req: NextRequest) {
       currency: clean.currency,
       date: clean.date,
       category: clean.category ?? "other",
-      hasPII: clean.hasPII,
+      hasPII: raw.hasPII,
       confidence: raw.confidence,
       totalUsd: totalUsd.toFixed(2),
     })

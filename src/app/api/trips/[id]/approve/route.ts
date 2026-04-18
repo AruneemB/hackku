@@ -36,27 +36,31 @@ export async function POST(req: NextRequest, context: ApproveRouteContext) {
     const { id } = await context.params
     await connectToDatabase()
 
-    const trip = await Trip.findById(id)
-    if (!trip) return NextResponse.json({ error: "Trip not found" }, { status: 404 })
+    // Atomically claim the "sending" slot — prevents duplicate emails on concurrent requests
+    const trip = await Trip.findOneAndUpdate(
+      { _id: id, "approvalThread.gmailThreadId": { $in: [null, undefined] }, selectedBundle: { $ne: null } },
+      { $set: { "approvalThread.status": "sending" } },
+      { new: true }
+    )
 
-    // Don't re-send if already pending/approved
-    if (trip.approvalThread?.gmailThreadId) {
+    if (!trip) {
+      // Either trip not found, no bundle selected, or another request already claimed it
+      const existing = await Trip.findById(id).lean()
+      if (!existing) return NextResponse.json({ error: "Trip not found" }, { status: 404 })
+      if (!existing.selectedBundle) return NextResponse.json({ error: "No bundle selected" }, { status: 400 })
+      // Already sent — return idempotent response
       return NextResponse.json({
         success: true,
-        gmailThreadId: trip.approvalThread.gmailThreadId,
+        gmailThreadId: existing.approvalThread?.gmailThreadId,
         alreadySent: true,
       })
-    }
-
-    if (!trip.selectedBundle) {
-      return NextResponse.json({ error: "No bundle selected" }, { status: 400 })
     }
 
     const fromEmail = session.user?.email ?? "me"
     const userName  = session.user?.name ?? "Kelli"
 
     const threadId = await sendApprovalRequest(
-      session.accessToken,
+      session.accessToken!,
       fromEmail,
       userName,
       trip.toObject(),

@@ -97,29 +97,31 @@ export default function HotelsPage() {
           </p>
         </div>
 
-        {/* Seed */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col gap-3">
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">
-            One-time Setup
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={seedDatabase}
-              disabled={seeding}
-              className="bg-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50 active:scale-95 transition-all"
-            >
-              {seeding ? "Seeding…" : "Seed Database"}
-            </button>
-            {seedMsg && (
-              <span className={`text-sm ${seedMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
-                {seedMsg}
-              </span>
-            )}
+        {/* Seed — dev-only */}
+        {process.env.NODE_ENV === "development" && (
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col gap-3">
+            <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+              One-time Setup
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={seedDatabase}
+                disabled={seeding}
+                className="bg-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50 active:scale-95 transition-all"
+              >
+                {seeding ? "Seeding…" : "Seed Database"}
+              </button>
+              {seedMsg && (
+                <span className={`text-sm ${seedMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
+                  {seedMsg}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-600">
+              Seeds 9 preferred vendors + creates 2dsphere index. Safe to re-run.
+            </p>
           </div>
-          <p className="text-xs text-gray-600">
-            Seeds 9 preferred vendors + creates 2dsphere index. Safe to re-run.
-          </p>
-        </div>
+        )}
 
         {/* Search form */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col gap-3">

@@ -31,10 +31,23 @@ export default function SavedReceiptsPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     fetch("/api/receipt/list")
-      .then((r) => r.json())
-      .then((data) => { setReceipts(data); setLoading(false) })
-      .catch((e) => { setError(e.message); setLoading(false) })
+      .then(async (r) => {
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `Server error ${r.status}`)
+        return r.json()
+      })
+      .then((data: unknown) => {
+        if (cancelled) return
+        setReceipts(Array.isArray(data) ? (data as SavedReceipt[]) : [])
+        setLoading(false)
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : "Failed to load receipts")
+        setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [])
 
   return (

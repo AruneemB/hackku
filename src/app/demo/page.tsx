@@ -1584,7 +1584,9 @@ export default function DemoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: msgs, frameIndex: currentIndex, knownFields }),
       });
-      const data = (await res.json()) as {
+      const resJson = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof resJson.error === "string" ? resJson.error : "Conversation failed");
+      const data = resJson as {
         mascotMessage: string;
         tone: Tone;
         extractedData: (Record<string, string> & { return: string }) | null;

@@ -250,7 +250,7 @@ async function say(text: string, newTone?: ToneKey) {
   clearSpeechWork();
 
   const tone = newTone ?? mascotState.tone;
-  setMascotState({ speech: text, visibleLength: 0, tone, isSpeaking: true });
+  setMascotState({ speech: text, visibleLength: 0, tone, isSpeaking: true, isThinking: false });
 
   const ok = await speakWithElevenLabs(text, tone);
   if (!ok) await speakWithBrowser(text, tone);
@@ -267,7 +267,7 @@ function setThinking(isThinking: boolean) {
 function stopSpeaking() {
   if (typeof window === "undefined") return;
   clearSpeechWork();
-  setMascotState({ isSpeaking: false, visibleLength: mascotState.speech.length });
+  setMascotState({ isSpeaking: false, isThinking: false, visibleLength: mascotState.speech.length });
 }
 
 export function useMascot() {
