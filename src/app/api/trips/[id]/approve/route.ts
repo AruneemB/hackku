@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, context: ApproveRouteContext) {
     }
 
     const fromEmail = session.user?.email ?? "me"
-    const userName  = session.user?.name ?? "Kelli"
+    const userName  = session.user?.name ?? "Lockey"
 
     const threadId = await sendApprovalRequest(
       session.accessToken!,
