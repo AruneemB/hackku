@@ -10,7 +10,6 @@
 // Safe to re-run — drops and recreates all collections.
 // ============================================================
 
-import "dotenv/config"
 import { MongoClient, ObjectId, Decimal128 } from "mongodb"
 import { generateEmbedding } from "../src/lib/gemini/client"
 import budgetCaps from "../data/policy/budget-caps.json"

@@ -11,7 +11,6 @@
 // ENV REQUIRED: MONGODB_URI (must have Atlas admin privileges)
 // ============================================================
 
-import "dotenv/config";
 import { MongoClient } from "mongodb";
 
 async function main() {
