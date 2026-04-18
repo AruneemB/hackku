@@ -1040,7 +1040,67 @@ function ReceiptCapture() {
   );
 }
 
-function ContactCards() {
+type EmbassyInfo = { name: string; address: string; hours: string };
+
+const US_EMBASSIES: Record<string, EmbassyInfo> = {
+  // Italy
+  milan:     { name: "US Embassy Milan (Consulate)", address: "Via Principe Amedeo 2/10, Milan", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  rome:      { name: "US Embassy Rome", address: "Via Vittorio Veneto 121, Rome", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  // Germany
+  berlin:    { name: "US Embassy Berlin", address: "Pariser Platz 2, 10117 Berlin", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  munich:    { name: "US Consulate Munich", address: "Königinstraße 5, 80539 Munich", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  frankfurt: { name: "US Consulate Frankfurt", address: "Gießener Str. 30, 60435 Frankfurt", hours: "Mon – Fri · 7:30 AM – 4:30 PM" },
+  // France
+  paris:     { name: "US Embassy Paris", address: "2 Avenue Gabriel, 75008 Paris", hours: "Mon – Fri · 9:00 AM – 6:00 PM" },
+  // UK
+  london:    { name: "US Embassy London", address: "33 Nine Elms Ln, London SW11 7US", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  // Spain
+  madrid:    { name: "US Embassy Madrid", address: "Calle de Serrano 75, 28006 Madrid", hours: "Mon – Fri · 9:00 AM – 6:00 PM" },
+  barcelona: { name: "US Consulate Barcelona", address: "Passeig Reina Elisenda 23, Barcelona", hours: "Mon – Fri · 9:00 AM – 1:00 PM" },
+  // Netherlands
+  amsterdam: { name: "US Consulate Amsterdam", address: "Museumplein 19, 1071 DJ Amsterdam", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  // Switzerland
+  zurich:    { name: "US Consulate Zurich", address: "Dufourstrasse 101, 8008 Zürich", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  geneva:    { name: "US Mission Geneva", address: "Rue du Pré-de-la-Bichette 1, Geneva", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  // Japan
+  tokyo:     { name: "US Embassy Tokyo", address: "1-10-5 Akasaka, Minato-ku, Tokyo", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  osaka:     { name: "US Consulate Osaka", address: "2-11-5 Nishitenma, Kita-ku, Osaka", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  // South Korea
+  seoul:     { name: "US Embassy Seoul", address: "188 Sejong-daero, Jongno-gu, Seoul", hours: "Mon – Fri · 7:30 AM – 4:00 PM" },
+  // Singapore
+  singapore: { name: "US Embassy Singapore", address: "27 Napier Rd, Singapore 258508", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  // Australia
+  sydney:    { name: "US Consulate Sydney", address: "Level 10, MLC Centre, 19-29 Martin Pl", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  melbourne: { name: "US Consulate Melbourne", address: "553 St Kilda Rd, Melbourne VIC 3004", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  // Canada
+  toronto:   { name: "US Consulate Toronto", address: "360 University Ave, Toronto ON M5G 1S4", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  // India
+  mumbai:    { name: "US Consulate Mumbai", address: "C-49, G-Block, Bandra Kurla Complex", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  delhi:     { name: "US Embassy New Delhi", address: "Shantipath, Chanakyapuri, New Delhi", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  // UAE
+  dubai:     { name: "US Consulate Dubai", address: "Al Seef Rd, Bur Dubai, Dubai", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  // China
+  beijing:   { name: "US Embassy Beijing", address: "55 Anjialou Rd, Chaoyang, Beijing", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  shanghai:  { name: "US Consulate Shanghai", address: "1469 Huaihai Zhong Rd, Shanghai", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  // Brazil
+  "são paulo": { name: "US Consulate São Paulo", address: "Rua Henri Dunant 500, São Paulo", hours: "Mon – Fri · 7:30 AM – 4:30 PM" },
+  // Mexico
+  "mexico city": { name: "US Embassy Mexico City", address: "Paseo de la Reforma 305, Mexico City", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+};
+
+const EMBASSY_FALLBACK: EmbassyInfo = {
+  name: "Nearest US Embassy",
+  address: "Visit travel.state.gov for location",
+  hours: "Mon – Fri · 8:00 AM – 5:00 PM",
+};
+
+function getEmbassy(city: string): EmbassyInfo {
+  const key = city.toLowerCase().trim();
+  return US_EMBASSIES[key] ?? EMBASSY_FALLBACK;
+}
+
+function ContactCards({ city }: { city: string }) {
+  const embassy = getEmbassy(city);
   return (
     <div className={styles.contactCards}>
       <div className={styles.contactCard}>
@@ -1054,9 +1114,9 @@ function ContactCards() {
       <div className={styles.contactCard}>
         <div className={styles.contactEmoji}>🏛️</div>
         <div className={styles.contactBody}>
-          <div className={styles.contactName}>US Embassy Milan</div>
-          <div className={styles.contactDetail}>Via Principe Amedeo 2/10</div>
-          <div className={styles.contactDetail}>Mon to Fri · 8:00 AM to 5:00 PM</div>
+          <div className={styles.contactName}>{embassy.name}</div>
+          <div className={styles.contactDetail}>{embassy.address}</div>
+          <div className={styles.contactDetail}>{embassy.hours}</div>
         </div>
       </div>
     </div>
@@ -1410,13 +1470,14 @@ function ReceiptSubmitted() {
   );
 }
 
-function ContactsSaved() {
+function ContactsSaved({ city }: { city: string }) {
+  const embassy = getEmbassy(city);
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
         <span className={styles.confirmEmoji}>📱</span>
         <div className={styles.confirmTitle}>Contacts Saved</div>
-        <div className={styles.confirmBody}>Corporate Travel Desk and US Embassy Milan added to your emergency contacts for this trip.</div>
+        <div className={styles.confirmBody}>Corporate Travel Desk and {embassy.name} added to your emergency contacts for this trip.</div>
       </div>
     </div>
   );
@@ -2759,6 +2820,7 @@ export default function DemoPage() {
           />
         );
       }
+      case 13: return <ContactCards city={tripData?.city ?? DEMO_DEFAULTS.city} />;
       default: { const V = frame.Visual; return <V />; }
     }
   }
