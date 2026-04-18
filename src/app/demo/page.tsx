@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Ellipsis, Pencil } from "lucide-react";
+import { ArrowBigLeft, Ellipsis, Pencil, Send as SendIcon } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
 import type { Flight } from "@/types/flight";
@@ -20,7 +20,7 @@ type TripData = {
   purpose: string;
 };
 
-type ConversationMessage = { role: "user" | "assistant"; content: string };
+type ConversationMessage = { role: "user" | "assistant"; content: string; frameIndex?: number };
 
 type DemoFrame = {
   tone: Tone;
@@ -1056,6 +1056,90 @@ const FRAMES: DemoFrame[] = [
   { tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
 ];
 
+// ── Roadmap data ───────────────────────────────────────────────
+
+const ROADMAP_PHASES = [
+  {
+    label: "Planning",
+    steps: [
+      { index: 0, label: "Share Trip Details", icon: "✈️" },
+      { index: 1, label: "Choose a Flight", icon: "🛫" },
+      { index: 2, label: "Find a Hotel", icon: "🏨" },
+      { index: 3, label: "Compliance Check", icon: "📋" },
+      { index: 4, label: "Choose Bundle", icon: "📦" },
+    ],
+  },
+  {
+    label: "Approval",
+    steps: [
+      { index: 5, label: "Submit for Approval", icon: "📬" },
+      { index: 6, label: "Handle Rejection", icon: "🔄" },
+    ],
+  },
+  {
+    label: "Pre-Trip",
+    steps: [
+      { index: 7, label: "Travel Checklist", icon: "🗒️" },
+    ],
+  },
+  {
+    label: "Live Travel",
+    steps: [
+      { index: 8, label: "Live Mode Active", icon: "📡" },
+      { index: 9, label: "Handle Disruption", icon: "⚡" },
+      { index: 10, label: "Emergency Exception", icon: "🚨" },
+      { index: 11, label: "Arrival & Transport", icon: "🚕" },
+      { index: 12, label: "Capture Receipts", icon: "📸" },
+      { index: 13, label: "Human Support", icon: "📞" },
+    ],
+  },
+  {
+    label: "Post-Trip",
+    steps: [
+      { index: 14, label: "Expense Summary", icon: "💰" },
+      { index: 15, label: "Data & Privacy", icon: "🔒" },
+    ],
+  },
+];
+
+function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number; frameCompleted: Record<number, boolean> }) {
+  const allSteps = ROADMAP_PHASES.flatMap((p) => p.steps);
+  const total = allSteps.length;
+
+  return (
+    <div className={styles.roadmapWrap}>
+      <h2 className={styles.sheetTitle}>Your Journey</h2>
+      {ROADMAP_PHASES.map((phase) => (
+        <div key={phase.label}>
+          <div className={styles.roadmapPhaseLabel}>{phase.label}</div>
+          {phase.steps.map((step) => {
+            const isDone = !!frameCompleted[step.index];
+            const isCurrent = currentIndex === step.index;
+            const globalIdx = allSteps.findIndex((s) => s.index === step.index);
+            const isLast = globalIdx === total - 1;
+            return (
+              <div key={step.index} className={styles.roadmapStepWrap}>
+                <div className={[
+                  styles.roadmapStep,
+                  isDone ? styles.roadmapStepDone : isCurrent ? styles.roadmapStepCurrent : styles.roadmapStepUpcoming,
+                ].join(" ")}>
+                  <div className={styles.roadmapStepDot}>
+                    {isDone ? "✓" : step.icon}
+                  </div>
+                  <div className={styles.roadmapStepInfo}>
+                    <span className={styles.roadmapStepLabel}>{step.label}</span>
+                  </div>
+                </div>
+                {!isLast && <div className={styles.roadmapConnector} />}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Icons ──────────────────────────────────────────────────────
 
 function MenuIcon() {
@@ -1154,6 +1238,18 @@ function PhoneShell({
   isProcessing,
   onMicClick,
   analyserNode,
+  chatMode,
+  onChatToggle,
+  chatMessages,
+  chatInput,
+  onChatInputChange,
+  onChatSend,
+  onOpenSheet,
+  roadmapOpen,
+  onRoadmapOpen,
+  onRoadmapClose,
+  currentFrameIndex,
+  frameCompleted,
 }: {
   sheetScrollContent: React.ReactNode;
   sheetFooter: React.ReactNode;
@@ -1165,10 +1261,32 @@ function PhoneShell({
   isProcessing: boolean;
   onMicClick: () => void;
   analyserNode: AnalyserNode | null;
+  chatMode: boolean;
+  onChatToggle: () => void;
+  chatMessages: ConversationMessage[];
+  chatInput: string;
+  onChatInputChange: (v: string) => void;
+  onChatSend: () => void;
+  onOpenSheet: () => void;
+  roadmapOpen: boolean;
+  onRoadmapOpen: () => void;
+  onRoadmapClose: () => void;
+  currentFrameIndex: number;
+  frameCompleted: Record<number, boolean>;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
   const dragging = useRef(false);
+  const roadmapSheetRef = useRef<HTMLDivElement>(null);
+  const rdragStartY = useRef(0);
+  const rdragging = useRef(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   function handlePointerDown(e: React.PointerEvent) {
     dragging.current = true;
@@ -1204,40 +1322,190 @@ function PhoneShell({
     }
   }
 
+  function handleRPointerDown(e: React.PointerEvent) {
+    rdragging.current = true;
+    rdragStartY.current = e.clientY;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleRPointerMove(e: React.PointerEvent) {
+    if (!rdragging.current) return;
+    const dy = Math.max(0, e.clientY - rdragStartY.current);
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "none";
+      roadmapSheetRef.current.style.transform = `translateY(${dy}px)`;
+    }
+  }
+
+  function handleRPointerUp(e: React.PointerEvent) {
+    if (!rdragging.current) return;
+    rdragging.current = false;
+    const dy = Math.max(0, e.clientY - rdragStartY.current);
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "";
+      roadmapSheetRef.current.style.transform = "";
+    }
+    if (dy > 100) onRoadmapClose();
+  }
+
+  function handleRPointerCancel() {
+    rdragging.current = false;
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "";
+      roadmapSheetRef.current.style.transform = "";
+    }
+  }
+
+  // Last assistant message index for showing card
+  const lastAssistantIdx = chatMessages.reduce<number>((acc, m, i) => m.role === "assistant" ? i : acc, -1);
+
   return (
     <div className={styles.phone}>
       <section className={styles.shell}>
         <div className={styles.content}>
-          <button aria-label="Open menu" className={styles.menuButton} type="button">
-            <MenuIcon />
-          </button>
-          <div className={styles.stage}>
-            <Mascot bubbleClassName={styles.speech} bubblePosition="below" bubbleSize="lg" bubbleVariant="plain" className={styles.mascot} figureClassName={styles.figure} />
-            <div className={styles.ellipsisSlot}>
-              {showEllipsis && (
-                <button aria-label="View details" className={styles.ellipsisButton} onClick={onEllipsisOpen} type="button">
-                  <Ellipsis size={18} />
+          <div className={styles.topBar}>
+            <button aria-label="Open menu" className={styles.menuButton} type="button">
+              <MenuIcon />
+            </button>
+            {chatMode && (
+              <button aria-label="Back to voice mode" className={styles.backToVoiceButton} onClick={onChatToggle} type="button">
+                <ArrowBigLeft size={26} />
+              </button>
+            )}
+          </div>
+
+          {chatMode ? (
+            <div className={styles.chatView}>
+              <div className={styles.chatMessages} ref={chatScrollRef}>
+                {chatMessages.length === 0 ? (
+                  <div className={styles.chatEmpty}>
+                    <span>Start a conversation with Kelli</span>
+                  </div>
+                ) : (
+                  chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={[styles.chatMsg, msg.role === "user" ? styles.chatMsgUser : styles.chatMsgAssistant].join(" ")}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className={styles.chatAvatarWrap}>
+                          <div className={styles.chatAvatar}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                          </div>
+                        </div>
+                      )}
+                      <div className={styles.chatBubbleWrap}>
+                        <div className={styles.chatBubble}>{msg.content}</div>
+                        {msg.role === "assistant" && i === lastAssistantIdx && msg.frameIndex !== undefined && (
+                          <button className={styles.chatCard} onClick={onOpenSheet} type="button">
+                            <span className={styles.chatCardIcon}>📋</span>
+                            <span className={styles.chatCardText}>{FRAMES[msg.frameIndex]?.sheetTitle}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isProcessing && (
+                  <div className={[styles.chatMsg, styles.chatMsgAssistant].join(" ")}>
+                    <div className={styles.chatAvatarWrap}>
+                      <div className={styles.chatAvatar}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                      </div>
+                    </div>
+                    <div className={styles.chatBubble}>
+                      <div className={styles.chatTyping}>
+                        <span /><span /><span />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className={styles.chatControls}>
+                <div className={styles.chatInputWrap}>
+                  <input
+                    className={styles.chatInput}
+                    disabled={isProcessing}
+                    onChange={(e) => onChatInputChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        onChatSend();
+                      }
+                    }}
+                    placeholder="Message Kelli…"
+                    type="text"
+                    value={chatInput}
+                  />
+                  <button
+                    aria-label="Send message"
+                    className={[styles.chatIconButton, styles.chatSendButton].join(" ")}
+                    disabled={isProcessing || !chatInput.trim()}
+                    onClick={onChatSend}
+                    type="button"
+                  >
+                    <SendIcon size={17} />
+                  </button>
+                </div>
+                <button
+                  aria-label="Open roadmap"
+                  className={styles.chatPencilButton}
+                  onClick={onRoadmapOpen}
+                  type="button"
+                >
+                  <Pencil size={18} />
                 </button>
-              )}
+              </div>
             </div>
-          </div>
-          <div className={styles.controls}>
-            <button aria-label="Trip planning unavailable" className={[styles.iconButton, styles.sideButton, styles.leftButton, styles.disabledButton].join(" ")} disabled type="button">
-              <Pencil size={22} />
-            </button>
-            <button
-              aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
-              className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
-              disabled={isProcessing}
-              onClick={onMicClick}
-              type="button"
-            >
-              {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
-            </button>
-            <button aria-label="Text mode" className={[styles.iconButton, styles.sideButton, styles.rightButton].join(" ")} type="button">
-              <MessageCircleMoreIcon />
-            </button>
-          </div>
+          ) : (
+            <div className={styles.stage}>
+              <Mascot
+                bubbleAfterTextSlot={showEllipsis ? (
+                  <button aria-label="View details" className={styles.ellipsisButton} onClick={onEllipsisOpen} type="button">
+                    <Ellipsis size={18} />
+                  </button>
+                ) : null}
+                bubbleClassName={styles.speech}
+                bubblePosition="below"
+                bubbleSize="lg"
+                bubbleVariant="plain"
+                className={styles.mascot}
+                figureClassName={styles.figure}
+              />
+            </div>
+          )}
+
+          {!chatMode && (
+            <div className={styles.controls}>
+              <button
+                aria-label="View trip roadmap"
+                className={[styles.iconButton, styles.sideButton, styles.leftButton].join(" ")}
+                onClick={onRoadmapOpen}
+                type="button"
+              >
+                <Pencil size={22} />
+              </button>
+              <button
+                aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
+                disabled={isProcessing}
+                onClick={onMicClick}
+                type="button"
+              >
+                {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
+              </button>
+              <button
+                aria-label="Switch to chat mode"
+                className={[styles.iconButton, styles.sideButton, styles.rightButton].join(" ")}
+                onClick={onChatToggle}
+                type="button"
+              >
+                <MessageCircleMoreIcon />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className={[styles.sheetBackdrop, sheetOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onSheetClose} />
@@ -1248,6 +1516,24 @@ function PhoneShell({
           </div>
           <div className={styles.sheetScroll}>{sheetScrollContent}</div>
           <div className={styles.sheetFooter}>{sheetFooter}</div>
+        </div>
+
+        {/* Roadmap overlay */}
+        <div className={[styles.sheetBackdrop, styles.roadmapBackdrop, roadmapOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onRoadmapClose} />
+        <div ref={roadmapSheetRef} className={[styles.sheet, styles.roadmapSheet, roadmapOpen ? styles.sheetOpen : ""].join(" ")}>
+          <div className={styles.sheetDragArea} onPointerCancel={handleRPointerCancel} onPointerDown={handleRPointerDown} onPointerMove={handleRPointerMove} onPointerUp={handleRPointerUp}>
+            <div className={styles.sheetHandle} />
+          </div>
+          <div className={styles.sheetScroll}>
+            <RoadmapContent currentIndex={currentFrameIndex} frameCompleted={frameCompleted} />
+          </div>
+          <div className={styles.sheetFooter}>
+            <div className={styles.sheetActions}>
+              <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={onRoadmapClose} type="button">
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -1288,10 +1574,16 @@ export default function DemoPage() {
   const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
   const [isProgressHydrated, setIsProgressHydrated] = useState(false);
 
-  const { say, setThinking, stopSpeaking } = useMascot();
+  // Roadmap + chat state
+  const [roadmapOpen, setRoadmapOpen] = useState(false);
+  const [chatMode, setChatMode] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const greetedFrames = useRef<Set<number>>(new Set());
+
+  const { say, setThinking, stopSpeaking, speech, visibleLength } = useMascot();
   const frame = FRAMES[currentIndex];
   const sheetOpen = overlayReady && !overlayDismissed;
-  const showEllipsis = overlayReady && overlayDismissed;
+  const showEllipsis = overlayReady && overlayDismissed && speech.length > 0 && visibleLength >= speech.length;
 
   useEffect(() => {
     let cancelled = false;
@@ -1372,6 +1664,17 @@ export default function DemoPage() {
     let cancelled = false;
 
     async function run() {
+      // Store greeting in chat history (deduplicated)
+      if (!greetedFrames.current.has(currentIndex)) {
+        greetedFrames.current.add(currentIndex);
+        setConversationMessages((prev) => {
+          const alreadyHas = prev.some(
+            (m) => m.role === "assistant" && m.frameIndex === currentIndex && m.content === frame.message
+          );
+          if (alreadyHas) return prev;
+          return [...prev, { role: "assistant", content: frame.message, frameIndex: currentIndex }];
+        });
+      }
       await say(frame.message, frame.tone);
       if (!cancelled && currentIndex !== 0) setOverlayReady(true);
     }
@@ -1570,6 +1873,22 @@ export default function DemoPage() {
     else startListening();
   }
 
+  function handleRoadmapOpen() { setRoadmapOpen(true); }
+  function handleRoadmapClose() { setRoadmapOpen(false); }
+  function handleChatToggle() { setChatMode((v) => !v); }
+
+  async function handleChatSend() {
+    if (!chatInput.trim() || isProcessing) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    await handleUserSpeech(text);
+  }
+
+  function handleOpenSheet() {
+    setOverlayReady(true);
+    setOverlayDismissed(false);
+  }
+
   async function handleUserSpeech(userText: string) {
     const msgs: ConversationMessage[] = [
       ...conversationMessages,
@@ -1607,7 +1926,7 @@ export default function DemoPage() {
         });
       }
 
-      setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage }]);
+      setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage, frameIndex: currentIndex }]);
       setThinking(false);
       await say(data.mascotMessage, data.tone);
       if (data.extractedData && currentIndex === 0) setOverlayReady(true);
@@ -1770,11 +2089,23 @@ export default function DemoPage() {
     <main className={styles.page}>
       <PhoneShell
         analyserNode={analyserNode}
+        chatInput={chatInput}
+        chatMessages={conversationMessages}
+        chatMode={chatMode}
+        currentFrameIndex={currentIndex}
+        frameCompleted={frameCompleted}
         isListening={isListening}
         isProcessing={isProcessing}
+        onChatInputChange={setChatInput}
+        onChatSend={() => void handleChatSend()}
+        onChatToggle={handleChatToggle}
         onEllipsisOpen={handleEllipsisOpen}
         onMicClick={handleMicClick}
+        onOpenSheet={handleOpenSheet}
+        onRoadmapClose={handleRoadmapClose}
+        onRoadmapOpen={handleRoadmapOpen}
         onSheetClose={handleSheetClose}
+        roadmapOpen={roadmapOpen}
         sheetFooter={footerContent}
         sheetScrollContent={scrollContent}
         sheetOpen={sheetOpen}

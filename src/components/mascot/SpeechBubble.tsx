@@ -6,6 +6,7 @@ interface SpeechBubbleProps {
   variant?: "card" | "plain";
   size?: "sm" | "lg";
   className?: string;
+  afterTextSlot?: React.ReactNode;
 }
 
 export function SpeechBubble({
@@ -14,6 +15,7 @@ export function SpeechBubble({
   variant = "card",
   size = "sm",
   className = "",
+  afterTextSlot,
 }: SpeechBubbleProps) {
   const displayed = text.slice(0, visibleLength ?? text.length);
   const length = displayed.length;
@@ -91,16 +93,37 @@ export function SpeechBubble({
 
   return (
     <div className={className} style={wrapperStyle}>
-      <p
+      <div
         style={{
-          margin: 0,
-          color: "var(--cc-text-primary)",
-          textAlign: "center",
-          ...textStyle,
+          position: "relative",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
-        {displayed}
-      </p>
+        <p
+          style={{
+            margin: 0,
+            color: "var(--cc-text-primary)",
+            textAlign: "center",
+            ...textStyle,
+          }}
+        >
+          {displayed}
+        </p>
+        {afterTextSlot ? (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              left: "50%",
+              transform: "translateX(-50%)",
+            }}
+          >
+            {afterTextSlot}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
