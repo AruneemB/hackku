@@ -1,26 +1,77 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cc-accent: #f35b4f;
+  --cc-bg: #f6f8fa;
+  --cc-surface: #ffffff;
+  --cc-raised: #fbfcfd;
+  --cc-border: #e8eaec;
+  --cc-border-strong: #e7ecf2;
+  --cc-text: #2d3b45;
+  --cc-body: #616972;
+  --cc-muted: #95a3ab;
+  --cc-text-subtle: #9fabb7;
+  --cc-text-primary: #2d3b45;
+  --cc-text-secondary: #6b7780;
+  --cc-secondary-border: #cbd5e0;
+  --cc-secondary-text: #4a5568;
+  --cc-radius: 8px;
+  --cc-card-radius: 10px;
+  --cc-modal-radius: 16px;
+  --cc-transition-base: 150ms ease;
+  --cc-transition-standard: 200ms ease;
+  --cc-transition-spring: 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  --background: var(--cc-bg);
+  --foreground: var(--cc-text-primary);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-sora);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--cc-bg);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--cc-bg);
+  color: var(--cc-text-primary);
+  font-family: var(--font-sora), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.cc-shell {
+  background: var(--cc-bg);
+  border: 0.8px solid var(--cc-border);
+  border-radius: var(--cc-modal-radius);
+}
+
+.cc-card {
+  background: var(--cc-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-card-radius);
+}
+
+.cc-kicker {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--cc-border);
+  background: var(--cc-surface);
+  color: var(--cc-secondary-text);
 }

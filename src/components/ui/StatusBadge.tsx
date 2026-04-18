@@ -1,29 +1,35 @@
-// ============================================================
-// COMPONENT: StatusBadge (Base UI)
-// OWNER: Track A (Frontend & UX)
-// DESCRIPTION: Small colored badge for trip status, compliance
-//   flags, and hotel preferred indicators.
-//
-// STATUS → COLOR:
-//   draft            → gray
-//   pending_approval → yellow
-//   approved         → green
-//   rejected         → red
-//   active           → blue
-//   archived         → slate
-// ============================================================
+import type { HTMLAttributes } from "react";
+import type { TripStatus } from "@/types";
+import styles from "./StatusBadge.module.css";
 
-// TODO: import type { TripStatus } from "@/types"
+interface StatusBadgeProps extends HTMLAttributes<HTMLSpanElement> {
+  status: TripStatus;
+}
 
-// TODO: const STATUS_COLORS: Record<TripStatus, string> = {
-//   draft:            "bg-gray-100 text-gray-600",
-//   pending_approval: "bg-yellow-100 text-yellow-700",
-//   approved:         "bg-green-100 text-green-700",
-//   rejected:         "bg-red-100 text-red-700",
-//   active:           "bg-blue-100 text-blue-700",
-//   archived:         "bg-slate-100 text-slate-600",
-// }
+const STATUS_STYLES: Record<TripStatus, string> = {
+  draft: styles.draft,
+  pending_approval: styles.pendingApproval,
+  approved: styles.approved,
+  rejected: styles.rejected,
+  active: styles.active,
+  archived: styles.archived,
+};
 
-// TODO: export function StatusBadge({ status }: { status: TripStatus }) {
-//   // return <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[status]}`}>{status}</span>
-// }
+const STATUS_LABELS: Record<TripStatus, string> = {
+  draft: "Draft",
+  pending_approval: "Pending approval",
+  approved: "Approved",
+  rejected: "Rejected",
+  active: "Active",
+  archived: "Archived",
+};
+
+export function StatusBadge({ status, className = "", ...props }: StatusBadgeProps) {
+  const classes = [styles.badge, STATUS_STYLES[status], className].filter(Boolean).join(" ");
+
+  return (
+    <span className={classes} {...props}>
+      {STATUS_LABELS[status]}
+    </span>
+  );
+}

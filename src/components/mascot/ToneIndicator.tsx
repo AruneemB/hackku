@@ -1,31 +1,40 @@
-// ============================================================
-// COMPONENT: ToneIndicator
-// OWNER: Track A (Frontend & UX)
-// DESCRIPTION: Small visual badge overlaid on the mascot image
-//   that changes color and icon based on the current tone.
-//   Helps judges/users see which emotional state the mascot is in.
-//
-// TONE → COLOR + EMOJI MAP:
-//   neutral    → gray   🤖
-//   excited    → green  🎉
-//   empathetic → amber  🤗
-//   urgent     → red    ⚠️
-//
-// PROPS:
-//   tone: ToneKey  (from @/lib/elevenlabs/tones)
-// ============================================================
+"use client";
 
-// TODO: "use client"
-// TODO: import type { ToneKey } from "@/lib/elevenlabs/tones"
+import type { ToneKey } from "@/lib/elevenlabs/tones";
 
-// TODO: const TONE_STYLES: Record<ToneKey, { color: string; icon: string }> = {
-//   neutral:   { color: "bg-gray-400",   icon: "🤖" },
-//   excited:   { color: "bg-green-500",  icon: "🎉" },
-//   empathetic:{ color: "bg-amber-400",  icon: "🤗" },
-//   urgent:    { color: "bg-red-500",    icon: "⚠️" },
-// }
+const TONE_STYLES: Record<ToneKey, { background: string; label: string }> = {
+  neutral: { background: "#9fabb7", label: "Neutral" },
+  excited: { background: "#00c389", label: "Excited" },
+  empathetic: { background: "#d9bb74", label: "Empathetic" },
+  urgent: { background: "#fc5050", label: "Urgent" },
+};
 
-// TODO: export function ToneIndicator({ tone }: { tone: ToneKey }) {
-//   // const { color, icon } = TONE_STYLES[tone]
-//   // return <span className={`absolute top-0 right-0 ${color} rounded-full p-1 text-xs`}>{icon}</span>
-// }
+export function ToneIndicator({ tone }: { tone: ToneKey }) {
+  const toneStyle = TONE_STYLES[tone];
+
+  return (
+    <span
+      aria-label={`Mascot tone: ${toneStyle.label}`}
+      style={{
+        position: "absolute",
+        top: 8,
+        right: 8,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minWidth: 70,
+        minHeight: 24,
+        padding: "0 10px",
+        borderRadius: 999,
+        background: toneStyle.background,
+        color: "#ffffff",
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+      }}
+    >
+      {toneStyle.label}
+    </span>
+  );
+}
