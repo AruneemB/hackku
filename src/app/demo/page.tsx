@@ -666,7 +666,7 @@ function ComplianceReport({
     retLabel = fmtDate(ret);
   }
   const stayLimit = visa?.stayLimitDays ?? null;
-  const stayExceedsVisaLimit = stayLimit != null && nights > 0 && nights > stayLimit;
+  const stayOverLimit = stayLimit != null && nights > stayLimit;
 
   return (
     <div className={styles.complianceList}>
@@ -747,26 +747,20 @@ function ComplianceReport({
 
       {nights > 0 && (
         <div
-          className={[styles.complianceItem, stayExceedsVisaLimit ? styles.complianceWarn : styles.complianceOk].join(
-            " ",
-          )}
+          className={[styles.complianceItem, stayOverLimit ? styles.complianceWarn : styles.complianceOk].join(" ")}
         >
-          <span className={styles.complianceIcon}>{stayExceedsVisaLimit ? "⚠️" : "✓"}</span>
+          <span className={styles.complianceIcon}>{stayOverLimit ? "⚠️" : "✓"}</span>
           <div>
             <div className={styles.complianceTitle}>
-              {stayExceedsVisaLimit ? "Stay exceeds visa limit" : "Travel dates policy-compliant"}
+              {stayOverLimit ? "Stay exceeds visa limit" : "Travel dates policy-compliant"}
             </div>
             <div className={styles.complianceBody}>
-              {stayExceedsVisaLimit ? (
-                <>
-                  {depLabel} to {retLabel} · {nights}-night stay · exceeds {stayLimit}-day limit
-                </>
-              ) : (
-                <>
-                  {depLabel} to {retLabel} · {nights}-night stay
-                  {stayLimit != null ? ` · within ${stayLimit}-day limit` : ""}
-                </>
-              )}
+              {depLabel} to {retLabel} · {nights}-night stay
+              {stayLimit != null
+                ? stayOverLimit
+                  ? ` · exceeds ${stayLimit}-day limit`
+                  : ` · within ${stayLimit}-day limit`
+                : ""}
             </div>
           </div>
         </div>
