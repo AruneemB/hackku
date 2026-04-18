@@ -66,6 +66,49 @@ describe("POST /api/visa/check", () => {
     expect(data.error).toBe("Visa requirement record not found for this destination and citizenship.");
   });
 
+  it("should return 400 if destinationCountry is missing", async () => {
+    const req = new NextRequest("http://localhost/api/visa/check", {
+      method: "POST",
+      body: JSON.stringify({
+        citizenship: "US",
+      }),
+    });
+
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe("destinationCountry is required and must be a string.");
+  });
+
+  it("should return 400 if citizenship is missing", async () => {
+    const req = new NextRequest("http://localhost/api/visa/check", {
+      method: "POST",
+      body: JSON.stringify({
+        destinationCountry: "IT",
+      }),
+    });
+
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe("citizenship is required and must be a string.");
+  });
+
+  it("should return 400 if JSON body is invalid", async () => {
+    const req = new NextRequest("http://localhost/api/visa/check", {
+      method: "POST",
+      body: "not-json",
+    });
+
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe("Invalid JSON body");
+  });
+
   it("should return 500 if database search fails", async () => {
     (VisaRequirement.findOne as any).mockRejectedValue(new Error("Database error"));
 
