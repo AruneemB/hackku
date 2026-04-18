@@ -666,7 +666,7 @@ function ComplianceReport({
     retLabel = fmtDate(ret);
   }
   const stayLimit = visa?.stayLimitDays ?? null;
-  const stayExceedsVisaLimit = stayLimit != null && nights > 0 && nights > stayLimit;
+  const stayOverLimit = stayLimit != null && nights > stayLimit;
 
   return (
     <div className={styles.complianceList}>
@@ -747,26 +747,20 @@ function ComplianceReport({
 
       {nights > 0 && (
         <div
-          className={[styles.complianceItem, stayExceedsVisaLimit ? styles.complianceWarn : styles.complianceOk].join(
-            " ",
-          )}
+          className={[styles.complianceItem, stayOverLimit ? styles.complianceWarn : styles.complianceOk].join(" ")}
         >
-          <span className={styles.complianceIcon}>{stayExceedsVisaLimit ? "⚠️" : "✓"}</span>
+          <span className={styles.complianceIcon}>{stayOverLimit ? "⚠️" : "✓"}</span>
           <div>
             <div className={styles.complianceTitle}>
-              {stayExceedsVisaLimit ? "Stay exceeds visa limit" : "Travel dates policy-compliant"}
+              {stayOverLimit ? "Stay exceeds visa limit" : "Travel dates policy-compliant"}
             </div>
             <div className={styles.complianceBody}>
-              {stayExceedsVisaLimit ? (
-                <>
-                  {depLabel} to {retLabel} · {nights}-night stay · exceeds {stayLimit}-day limit
-                </>
-              ) : (
-                <>
-                  {depLabel} to {retLabel} · {nights}-night stay
-                  {stayLimit != null ? ` · within ${stayLimit}-day limit` : ""}
-                </>
-              )}
+              {depLabel} to {retLabel} · {nights}-night stay
+              {stayLimit != null
+                ? stayOverLimit
+                  ? ` · exceeds ${stayLimit}-day limit`
+                  : ` · within ${stayLimit}-day limit`
+                : ""}
             </div>
           </div>
         </div>
@@ -2276,6 +2270,29 @@ export default function DemoPage() {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
+
+  // Ensure visa info is available at frame 7 even if frame 3 was skipped
+  useEffect(() => {
+    if (!isProgressHydrated || currentIndex !== 7 || visaInfo !== null) return;
+    const country = tripData?.country ?? DEMO_DEFAULTS.country;
+    if (visaFetchedForRef.current === country) return;
+    visaFetchedForRef.current = country;
+    let cancelled = false;
+
+    fetch("/api/demo/visa-lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ country }),
+    })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: DemoVisaInfo | null) => {
+        if (!cancelled && data) setVisaInfo(data);
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated, visaInfo]);
 
   // Fetch real flights when entering frame 1 (flight picker)
   useEffect(() => {
