@@ -73,8 +73,8 @@ const TripSchema = new Schema(
       },
       reason: { type: String, default: null },
     },
-    totalSpend: { type: Types.Decimal128, default: 0 },
-    budgetCap: { type: Types.Decimal128, required: true },
+    totalSpendUsd: { type: Types.Decimal128, default: 0 },
+    budgetCapUsd: { type: Types.Decimal128, required: true },
   },
   { timestamps: true }
 );

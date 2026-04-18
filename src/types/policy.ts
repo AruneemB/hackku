@@ -18,9 +18,12 @@ export interface Policy {
   requiresApprovalAboveUsd: number;
   handbookExcerpt: string; // source text used for vector embedding
   // embedding: number[];  ← stored in DB but not returned to client
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface VisaRequirement {
+  _id: string;
   destinationCountry: string;
   citizenship: string;
   visaRequired: boolean;
@@ -28,6 +31,8 @@ export interface VisaRequirement {
   stayLimitDays: number;
   notes: string;
   applicationUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface PolicyFindings {
