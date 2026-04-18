@@ -37,11 +37,13 @@ export function useLiveTracking(trip: Trip | null) {
     }
   }, [isCrisisOrCancelled, isCancelled, delayMinutes]);
 
+  const announcedGate = useRef<string | null>(null);
   useEffect(() => {
-    if (gate && flightStatus?.status === "on_time") {
+    if (gate && flightStatus?.status === "on_time" && announcedGate.current !== gate) {
+      announcedGate.current = gate;
       mascot.say(`Your departure gate is ${gate}. Everything looks on schedule.`, "neutral");
     }
-  }, [gate]);
+  }, [gate, flightStatus?.status, mascot]);
 
   return {
     flightStatus,
