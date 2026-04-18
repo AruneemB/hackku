@@ -208,41 +208,37 @@ async function parseSpeechResponse(
   };
 }
 
-export async function speak(text: string, tone: ToneKey): Promise<ElevenLabsSpeech | null> {
+export type SpeakResult =
+  | { ok: true; speech: ElevenLabsSpeech; voiceId: string }
+  | { ok: false; reason: string; status?: number; voiceId?: string };
+
+export async function speak(text: string, tone: ToneKey): Promise<SpeakResult> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
-    console.warn("ElevenLabs env vars missing - skipping TTS");
-    return null;
+    return { ok: false, reason: "ELEVENLABS_API_KEY not set" };
   }
-
-  const voiceId = await resolveVoiceId(apiKey);
-  if (!voiceId) {
-    console.warn("No ElevenLabs voice available");
-    return null;
-  }
-
-  let res = await requestSpeech(apiKey, voiceId, text, tone);
 
   const configuredVoiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || null;
-  if (!res.ok && configuredVoiceId && voiceId === configuredVoiceId && res.status !== 402) {
-    cachedVoiceId = null;
-    const fallbackVoiceId = await resolveVoiceId(apiKey, true);
-    if (fallbackVoiceId && fallbackVoiceId !== voiceId) {
-      console.warn(
-        `[elevenlabs] configured voice ${voiceId} failed (${res.status}); retrying with ${fallbackVoiceId}`
-      );
-      res = await requestSpeech(apiKey, fallbackVoiceId, text, tone);
-    }
+  const voiceId = await resolveVoiceId(apiKey);
+  if (!voiceId) {
+    return { ok: false, reason: "No ElevenLabs voice available" };
   }
+
+  console.log(`[elevenlabs] speak using voice=${voiceId} (configured=${configuredVoiceId ?? "none"}) tone=${tone}`);
+
+  const res = await requestSpeech(apiKey, voiceId, text, tone);
 
   if (!res.ok) {
-    const errText = await res.text();
-    console.error("ElevenLabs error:", res.status, errText);
-
-    // 402 = library voice not available on free tier - clear cache to re-discover.
+    const errText = await res.text().catch(() => "");
+    console.error(`[elevenlabs] request failed status=${res.status} voice=${voiceId}: ${errText}`);
     if (res.status === 402) cachedVoiceId = null;
-    return null;
+    return { ok: false, reason: errText || `status ${res.status}`, status: res.status, voiceId };
   }
 
-  return parseSpeechResponse(res, text);
+  const speech = await parseSpeechResponse(res, text);
+  if (!speech) {
+    return { ok: false, reason: "Empty response from ElevenLabs", voiceId };
+  }
+
+  return { ok: true, speech, voiceId };
 }

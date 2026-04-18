@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { Ellipsis, Pencil } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
 import type { Flight } from "@/types/flight";
+import type { Hotel } from "@/types/hotel";
 import styles from "./page.module.css";
+import dynamic from "next/dynamic";
+
+const DynamicHotelMap = dynamic(() => import("@/components/map/LeafletHotelMap"), { ssr: false });
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -43,6 +48,7 @@ type DemoProgressSnapshot = {
   conversationMessages: ConversationMessage[];
   knownFields: Record<string, string>;
   selectedFlight: number;
+  selectedHotel: number;
   selectedBundle: number | null;
 };
 
@@ -132,7 +138,7 @@ async function patchTrip(tripId: string, data: Record<string, unknown>) {
 async function executeFrameAction(
   frameIdx: number,
   tripId: string,
-  sel: { flight: number; bundle: number | null; liveFlights?: Flight[] | null }
+  sel: { flight: number; hotel: number; bundle: number | null; liveFlights?: Flight[] | null; liveHotels?: Hotel[] | null }
 ) {
   const flight = sel.liveFlights?.[sel.flight] ?? DEMO_FLIGHTS[sel.flight] ?? DEMO_FLIGHTS[0];
   const bundle = sel.bundle !== null ? DEMO_BUNDLES[sel.bundle] : DEMO_BUNDLES[2];
@@ -141,9 +147,11 @@ async function executeFrameAction(
     case 1:
       await patchTrip(tripId, { flights: [flight] });
       break;
-    case 2:
-      await patchTrip(tripId, { hotels: [DEMO_HOTELS[0]] });
+    case 2: {
+      const hotel = sel.liveHotels?.[sel.hotel] ?? DEMO_HOTELS[sel.hotel] ?? DEMO_HOTELS[0];
+      await patchTrip(tripId, { hotels: [hotel] });
       break;
+    }
     case 3:
       await patchTrip(tripId, { policyFindings: DEMO_POLICY });
       break;
@@ -156,12 +164,14 @@ async function executeFrameAction(
         approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
       });
       break;
-    case 6:
+    case 6: {
+      const altHotel = sel.liveHotels?.find((h) => !h.overPolicyCap) ?? sel.liveHotels?.[1] ?? DEMO_HOTELS[1];
       await patchTrip(tripId, {
-        hotels: [DEMO_HOTELS[1]],
+        hotels: [altHotel],
         approvalThread: { gmailThreadId: "demo-thread-002", status: "pending", reason: null },
       });
       break;
+    }
     case 7:
       await patchTrip(tripId, { status: "approved" });
       break;
@@ -190,7 +200,7 @@ async function executeFrameAction(
   }
 }
 
-async function revertFrameAction(frameIdx: number, tripId: string) {
+async function revertFrameAction(frameIdx: number, tripId: string, liveHotels?: Hotel[] | null) {
   switch (frameIdx) {
     case 1:
       await patchTrip(tripId, { flights: [] });
@@ -212,7 +222,7 @@ async function revertFrameAction(frameIdx: number, tripId: string) {
       break;
     case 6:
       await patchTrip(tripId, {
-        hotels: [DEMO_HOTELS[0]],
+        hotels: [liveHotels?.[0] ?? DEMO_HOTELS[0]],
         approvalThread: { gmailThreadId: "demo-thread-001", status: "rejected", reason: "Hotel exceeds $200 nightly cap" },
       });
       break;
@@ -253,7 +263,7 @@ function isPassportExpiringSoon(passportExpiry: string, departure: string): bool
 
 // ── Visual components ──────────────────────────────────────────
 
-function TripCard({ tripData }: { tripData?: TripData | null }) {
+function TripCard({ tripData, travelerName }: { tripData?: TripData | null; travelerName?: string }) {
   const data = tripData ?? DEMO_DEFAULTS;
   const depDate = new Date(data.departure);
   const retDate = new Date(data.returnDate);
@@ -281,8 +291,7 @@ function TripCard({ tripData }: { tripData?: TripData | null }) {
       )}
       <div className={styles.infoGrid}>
         {[
-          ["Traveler", "Kelli Monroe"],
-          ["Department", "Risk Management"],
+          ["Traveler", travelerName ?? "—"],
           ["Purpose", purpose],
         ].map(([k, v]) => (
           <div className={styles.infoRow} key={k}>
@@ -358,55 +367,6 @@ function FlightSearchState({
   );
 }
 
-function HotelMap() {
-  const hotels = [
-    { x: 115, label: "H1", name: "Marriott Scala", dist: "0.4 km", price: "$247/n" },
-    { x: 193, label: "H2", name: "AC Hotel Milan", dist: "1.2 km", price: "$189/n" },
-    { x: 273, label: "H3", name: "NH Collection", dist: "2.1 km", price: "$165/n" },
-  ];
-  return (
-    <div className={styles.mapWrap}>
-      <svg className={styles.mapSvg} viewBox="0 0 320 130" xmlns="http://www.w3.org/2000/svg">
-        <rect fill="#ede9e0" height="130" width="320" />
-        {([[4,4,68,54],[82,4,68,54],[156,4,68,54],[234,4,80,54],[4,72,68,54],[82,72,68,54],[156,72,68,54],[234,72,80,54]] as number[][]).map(([x,y,w,h],i) => (
-          <rect fill={i === 5 ? "#c8d8a0" : "#dad6cc"} height={h} key={i} rx="2" width={w} x={x} y={y} />
-        ))}
-        <rect fill="#fff" height="12" width="320" x="0" y="58" />
-        <rect fill="#fff" height="130" width="10" x="76" y="0" />
-        <rect fill="#fff" height="130" width="10" x="150" y="0" />
-        <rect fill="#fff" height="130" width="10" x="228" y="0" />
-        <line stroke="#e8c870" strokeDasharray="8,5" strokeWidth="1.5" x1="0" x2="320" y1="64" y2="64" />
-        {hotels.map(h => (
-          <line key={h.label} stroke="#f35b4f" strokeDasharray="4,3" strokeOpacity="0.4" strokeWidth="1.5" x1="38" x2={h.x} y1="30" y2="30" />
-        ))}
-        <circle cx="38" cy="30" fill="#1a2530" r="11" />
-        <text fill="#fff" fontSize="11" fontWeight="bold" textAnchor="middle" x="38" y="34">★</text>
-        {hotels.map(h => (
-          <g key={h.label}>
-            <circle cx={h.x} cy={30} fill="#f35b4f" r="11" />
-            <text fill="#fff" fontSize="9" fontWeight="bold" textAnchor="middle" x={h.x} y={34}>{h.label}</text>
-            <text fill="#888" fontSize="8" textAnchor="middle" x={h.x} y={52}>{h.dist}</text>
-          </g>
-        ))}
-      </svg>
-      <div className={styles.mapLegend}>
-        <div className={styles.mapLegendItem}><span className={styles.mapDotDark} />Client office</div>
-        <div className={styles.mapLegendItem}><span className={styles.mapDotAccent} />Preferred hotels</div>
-      </div>
-      <div className={styles.hotelList}>
-        {hotels.map(h => (
-          <div className={styles.hotelRow} key={h.label}>
-            <span className={styles.hotelBadge}>{h.label}</span>
-            <span className={styles.hotelName}>{h.name}</span>
-            <span className={styles.hotelDist}>{h.dist}</span>
-            <span className={styles.hotelPrice}>{h.price}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ComplianceReport() {
   return (
     <div className={styles.complianceList}>
@@ -454,7 +414,7 @@ function ApprovalEmail() {
         <strong>Hotel:</strong> Marriott Scala · $247/night x 5 = $1,235<br />
         <strong>Note:</strong> Hotel is $47 over the $200 cap - closest preferred vendor to client office.</p>
         <p>Total estimated: $2,010. Please let me know if you have any questions.</p>
-        <p>Thanks,<br />Kelli</p>
+        <p>Thanks,<br />Lockey</p>
       </div>
     </div>
   );
@@ -568,7 +528,7 @@ function ExceptionEmail() {
         <p>Hi Sarah,</p>
         <p><strong>LH 8904 was cancelled due to a thunderstorm</strong> at O&#39;Hare. The only available rebooking is LH 9012 at <strong>$1,067</strong>, which is $380 over the approved $687 budget.</p>
         <p>Force majeure - requesting emergency exception. Hotel hold expires in 2 hours.</p>
-        <p>Kelli</p>
+        <p>Lockey</p>
       </div>
     </div>
   );
@@ -882,7 +842,7 @@ function ResubmitEmail() {
         <p>Hi Sarah,</p>
         <p>Following your feedback, I&#39;ve switched to <strong>AC Hotel Milan at $189/night</strong> — fully within the $200 cap. Total drops to $1,840.</p>
         <p>Everything else is the same. Please let me know if you&#39;re happy to approve.</p>
-        <p>Thanks,<br />Kelli</p>
+        <p>Thanks,<br />Lockey</p>
       </div>
       <button className={styles.emailSend} onClick={() => setSent(true)} type="button">Send Updated Request</button>
     </div>
@@ -1040,7 +1000,7 @@ function DataCleared() {
 const FRAMES: DemoFrame[] = [
   { tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
   { tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
-  { tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: HotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
+  { tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
   { tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
   { tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
   { tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
@@ -1154,6 +1114,9 @@ function PhoneShell({
   isProcessing,
   onMicClick,
   analyserNode,
+  menuOpen,
+  onMenuToggle,
+  onResetDemo,
 }: {
   sheetScrollContent: React.ReactNode;
   sheetFooter: React.ReactNode;
@@ -1165,6 +1128,9 @@ function PhoneShell({
   isProcessing: boolean;
   onMicClick: () => void;
   analyserNode: AnalyserNode | null;
+  menuOpen: boolean;
+  onMenuToggle: () => void;
+  onResetDemo: () => void;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
@@ -1208,9 +1174,24 @@ function PhoneShell({
     <div className={styles.phone}>
       <section className={styles.shell}>
         <div className={styles.content}>
-          <button aria-label="Open menu" className={styles.menuButton} type="button">
-            <MenuIcon />
-          </button>
+          <div className={styles.menuWrap}>
+            <button aria-label="Open menu" className={styles.menuButton} onClick={onMenuToggle} type="button">
+              <MenuIcon />
+            </button>
+            {menuOpen && (
+              <>
+                <div className={styles.menuBackdrop} onClick={onMenuToggle} />
+                <div className={styles.menuPanel}>
+                  <button className={[styles.menuItem, styles.menuItemDanger].join(" ")} onClick={onResetDemo} type="button">
+                    Reset Demo
+                  </button>
+                  <button className={styles.menuItem} onClick={() => void signOut({ callbackUrl: "/demo" })} type="button">
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <div className={styles.stage}>
             <Mascot bubbleClassName={styles.speech} bubblePosition="below" bubbleSize="lg" bubbleVariant="plain" className={styles.mascot} figureClassName={styles.figure} />
             <div className={styles.ellipsisSlot}>
@@ -1226,7 +1207,7 @@ function PhoneShell({
               <Pencil size={22} />
             </button>
             <button
-              aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+              aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
               className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
               disabled={isProcessing}
               onClick={onMicClick}
@@ -1248,6 +1229,52 @@ function PhoneShell({
           </div>
           <div className={styles.sheetScroll}>{sheetScrollContent}</div>
           <div className={styles.sheetFooter}>{sheetFooter}</div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ── Login screen (shown inside the phone shell before demo starts) ─
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+      <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
+    </svg>
+  );
+}
+
+function LoginScreen() {
+  const [loading, setLoading] = React.useState(false);
+  return (
+    <div className={styles.phone}>
+      <section className={styles.shell}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: "0 8px 22px" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 42, marginBottom: 8 }}>✈️</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--cc-text-primary, #fff)" }}>Lockey</div>
+            <div style={{ fontSize: 13, color: "var(--cc-body, #8a9baa)", marginTop: 4 }}>AI Travel Concierge · Lockton</div>
+          </div>
+          <button
+            onClick={() => { setLoading(true); void signIn("google", { callbackUrl: "/demo" }); }}
+            disabled={loading}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+              background: "#fff", color: "#1a2530", fontWeight: 600, fontSize: 15,
+              border: "none", borderRadius: 14, padding: "13px 28px", cursor: loading ? "default" : "pointer",
+              opacity: loading ? 0.7 : 1, transition: "opacity 150ms",
+            }}
+          >
+            <GoogleIcon />
+            {loading ? "Signing in…" : "Sign in with Google"}
+          </button>
+          <p style={{ fontSize: 11, color: "var(--cc-body, #8a9baa)", textAlign: "center", maxWidth: 200, lineHeight: 1.5 }}>
+            Authorizes Gmail access for travel approvals and receipt scanning.
+          </p>
         </div>
       </section>
     </div>
@@ -1281,12 +1308,27 @@ export default function DemoPage() {
 
   // Selection state (lifted from sub-components)
   const [selectedFlight, setSelectedFlight] = useState(0);
+  const [selectedHotel, setSelectedHotel] = useState(0);
   const [selectedBundle, setSelectedBundle] = useState<number | null>(null);
   const [liveFlights, setLiveFlights] = useState<DisplayFlight[] | null>(null);
   const [liveFlightResults, setLiveFlightResults] = useState<Flight[] | null>(null);
   const [isFlightSearchLoading, setIsFlightSearchLoading] = useState(false);
   const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
+  const [liveHotels, setLiveHotels] = useState<Hotel[] | null>(null);
   const [isProgressHydrated, setIsProgressHydrated] = useState(false);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { data: session, status } = useSession();
+  const [userProfile, setUserProfile] = useState<{ name: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data: { name: string }) => setUserProfile(data))
+      .catch(() => {});
+  }, []);
+
+  const travelerName = userProfile?.name ?? session?.user?.name ?? undefined;
 
   const { say, setThinking, stopSpeaking } = useMascot();
   const frame = FRAMES[currentIndex];
@@ -1320,6 +1362,7 @@ export default function DemoPage() {
         if (Array.isArray(snapshot.conversationMessages)) setConversationMessages(snapshot.conversationMessages);
         if (snapshot.knownFields) setKnownFields(snapshot.knownFields);
         if (typeof snapshot.selectedFlight === "number") setSelectedFlight(snapshot.selectedFlight);
+        if (typeof snapshot.selectedHotel === "number") setSelectedHotel(snapshot.selectedHotel);
         if (typeof snapshot.selectedBundle === "number" || snapshot.selectedBundle === null) {
           setSelectedBundle(snapshot.selectedBundle);
         }
@@ -1347,6 +1390,7 @@ export default function DemoPage() {
       conversationMessages,
       knownFields,
       selectedFlight,
+      selectedHotel,
       selectedBundle,
     };
 
@@ -1361,25 +1405,30 @@ export default function DemoPage() {
     overlayReady,
     selectedBundle,
     selectedFlight,
+    selectedHotel,
     tripData,
     tripId,
   ]);
 
-  // Speak the frame greeting, then open the sheet once Kelli finishes talking.
+  // Speak the frame greeting, then open the sheet once Lockey finishes talking.
   // Frame 0 is special: sheet only opens after Gemini parses the user's speech.
   useEffect(() => {
-    if (!isProgressHydrated) return;
+    if (!isProgressHydrated || status !== "authenticated") return;
     let cancelled = false;
 
     async function run() {
-      await say(frame.message, frame.tone);
+      const firstName = session?.user?.name?.split(" ")[0];
+      const message = currentIndex === 0 && firstName
+        ? `Hey, ${firstName}! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.`
+        : frame.message;
+      await say(message, frame.tone);
       if (!cancelled && currentIndex !== 0) setOverlayReady(true);
     }
 
     void run();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, isProgressHydrated]);
+  }, [currentIndex, isProgressHydrated, status]);
 
   // Fetch real flights when entering frame 1 (flight picker)
   useEffect(() => {
@@ -1448,6 +1497,33 @@ export default function DemoPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
 
+  // Fetch real hotels when entering frame 2 (hotel picker)
+  useEffect(() => {
+    if (!isProgressHydrated) return;
+    if (currentIndex !== 2) return;
+    const trip = tripData ?? DEMO_DEFAULTS;
+    let cancelled = false;
+
+    fetch("/api/hotels/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        city: trip.city,
+        country: trip.country,
+        checkIn: trip.departure,
+        checkOut: trip.returnDate,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { hotels: Hotel[] }) => {
+        if (!cancelled && data.hotels?.length) setLiveHotels(data.hotels.slice(0, 6));
+      })
+      .catch(() => {}); // silently fall back to DEMO_HOTELS
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated]);
+
   // ── Voice input (Gemini STT) ─────────────────────────────────
 
   function stopListening() {
@@ -1505,10 +1581,15 @@ export default function DemoPage() {
       recorder.start();
       setIsListening(true);
 
-      // Auto-stop after 1.8 s of silence
-      const SILENCE_THRESHOLD = 10;
-      const SILENCE_MS = 1800;
+      // Auto-stop after sustained silence, with a noise gate so fan
+      // hum doesn't count as speech. The mic only "arms" once it
+      // detects audio above SPEECH_THRESHOLD, and the silence timer
+      // only triggers when levels drop below SILENCE_THRESHOLD.
+      const SILENCE_THRESHOLD = 30;   // fan noise sits ~5-20
+      const SPEECH_THRESHOLD  = 35;   // must exceed this to arm
+      const SILENCE_MS        = 2200; // ms of quiet before auto-stop
       let silenceStart: number | null = null;
+      let speechDetected = false;
 
       silenceTimerRef.current = setInterval(() => {
         if (mediaRecorderRef.current?.state !== "recording") {
@@ -1519,6 +1600,14 @@ export default function DemoPage() {
         const data = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(data);
         const avg = data.reduce((s, v) => s + v, 0) / data.length;
+
+        // Noise gate: don't start silence countdown until real
+        // speech has been detected at least once.
+        if (!speechDetected) {
+          if (avg >= SPEECH_THRESHOLD) speechDetected = true;
+          return; // keep waiting for speech
+        }
+
         if (avg < SILENCE_THRESHOLD) {
           silenceStart = silenceStart ?? Date.now();
           if (Date.now() - silenceStart >= SILENCE_MS) stopListening();
@@ -1641,8 +1730,10 @@ export default function DemoPage() {
       } else if (tripId) {
         await executeFrameAction(currentIndex, tripId, {
           flight: selectedFlight,
+          hotel: selectedHotel,
           bundle: selectedBundle,
           liveFlights: liveFlightResults,
+          liveHotels,
         });
       }
 
@@ -1658,6 +1749,10 @@ export default function DemoPage() {
   function handleSecondary() { setOverlayDismissed(true); }
   function handleEllipsisOpen() { setOverlayDismissed(false); }
   function handleSheetClose() { setOverlayDismissed(true); }
+  function handleResetDemo() {
+    window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
+    window.location.reload();
+  }
 
   async function handleBack() {
     if (isProcessing || currentIndex === 0) return;
@@ -1665,7 +1760,7 @@ export default function DemoPage() {
     if (frameCompleted[currentIndex] && tripId) {
       setIsProcessing(true);
       try {
-        await revertFrameAction(currentIndex, tripId);
+        await revertFrameAction(currentIndex, tripId, liveHotels);
         setFrameCompleted((prev) => {
           const next = { ...prev };
           delete next[currentIndex];
@@ -1692,7 +1787,15 @@ export default function DemoPage() {
     setCurrentIndex((v) => Math.min(FRAMES.length - 1, v + 1));
   }
 
-  if (!isProgressHydrated) {
+  if (status === "unauthenticated") {
+    return (
+      <main className={styles.page}>
+        <LoginScreen />
+      </main>
+    );
+  }
+
+  if (!isProgressHydrated || status === "loading") {
     return (
       <main className={styles.page}>
         <div className={styles.phone}>
@@ -1706,7 +1809,7 @@ export default function DemoPage() {
 
   function renderFrameVisual() {
     switch (currentIndex) {
-      case 0: return <TripCard tripData={tripData} />;
+      case 0: return <TripCard travelerName={travelerName} tripData={tripData} />;
       case 1:
         if (false && isFlightSearchLoading) {
           return (
@@ -1736,6 +1839,7 @@ export default function DemoPage() {
           );
         }
         return <FlightPicker flights={liveFlights} onChange={setSelectedFlight} value={selectedFlight} />;
+      case 2: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
       case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
       default: { const V = frame.Visual; return <V />; }
     }
@@ -1772,8 +1876,11 @@ export default function DemoPage() {
         analyserNode={analyserNode}
         isListening={isListening}
         isProcessing={isProcessing}
+        menuOpen={menuOpen}
         onEllipsisOpen={handleEllipsisOpen}
+        onMenuToggle={() => setMenuOpen((v) => !v)}
         onMicClick={handleMicClick}
+        onResetDemo={handleResetDemo}
         onSheetClose={handleSheetClose}
         sheetFooter={footerContent}
         sheetScrollContent={scrollContent}

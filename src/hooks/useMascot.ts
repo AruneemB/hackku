@@ -31,6 +31,28 @@ let fallbackTimer: number | null = null;
 let currentAudio: HTMLAudioElement | null = null;
 let currentAudioUrl: string | null = null;
 let syncFrame: number | null = null;
+let audioUnlocked = false;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  // Play a silent buffer to satisfy browser autoplay policy.
+  try {
+    const ctx = new AudioContext();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    ctx.close();
+  } catch { /* ignore */ }
+}
+
+if (typeof window !== "undefined") {
+  const unlock = () => { unlockAudio(); window.removeEventListener("click", unlock, true); window.removeEventListener("touchend", unlock, true); };
+  window.addEventListener("click", unlock, true);
+  window.addEventListener("touchend", unlock, true);
+}
 
 function emitChange() {
   listeners.forEach((l) => l());
@@ -142,14 +164,23 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
       body: JSON.stringify({ text, tone }),
     });
 
-    if (!res.ok) return false;
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      console.warn("[mascot] ElevenLabs unavailable — falling back to browser TTS:", body);
+      return false;
+    }
 
     const data = (await res.json()) as {
       audioBase64?: string;
       alignment?: SpeechAlignment | null;
+      voiceId?: string;
     };
 
-    if (!data.audioBase64) return false;
+    if (!data.audioBase64) {
+      console.warn("[mascot] ElevenLabs returned no audio — falling back to browser TTS");
+      return false;
+    }
+    console.log(`[mascot] playing ElevenLabs voice ${data.voiceId}`);
 
     const blob = base64ToBlob(data.audioBase64, "audio/mpeg");
     const url = URL.createObjectURL(blob);
@@ -184,13 +215,35 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
         }
       };
 
-      audio.play().catch(() => {
-        const ms = getFallbackDuration(text);
-        startEstimatedReveal(text, ms);
-        fallbackTimer = window.setTimeout(() => {
-          fallbackTimer = null;
-          cleanup();
-        }, ms);
+      audio.play().catch((err) => {
+        console.warn("[mascot] audio.play() rejected — falling back to browser TTS:", err);
+        // Autoplay blocked — release the audio resources but keep isSpeaking:true
+        // so the speech bubble stays visible while browser TTS runs.
+        if (currentAudioUrl === url) {
+          URL.revokeObjectURL(url);
+          currentAudioUrl = null;
+        }
+        currentAudio = null;
+        if (syncFrame) { window.cancelAnimationFrame(syncFrame); syncFrame = null; }
+
+        if ("speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.rate = tone === "urgent" ? 1.08 : tone === "excited" ? 1.02 : 0.98;
+          utterance.pitch = tone === "excited" ? 1.1 : tone === "empathetic" ? 0.95 : 1;
+          revealTo(0);
+          utterance.onboundary = (event) => revealTo(event.charIndex);
+          utterance.onend = () => { revealTo(text.length); setMascotState({ isSpeaking: false }); resolve(); };
+          utterance.onerror = () => {
+            const ms = getFallbackDuration(text);
+            startEstimatedReveal(text, ms);
+            fallbackTimer = window.setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
+          };
+          window.speechSynthesis.speak(utterance);
+        } else {
+          const ms = getFallbackDuration(text);
+          startEstimatedReveal(text, ms);
+          fallbackTimer = window.setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
+        }
       });
     });
 
