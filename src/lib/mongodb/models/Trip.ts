@@ -15,7 +15,7 @@
 // EXAMPLE DOC → see src/types/trip.ts
 // ============================================================
 
-import { Schema, model, models, Types } from "mongoose";
+import { Schema, model, models } from "mongoose";
 
 const ReceiptSubSchema = new Schema(
   {
@@ -25,9 +25,9 @@ const ReceiptSubSchema = new Schema(
       enum: ["meal", "transport", "hotel", "other"],
       required: true,
     },
-    total: { type: Types.Decimal128, required: true },
+    total: { type: Number, required: true },
     currency: { type: String, required: true },
-    originalAmount: { type: Types.Decimal128, default: null },
+    originalAmount: { type: Number, default: null },
     date: { type: Date, required: true },
     sanitized: { type: Boolean, default: false },
     extractedByAI: { type: Boolean, default: true },
@@ -76,8 +76,18 @@ const TripSchema = new Schema(
       },
       reason: { type: String, default: null },
     },
-    totalSpendUsd: { type: Types.Decimal128, default: 0 },
-    budgetCapUsd: { type: Types.Decimal128, required: true },
+    exceptionRequest: {
+      subject: { type: String, default: null },
+      body: { type: String, default: null },
+      requestedAt: { type: Date, default: null },
+      status: {
+        type: String,
+        enum: ["pending", "approved", "rejected", null],
+        default: null,
+      },
+    },
+    totalSpendUsd: { type: Number, default: 0 },
+    budgetCapUsd: { type: Number, required: true },
   },
   { timestamps: true }
 );

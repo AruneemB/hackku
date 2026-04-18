@@ -15,6 +15,7 @@ export interface FlightLeg {
   carrier: string;      // e.g. "American Airlines"
   flightNumber: string; // e.g. "AA2345"
   durationMinutes: number;
+  layoverAirports?: string[]; // intermediate IATA codes; empty = nonstop
 }
 
 export interface Flight {
@@ -50,6 +51,12 @@ export interface Flight {
 //   "source": "serpapi"
 // }
 // -------------------------------------------------------
+
+export interface FlightGroup {
+  outbound: Flight;
+  returns: Flight[];
+  cheapestTotalUsd: number;
+}
 
 // Live status from TimeSeries collection (Frame 9-10)
 export interface FlightStatusUpdate {
