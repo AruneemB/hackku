@@ -28,9 +28,23 @@ export async function POST(req: NextRequest, context: ExceptionRouteContext) {
     return NextResponse.json({ error: "subject and body are required" }, { status: 400 });
   }
 
+  if (!mongoose.isValidObjectId(id)) {
+    return NextResponse.json({ error: "Invalid trip id" }, { status: 400 });
+  }
   await connectToDatabase();
-  const trip = await Trip.findById(id);
-  if (!trip) {
+  const updated = await Trip.findByIdAndUpdate(
+    id,
+    {
+      $set: {
+        "exceptionRequest.subject": subject,
+        "exceptionRequest.body": body,
+        "exceptionRequest.requestedAt": new Date(),
+        "exceptionRequest.status": "pending",
+      },
+    },
+    { new: true }
+  );
+  if (!updated) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
 
