@@ -32,9 +32,9 @@ function decimal128ToString(val: unknown, fallback: string): string {
 
 export async function GET(req: NextRequest, context: CrisisRouteContext) {
   const { id } = await context.params;
-  const delayMinutes = parseInt(req.nextUrl.searchParams.get("delayMinutes") ?? "0", 10);
-
-  if (delayMinutes <= CONNECTION_BUFFER_MINUTES) {
+  const raw = req.nextUrl.searchParams.get("delayMinutes");
+  const delayMinutes = Number.parseInt(raw ?? "0", 10);
+  if (!Number.isFinite(delayMinutes) || delayMinutes <= CONNECTION_BUFFER_MINUTES) {
     return NextResponse.json({ crisis: false });
   }
 
