@@ -24,41 +24,72 @@ const MASCOT_IMAGES: Record<ToneKey, { src: string; alt: string }> = {
   },
 };
 
-export function Mascot() {
+interface MascotProps {
+  bubblePosition?: "above" | "below";
+  bubbleVariant?: "card" | "plain";
+  bubbleSize?: "sm" | "lg";
+  className?: string;
+  figureClassName?: string;
+  bubbleClassName?: string;
+}
+
+export function Mascot({
+  bubblePosition = "above",
+  bubbleVariant = "card",
+  bubbleSize = "sm",
+  className = "",
+  figureClassName = "",
+  bubbleClassName = "",
+}: MascotProps) {
   const { speech, tone, isSpeaking } = useMascot();
   const mascotImage = MASCOT_IMAGES[tone];
+  const imageNode = (
+    <div
+      className={figureClassName}
+      style={{
+        position: "relative",
+        display: "grid",
+        placeItems: "center",
+        transform: isSpeaking ? "translateY(-2px)" : "translateY(0)",
+        transition: "transform 150ms ease",
+      }}
+    >
+      <Image
+        alt={mascotImage.alt}
+        height={280}
+        priority
+        src={mascotImage.src}
+        style={{
+          width: "min(280px, 60vw)",
+          height: "auto",
+        }}
+        width={280}
+      />
+    </div>
+  );
+
+  const bubbleNode = speech ? (
+    <SpeechBubble
+      className={bubbleClassName}
+      key={speech}
+      size={bubbleSize}
+      text={speech}
+      variant={bubbleVariant}
+    />
+  ) : null;
 
   return (
     <div
+      className={className}
       style={{
         display: "grid",
         justifyItems: "center",
         gap: 16,
       }}
     >
-      {speech ? <SpeechBubble key={speech} text={speech} /> : null}
-
-      <div
-        style={{
-          position: "relative",
-          display: "grid",
-          placeItems: "center",
-          transform: isSpeaking ? "translateY(-2px)" : "translateY(0)",
-          transition: "transform 150ms ease",
-        }}
-      >
-        <Image
-          alt={mascotImage.alt}
-          height={280}
-          priority
-          src={mascotImage.src}
-          style={{
-            width: "min(280px, 60vw)",
-            height: "auto",
-          }}
-          width={280}
-        />
-      </div>
+      {bubblePosition === "above" ? bubbleNode : null}
+      {imageNode}
+      {bubblePosition === "below" ? bubbleNode : null}
     </div>
   );
 }
