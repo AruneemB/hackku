@@ -46,6 +46,7 @@ describe("FlightStatus Model (TimeSeries)", () => {
       status: "delayed",
       delayMinutes: 45,
       gate: "B22",
+      destination: "MXP",
       timestamp: new Date().toISOString(),
     };
 
@@ -58,6 +59,7 @@ describe("FlightStatus Model (TimeSeries)", () => {
     expect(latest?.status).toBe("delayed");
     expect(latest?.delayMinutes).toBe(45);
     expect(latest?.gate).toBe("B22");
+    expect(latest?.destination).toBe("MXP");
     expect(latest?.timestamp).toBeInstanceOf(Date);
   });
 
@@ -67,10 +69,10 @@ describe("FlightStatus Model (TimeSeries)", () => {
   });
 
   it("should return the most recent update when multiple exist", async () => {
-    const base = { flightNumber: "DL456", tripId: "trip_1" };
+    const base = { flightNumber: "DL456", tripId: "trip_1", destination: "LHR", delayMinutes: 0 };
     
-    const older = { ...base, status: "on-time", timestamp: new Date("2026-04-18T10:00:00Z").toISOString() };
-    const newer = { ...base, status: "delayed", timestamp: new Date("2026-04-18T11:00:00Z").toISOString() };
+    const older = { ...base, status: "on_time", timestamp: new Date("2026-04-18T10:00:00Z").toISOString() };
+    const newer = { ...base, status: "delayed", delayMinutes: 30, timestamp: new Date("2026-04-18T11:00:00Z").toISOString() };
 
     await FlightStatus.writeFlightStatus(older);
     await FlightStatus.writeFlightStatus(newer);

@@ -28,12 +28,15 @@ export async function queryPolicyForTrip(
   trip: Trip, 
   costs?: { flightCostUsd?: number; hotelNightlyRateUsd?: number }
 ): Promise<PolicyFindings> {
+  // Ensure we are connected to the DB (Mongoose and raw client)
+  await connectToDatabase();
+  const client = await clientPromise;
+
   // Step 1: Generate query embedding
   const query = `travel policy budget rules for ${trip.destination.city} ${trip.destination.country}`
   const embedding = await generateEmbedding(query)
 
   // Step 2: Atlas Vector Search
-  const client = await clientPromise;
   const db = client.db("hackku")
   const results = await db.collection("policies").aggregate([
     {
@@ -57,7 +60,6 @@ export async function queryPolicyForTrip(
   const policyDoc = results[0] as unknown as Policy;
 
   // Step 3: Fetch Visa Requirements
-  await connectToDatabase();
   const user = await User.findById(trip.userId);
   if (!user) {
     throw new Error(`User not found: ${trip.userId}`);
