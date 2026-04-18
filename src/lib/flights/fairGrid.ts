@@ -55,17 +55,16 @@ export function buildDateWindow(target: Date, days: number): string[] {
  * in lower fares for leisure travelers.
  */
 function isSaturdayNightStay(departureDate: Date, returnDate: Date): boolean {
-  // Find the first Sunday strictly after the departure date
-  const nextSunday = new Date(departureDate);
-  nextSunday.setUTCHours(0, 0, 0, 0);
-  const daysUntilSunday = 7 - nextSunday.getUTCDay();
-  nextSunday.setUTCDate(nextSunday.getUTCDate() + daysUntilSunday);
-
-  // Compare the return date to that Sunday
+  // A Saturday-night stay means the trip spans at least one Saturday midnight:
+  // the return must be strictly after the first Saturday on or after departure.
+  const dep = new Date(departureDate);
+  dep.setUTCHours(0, 0, 0, 0);
+  const daysToSaturday = (6 - dep.getUTCDay() + 7) % 7;
+  const firstSaturday = new Date(dep);
+  firstSaturday.setUTCDate(dep.getUTCDate() + daysToSaturday);
   const ret = new Date(returnDate);
   ret.setUTCHours(0, 0, 0, 0);
-
-  return ret.getTime() >= nextSunday.getTime();
+  return ret.getTime() > firstSaturday.getTime();
 }
 
 /**

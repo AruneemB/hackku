@@ -16,7 +16,7 @@
 //   say("Kelli, your trip is approved!", "excited")
 // ============================================================
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 // Mock speak function for now as ElevenLabs client is also likely a scaffold
 // import { speak } from "@/lib/elevenlabs/client";
 import type { ToneKey } from "@/lib/elevenlabs/tones";
@@ -25,6 +25,13 @@ export function useMascot() {
   const [speech, setSpeech] = useState<string>("");
   const [tone, setTone] = useState<ToneKey>("neutral");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const say = useCallback(async (text: string, newTone?: ToneKey) => {
     if (newTone) setTone(newTone);
@@ -33,8 +40,9 @@ export function useMascot() {
     console.log(`Mascot says: "${text}" with tone: ${newTone || tone}`);
     // const audio = await speak(text, newTone ?? tone)
     // play audio stream
-    setTimeout(() => {
-        setIsSpeaking(false);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setIsSpeaking(false);
     }, 2000); // Simulate speaking
   }, [tone]);
 
