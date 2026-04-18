@@ -5,7 +5,7 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { ArrowBigLeft, Ellipsis, Pencil, Plane, Send as SendIcon } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
-import type { Flight, FlightGroup } from "@/types/flight";
+import type { FlightGroup } from "@/types/flight";
 import type { Hotel } from "@/types/hotel";
 import styles from "./page.module.css";
 import dynamic from "next/dynamic";
@@ -29,6 +29,7 @@ type TripData = {
 type ConversationMessage = { role: "user" | "assistant"; content: string; frameIndex?: number };
 
 type DemoFrame = {
+  frameNumber: number;
   tone: Tone;
   message: string;
   sheetTitle: string;
@@ -168,6 +169,25 @@ const DEMO_POLICY = {
 };
 
 const DEMO_PROGRESS_STORAGE_KEY = "hackku.demo.progress.v1";
+const HIDDEN_FRAME_INDEXES = new Set([4, 12, 15]);
+
+function isVisibleFrameIndex(index: number): boolean {
+  return index >= 0 && index < FRAMES.length && !HIDDEN_FRAME_INDEXES.has(index);
+}
+
+function getNearestVisibleFrameIndex(index: number): number {
+  if (isVisibleFrameIndex(index)) return index;
+
+  for (let next = index + 1; next < FRAMES.length; next += 1) {
+    if (isVisibleFrameIndex(next)) return next;
+  }
+
+  for (let prev = index - 1; prev >= 0; prev -= 1) {
+    if (isVisibleFrameIndex(prev)) return prev;
+  }
+
+  return 0;
+}
 
 const DEMO_BUNDLES = [
   { label: "A", description: "MXP direct · Marriott Scala. Full compliance, hotel exception needed.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2340, savingsVsStandard: 0, complianceFlags: ["hotel_over_cap"] },
@@ -257,60 +277,6 @@ async function executeFrameAction(
       break;
     case 14:
       await patchTrip(tripId, { status: "archived", totalSpendUsd: "2187.00" });
-      break;
-    default:
-      break;
-  }
-}
-
-async function revertFrameAction(frameIdx: number, tripId: string, liveHotels?: Hotel[] | null) {
-  switch (frameIdx) {
-    case 1:
-      await patchTrip(tripId, { flights: [] });
-      break;
-    case 2:
-      await patchTrip(tripId, { hotels: [] });
-      break;
-    case 3:
-      await patchTrip(tripId, { policyFindings: null });
-      break;
-    case 4:
-      await patchTrip(tripId, { selectedBundle: null });
-      break;
-    case 5:
-      await patchTrip(tripId, {
-        status: "draft",
-        approvalThread: { gmailThreadId: null, status: null, reason: null },
-      });
-      break;
-    case 6:
-      await patchTrip(tripId, {
-        hotels: [liveHotels?.[0] ?? DEMO_HOTELS[0]],
-        approvalThread: { gmailThreadId: "demo-thread-001", status: "rejected", reason: "Hotel exceeds $200 nightly cap" },
-      });
-      break;
-    case 7:
-      await patchTrip(tripId, { status: "pending_approval" });
-      break;
-    case 8:
-      await patchTrip(tripId, { status: "approved" });
-      break;
-    case 9:
-      await patchTrip(tripId, { flights: [REBOOKED_FLIGHT] });
-      break;
-    case 10:
-      await patchTrip(tripId, {
-        approvalThread: { gmailThreadId: "demo-thread-001", status: "approved", reason: null },
-      });
-      break;
-    case 11:
-    case 13:
-      break;
-    case 12:
-      await patchTrip(tripId, { receipts: [] });
-      break;
-    case 14:
-      await patchTrip(tripId, { status: "active", totalSpendUsd: "0" });
       break;
     default:
       break;
@@ -1265,22 +1231,22 @@ function DataCleared() {
 // ── Frame definitions ──────────────────────────────────────────
 
 const FRAMES: DemoFrame[] = [
-  { tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
-  { tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
-  { tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
-  { tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
-  { tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
-  { tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
-  { tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
-  { tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
-  { tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
-  { tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
-  { tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
-  { tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel and your daily meal allowance to keep you covered.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupport, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
-  { tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
-  { tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCards, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
-  { tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
-  { tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
+  { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
+  { frameNumber: 2, tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
+  { frameNumber: 3, tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
+  { frameNumber: 4, tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
+  { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
+  { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
+  { frameNumber: 7, tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
+  { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
+  { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
+  { frameNumber: 11, tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
+  { frameNumber: 12, tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel and your daily meal allowance to keep you covered.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupport, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
+  { frameNumber: 13, tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
+  { frameNumber: 14, tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCards, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
+  { frameNumber: 15, tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
+  { frameNumber: 16, tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
 ];
 
 // ── Roadmap data ───────────────────────────────────────────────
@@ -1330,7 +1296,7 @@ const ROADMAP_PHASES = [
 ];
 
 function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number; frameCompleted: Record<number, boolean> }) {
-  const allSteps = ROADMAP_PHASES.flatMap((p) => p.steps);
+  const allSteps = ROADMAP_PHASES.flatMap((p) => p.steps).filter((step) => isVisibleFrameIndex(step.index));
   const total = allSteps.length;
 
   return (
@@ -1339,7 +1305,7 @@ function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number
       {ROADMAP_PHASES.map((phase) => (
         <div key={phase.label}>
           <div className={styles.roadmapPhaseLabel}>{phase.label}</div>
-          {phase.steps.map((step) => {
+          {phase.steps.filter((step) => isVisibleFrameIndex(step.index)).map((step) => {
             const isDone = !!frameCompleted[step.index];
             const isCurrent = currentIndex === step.index;
             const globalIdx = allSteps.findIndex((s) => s.index === step.index);
@@ -1837,6 +1803,7 @@ function LoginScreen() {
 // ── Page ───────────────────────────────────────────────────────
 
 export default function DemoPage() {
+  const visibleFrames = FRAMES.map((frame, index) => ({ ...frame, index })).filter(({ index }) => isVisibleFrameIndex(index));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [overlayReady, setOverlayReady] = useState(false);
   const [overlayDismissed, setOverlayDismissed] = useState(false);
@@ -1911,7 +1878,8 @@ export default function DemoPage() {
         }
 
         if (typeof snapshot.currentIndex === "number") {
-          setCurrentIndex(Math.max(0, Math.min(FRAMES.length - 1, snapshot.currentIndex)));
+          const savedIndex = Math.max(0, Math.min(FRAMES.length - 1, snapshot.currentIndex));
+          setCurrentIndex(getNearestVisibleFrameIndex(savedIndex));
         }
         if (typeof snapshot.overlayReady === "boolean") setOverlayReady(snapshot.overlayReady);
         if (typeof snapshot.overlayDismissed === "boolean") setOverlayDismissed(snapshot.overlayDismissed);
@@ -2357,37 +2325,12 @@ export default function DemoPage() {
     window.location.reload();
   }
 
-  async function handleBack() {
-    if (isProcessing || currentIndex === 0) return;
-
-    if (frameCompleted[currentIndex] && tripId) {
-      setIsProcessing(true);
-      try {
-        await revertFrameAction(currentIndex, tripId, liveHotels);
-        setFrameCompleted((prev) => {
-          const next = { ...prev };
-          delete next[currentIndex];
-          return next;
-        });
-      } catch (err) {
-        console.error("Revert error:", err);
-      } finally {
-        setIsProcessing(false);
-      }
-    }
-
+  function handleFrameSelect(nextIndex: number) {
+    if (isProcessing || nextIndex === currentIndex || !isVisibleFrameIndex(nextIndex)) return;
     stopSpeaking();
     setOverlayReady(false);
     setOverlayDismissed(false);
-    setCurrentIndex((v) => Math.max(0, v - 1));
-  }
-
-  function handleNext() {
-    if (!frameCompleted[currentIndex] || isProcessing) return;
-    stopSpeaking();
-    setOverlayReady(false);
-    setOverlayDismissed(false);
-    setCurrentIndex((v) => Math.min(FRAMES.length - 1, v + 1));
+    setCurrentIndex(nextIndex);
   }
 
   if (status === "unauthenticated") {
@@ -2512,28 +2455,30 @@ export default function DemoPage() {
         showEllipsis={showEllipsis}
       />
       <div className={styles.nav}>
-        <div className={styles.navRow}>
-          <button
-            className={[styles.navButton, styles.navButtonSecondary].join(" ")}
-            disabled={currentIndex === 0 || isProcessing}
-            onClick={() => void handleBack()}
-            type="button"
-          >
-            Back
-          </button>
-          <button
-            className={[styles.navButton, styles.navButtonPrimary].join(" ")}
-            disabled={currentIndex === FRAMES.length - 1 || !frameCompleted[currentIndex] || isProcessing}
-            onClick={handleNext}
-            type="button"
-          >
-            Next
-          </button>
+        <div className={styles.frameNavGrid}>
+          {visibleFrames.map(({ frameNumber, index, sheetTitle }) => {
+            const isCurrent = currentIndex === index;
+            const isDone = !!frameCompleted[index];
+
+            return (
+              <button
+                key={frameNumber}
+                aria-current={isCurrent ? "step" : undefined}
+                className={[
+                  styles.frameNavButton,
+                  isCurrent ? styles.frameNavButtonCurrent : "",
+                  isDone ? styles.frameNavButtonDone : "",
+                ].join(" ")}
+                disabled={isProcessing}
+                onClick={() => handleFrameSelect(index)}
+                title={sheetTitle}
+                type="button"
+              >
+                <span className={styles.frameNavNumber}>{frameNumber}</span>
+              </button>
+            );
+          })}
         </div>
-        <span className={styles.counter}>
-          {currentIndex + 1} <span className={styles.counterOf}>of</span> {FRAMES.length}
-          {tripId && <span className={styles.counterOf}> · Trip saved</span>}
-        </span>
       </div>
     </main>
   );
