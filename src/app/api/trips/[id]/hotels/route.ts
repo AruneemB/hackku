@@ -31,3 +31,13 @@
 //   // 4. markPreferredVendors(hotelResults, country)
 //   // 5. Save to trip.hotels, return results
 // }
+
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "scaffold" });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "scaffold" });
+}

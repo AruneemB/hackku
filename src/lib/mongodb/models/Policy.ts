@@ -28,7 +28,7 @@ const PolicySchema = new Schema(
     preferredTransport: [{ type: String }],
     requiresApprovalAboveUsd: { type: Number, required: true },
     handbookExcerpt: { type: String, required: true },
-    embedding: { type: [Number], required: true, index: false }, // atlas manages the index
+    embedding: { type: [Number], required: true, default: undefined, index: false }, // atlas manages the index
   },
   { timestamps: true }
 );

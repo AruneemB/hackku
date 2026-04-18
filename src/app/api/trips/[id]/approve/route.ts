@@ -30,3 +30,13 @@
 //   // 4. PATCH trip: { status: "pending_approval", approvalThread.gmailThreadId }
 //   // 5. Return success + threadId
 // }
+
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "scaffold" });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "scaffold" });
+}
