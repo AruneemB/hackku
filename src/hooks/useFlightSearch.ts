@@ -55,9 +55,10 @@ export function useFlightSearch() {
       }
 
       setFlights(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("useFlightSearch error:", err);
-      setError(err.message || "An error occurred while searching for flights");
+      const errorMessage = err instanceof Error ? err.message : "An error occurred while searching for flights";
+      setError(errorMessage);
       setFlights([]);
     } finally {
       setIsLoading(false);
