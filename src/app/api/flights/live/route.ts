@@ -24,29 +24,24 @@
 // { "flightNumber": "AA2345", "status": "delayed", "delayMinutes": 47 }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import { getLatestFlightStatus, writeFlightStatus } from "@/lib/mongodb/models/FlightStatus"
+import { NextRequest, NextResponse } from "next/server";
+import { getLatestFlightStatus, writeFlightStatus } from "@/lib/mongodb/models/FlightStatus";
 
-// TODO: export async function GET(req: NextRequest) {
-//   // const flightNumber = req.nextUrl.searchParams.get("flightNumber")
-//   // const status = await getLatestFlightStatus(flightNumber!)
-//   // return NextResponse.json(status)
-// }
-
-// TODO: export async function POST(req: NextRequest) {
-//   // Demo trigger: inject a flight status event
-//   // const update = await req.json()
-//   // await writeFlightStatus(update)
-//   // return NextResponse.json({ success: true })
-// }
-
-import { NextResponse } from "next/server";
-
-export async function GET() {
-  return NextResponse.json({ message: "Live flight route scaffold" });
+export async function GET(req: NextRequest) {
+  const flightNumber = req.nextUrl.searchParams.get("flightNumber");
+  if (!flightNumber) {
+    return NextResponse.json({ error: "flightNumber query param required" }, { status: 400 });
+  }
+  const status = await getLatestFlightStatus(flightNumber);
+  if (!status) {
+    return NextResponse.json({ error: "No status found" }, { status: 404 });
+  }
+  return NextResponse.json(status);
 }
 
-export async function POST() {
-  return NextResponse.json({ message: "Live flight route scaffold" });
+export async function POST(req: NextRequest) {
+  const update = await req.json();
+  await writeFlightStatus(update);
+  return NextResponse.json({ success: true });
 }
 
