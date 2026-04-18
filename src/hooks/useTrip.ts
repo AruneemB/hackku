@@ -37,9 +37,10 @@ export function useTrip(tripId: string) {
   }, [tripId]);
 
   useEffect(() => {
-    if (tripId) {
-      fetchTrip();
-    }
+    if (!tripId) return;
+    queueMicrotask(() => {
+      void fetchTrip();
+    });
   }, [tripId, fetchTrip]);
 
   const selectBundle = async (bundle: TripBundle) => {

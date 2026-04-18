@@ -20,6 +20,26 @@ import { getJson } from "serpapi";
 import type { Flight, FlightLeg, FlightSearchParams } from "@/types/flight";
 import { withFlightCache } from "./cache";
 
+type SerpFlightsQuery = Record<string, string | number | undefined>;
+
+interface SerpAirportRef {
+  id: string;
+  time: string;
+}
+
+interface SerpFlightSegmentRaw {
+  departure_airport: SerpAirportRef;
+  arrival_airport: SerpAirportRef;
+  airline: string;
+  flight_number: string;
+  duration: number;
+}
+
+interface SerpFlightOptionRaw {
+  flights?: SerpFlightSegmentRaw[];
+  price: number;
+}
+
 /**
  * Internal implementation of flight search using SerpAPI.
  */
@@ -32,7 +52,7 @@ async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight
   }
 
   try {
-    const query: any = {
+    const query: SerpFlightsQuery = {
       engine: "google_flights",
       departure_id: params.origin,
       arrival_id: params.destination,
@@ -50,18 +70,17 @@ async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight
       query.adults = params.adults;
     }
 
-    const results = await getJson(query);
+    const results = (await getJson(query)) as Record<string, unknown>;
+    const bestFlights = Array.isArray(results.best_flights) ? results.best_flights : [];
+    const otherFlights = Array.isArray(results.other_flights) ? results.other_flights : [];
+    const allFlightOptions = [...bestFlights, ...otherFlights] as SerpFlightOptionRaw[];
 
-    const bestFlights = results.best_flights || [];
-    const otherFlights = results.other_flights || [];
-    const allFlightOptions = [...bestFlights, ...otherFlights];
-
-    return allFlightOptions.map((option: any) => {
-      const flights = option.flights || [];
+    return allFlightOptions.map((option) => {
+      const flights = option.flights ?? [];
       if (flights.length === 0) return null;
 
       // Map a SerpAPI flight segment to our FlightLeg type
-      const mapToLeg = (f: any): FlightLeg => ({
+      const mapToLeg = (f: SerpFlightSegmentRaw): FlightLeg => ({
         origin: f.departure_airport.id,
         destination: f.arrival_airport.id,
         departureTime: new Date(f.departure_airport.time),

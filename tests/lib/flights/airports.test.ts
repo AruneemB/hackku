@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAirportsWithinRadius, haversineDistanceMiles, KNOWN_AIRPORTS } from '@/lib/flights/airports';
+import { getAirportsWithinRadius, haversineDistanceMiles } from '@/lib/flights/airports';
 
 describe('airports lib', () => {
   it('haversineDistanceMiles should calculate distance correctly', () => {
