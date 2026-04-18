@@ -33,7 +33,10 @@
 //   // ]
 // }
 
-export function buildPolicySummaryPrompt(policyDoc: any, trip: any) {
+import { Trip } from "@/types/trip";
+import { Policy } from "@/types/policy";
+
+export function buildPolicySummaryPrompt(policyDoc: Policy, trip: Trip) {
   return `You are a travel policy expert and helpful AI mascot. 
 Based on the company travel policy excerpt and the user's trip details below, generate a PolicyFindings JSON object.
 
