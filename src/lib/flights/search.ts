@@ -96,8 +96,11 @@ async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight
       // If it's a round trip, we expect at least two segments (outbound + inbound).
       // We take the last segment as the representative inbound leg for now.
       // If there's only one segment but a returnDate was requested, we fallback to the same leg or a dummy.
-      const inbound = (params.returnDate && flights.length > 1) 
-        ? mapToLeg(flights[flights.length - 1]) 
+      // Round-trip requires at least 2 segments; skip if return is missing
+      if (params.returnDate && flights.length < 2) return null;
+
+      const inbound = params.returnDate
+        ? mapToLeg(flights[flights.length - 1])
         : outbound;
 
       // Generate a consistent ID: serp_flightNumber_origin_destination_MMDD

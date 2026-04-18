@@ -63,11 +63,27 @@ export async function getLatestFlightStatus(flightNumber: string): Promise<Fligh
 
   const { metadata, timestamp, _id, ...rest } = doc[0];
 
-  // Map back to the flat FlightStatusUpdate type for the frontend
+  const flightNum = metadata?.flightNumber;
+  const tripId = metadata?.tripId;
+
+  // Required fields must be present; status/gate/delayMinutes/destination come from ...rest
+  if (
+    typeof flightNum !== "string" ||
+    typeof tripId !== "string" ||
+    typeof rest.status !== "string" ||
+    typeof rest.delayMinutes !== "number" ||
+    typeof rest.destination !== "string"
+  ) {
+    return null;
+  }
+
   return {
     timestamp: new Date(timestamp),
-    flightNumber: metadata?.flightNumber,
-    tripId: metadata?.tripId,
-    ...rest,
-  } as FlightStatusUpdate;
+    flightNumber: flightNum,
+    tripId,
+    status: rest.status as FlightStatusUpdate["status"],
+    gate: typeof rest.gate === "string" ? rest.gate : null,
+    delayMinutes: rest.delayMinutes,
+    destination: rest.destination,
+  };
 }

@@ -38,9 +38,9 @@ export async function POST(req: NextRequest) {
 
     if (
       windowDays !== undefined &&
-      (typeof windowDays !== "number" || !Number.isInteger(windowDays) || windowDays < 1 || windowDays > 14)
+      (typeof windowDays !== "number" || !Number.isInteger(windowDays) || windowDays < 1 || windowDays > 7)
     ) {
-      errors.push("windowDays must be an integer between 1 and 14.");
+      errors.push("windowDays must be an integer between 1 and 7.");
     }
     if (
       radiusMiles !== undefined &&
