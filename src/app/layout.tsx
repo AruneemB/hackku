@@ -10,8 +10,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Sora } from "next/font/google";
 import "./globals.css";
-
-// TODO: import { SessionProvider } from "next-auth/react"
+import { AuthProvider } from "@/components/providers/AuthProvider"
 // TODO: import { Mascot } from "@/components/mascot/Mascot"
 
 const sora = Sora({
@@ -34,10 +33,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${sora.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        {/* TODO: <SessionProvider> */}
-        {children}
-        {/* TODO: <Mascot /> <- persistent across all pages */}
-        {/* TODO: </SessionProvider> */}
+        <AuthProvider>
+          {children}
+          {/* TODO: <Mascot /> ← persistent across all pages */}
+        </AuthProvider>
       </body>
     </html>
   );

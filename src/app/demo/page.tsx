@@ -1288,7 +1288,7 @@ export default function DemoPage() {
   const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
   const [isProgressHydrated, setIsProgressHydrated] = useState(false);
 
-  const { say, stopSpeaking } = useMascot();
+  const { say, setThinking, stopSpeaking } = useMascot();
   const frame = FRAMES[currentIndex];
   const sheetOpen = overlayReady && !overlayDismissed;
   const showEllipsis = overlayReady && overlayDismissed;
@@ -1533,6 +1533,7 @@ export default function DemoPage() {
 
   async function transcribeAndProcess(blob: Blob, mimeType: string) {
     setIsProcessing(true);
+    setThinking(true);
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -1553,9 +1554,11 @@ export default function DemoPage() {
       if (text?.trim()) {
         await handleUserSpeech(text.trim());
       } else {
+        setThinking(false);
         void say("I didn't quite catch that. Could you try again?", "empathetic");
       }
     } catch {
+      setThinking(false);
       void say("I'm having trouble with voice right now. Please try again.", "empathetic");
     } finally {
       setIsProcessing(false);
@@ -1573,6 +1576,7 @@ export default function DemoPage() {
       { role: "user", content: userText },
     ];
     setConversationMessages(msgs);
+    setThinking(true);
 
     try {
       const res = await fetch("/api/demo/conversation", {
@@ -1580,7 +1584,9 @@ export default function DemoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: msgs, frameIndex: currentIndex, knownFields }),
       });
-      const data = (await res.json()) as {
+      const resJson = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof resJson.error === "string" ? resJson.error : "Conversation failed");
+      const data = resJson as {
         mascotMessage: string;
         tone: Tone;
         extractedData: (Record<string, string> & { return: string }) | null;
@@ -1602,9 +1608,11 @@ export default function DemoPage() {
       }
 
       setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage }]);
+      setThinking(false);
       await say(data.mascotMessage, data.tone);
       if (data.extractedData && currentIndex === 0) setOverlayReady(true);
     } catch {
+      setThinking(false);
       await say("I'm having trouble connecting right now. Please try again.", "empathetic");
     }
   }

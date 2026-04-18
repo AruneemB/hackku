@@ -8,47 +8,97 @@
 //
 // REQUEST BODY:
 // {
-//   "imageBase64": "data:image/jpeg;base64,/9j/4AAQ...",
+//   "imageBase64": "<base64 string>",
 //   "mimeType": "image/jpeg"
 // }
 //
 // RESPONSE (201):
 // {
 //   "receipt": {
-//     "id": "rcpt_001",
 //     "merchant": "Ristorante Da Enzo",
 //     "category": "meal",
 //     "totalUsd": "47.23",
-//     "currency": "EUR",
-//     "originalAmount": "43.50",
-//     "date": "2025-09-15T20:30:00.000Z",
-//     "sanitized": true,
-//     "extractedByAI": true
+//     ...
 //   }
 // }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import { extractReceiptData } from "@/lib/gemini/multimodal"
-// TODO: import { sanitizeReceiptData } from "@/lib/utils/pii"
-// TODO: import { toDecimal128, convertCurrency } from "@/lib/utils/currency"
+import { NextRequest, NextResponse } from "next/server"
+import { connectToDatabase } from "@/lib/mongodb/client"
+import Trip from "@/lib/mongodb/models/Trip"
+import { extractReceiptData } from "@/lib/gemini/multimodal"
+import { sanitizeReceiptData } from "@/lib/utils/pii"
+import { toDecimal128, convertCurrency } from "@/lib/utils/currency"
+import { Types } from "mongoose"
 
-// TODO: export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-//   // 1. Parse imageBase64 + mimeType from body
-//   // 2. extractReceiptData(base64, mimeType) via Gemini
-//   // 3. sanitizeReceiptData(extraction) — strip PII
-//   // 4. convertCurrency(amount, currency, "USD")
-//   // 5. toDecimal128(usdAmount)
-//   // 6. Append to trip.receipts[] and update trip.totalSpendUsd
-//   // 7. Return receipt doc
-// }
+type ReceiptsRouteContext = { params: Promise<{ id: string }> }
 
-import { NextResponse } from "next/server";
+export async function POST(req: NextRequest, context: ReceiptsRouteContext) {
+  try {
+    const { id } = await context.params
+    const { imageBase64, mimeType } = await req.json()
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
-}
+    if (!imageBase64) return NextResponse.json({ error: "imageBase64 required" }, { status: 400 })
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+    await connectToDatabase()
+    const trip = await Trip.findById(id)
+    if (!trip) return NextResponse.json({ error: "Trip not found" }, { status: 404 })
+
+    // Strip data URL prefix if the client sends a full data URL
+    const base64Data = imageBase64.replace(/^data:[^;]+;base64,/, "")
+
+    const raw = await extractReceiptData(base64Data, mimeType ?? "image/jpeg")
+    const clean = sanitizeReceiptData(raw)
+
+    const amountNum = parseFloat(clean.amount)
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      return NextResponse.json({ error: "Invalid amount extracted from receipt" }, { status: 422 })
+    }
+    const totalUsd = await convertCurrency(amountNum, clean.currency, "USD")
+    const totalDecimal = toDecimal128(totalUsd)
+    const originalDecimal = toDecimal128(amountNum)
+
+    const extractedDate = clean.date ? new Date(clean.date) : new Date()
+    const receiptDate = isNaN(extractedDate.getTime()) ? new Date() : extractedDate
+
+    const receipt = {
+      _id: new Types.ObjectId(),
+      merchant: clean.merchant,
+      category: clean.category,
+      total: totalDecimal,
+      currency: clean.currency,
+      originalAmount: originalDecimal,
+      date: receiptDate,
+      sanitized: true,
+      extractedByAI: true,
+      imageUrl: null,
+    }
+
+    // Atomic push + increment — no read-modify-write
+    await Trip.findByIdAndUpdate(id, {
+      $push: { receipts: receipt },
+      $inc: { totalSpendUsd: totalUsd },
+    })
+
+    return NextResponse.json({
+      receipt: {
+        id: receipt._id.toString(),
+        merchant: clean.merchant,
+        category: clean.category,
+        totalUsd: totalUsd.toFixed(2),
+        currency: clean.currency,
+        originalAmount: amountNum.toFixed(2),
+        date: receipt.date,
+        sanitized: true,
+        extractedByAI: true,
+        confidence: clean.confidence,
+      },
+    }, { status: 201 })
+  } catch (err) {
+    console.error("[receipts]", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Receipt processing failed" },
+      { status: 500 }
+    )
+  }
 }

@@ -15,15 +15,121 @@
 //   policyCapUsd: number
 // ============================================================
 
-// TODO: "use client"
-// TODO: import { useState, useEffect } from "react"
-// TODO: import { useMascot } from "@/hooks/useMascot"
-// TODO: import { BundleCard } from "@/components/trip/BundleCard"
+"use client"
 
-// TODO: export function RejectionRecovery({ tripId, rejectionReason, policyCapUsd }) {
-//   // Mascot: say(`I understand — the manager flagged the hotel cost.
-//   //   Here's a fully compliant option that stays under $${policyCapUsd}/night.`, "empathetic")
-//   // Fetch compliant alternative bundle
-//   // Show single BundleCard with the alternative
-//   // "Submit for Re-approval" button
-// }
+import { useEffect, useState } from "react"
+import { useMascot } from "@/hooks/useMascot"
+
+interface Props {
+  tripId: string
+  rejectionReason: string
+  policyCapUsd?: number
+  onResubmitted?: () => void
+}
+
+type RecoveryBundle = {
+  label: string
+  description: string
+  totalCostUsd: number
+}
+
+export function RejectionRecovery({ tripId, rejectionReason, policyCapUsd = 200, onResubmitted }: Props) {
+  const { say } = useMascot()
+  const [bundle, setBundle] = useState<RecoveryBundle | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void say(
+      `I understand — the manager flagged the hotel cost. Here's a fully compliant option that stays under $${policyCapUsd}/night.`,
+      "empathetic"
+    )
+
+    setIsLoading(true)
+    fetch(`/api/trips/${tripId}/bundles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ maxHotelNightlyUsd: policyCapUsd }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to load alternatives")
+        const data = await res.json()
+        const bundles: RecoveryBundle[] = Array.isArray(data?.bundles) ? data.bundles : []
+        const compliant = bundles.find((b) => b.totalCostUsd <= policyCapUsd * 5) ?? bundles[0] ?? null
+        setBundle(compliant)
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Could not load alternative bundles")
+      })
+      .finally(() => setIsLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, policyCapUsd])
+
+  async function handleResubmit() {
+    if (!bundle) return
+    setIsSubmitting(true)
+    try {
+      const res = await fetch(`/api/trips/${tripId}/approve`, { method: "POST" })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Resubmit failed")
+      setSubmitted(true)
+      void say("I've sent the updated request to your manager. I'll let you know as soon as they reply!", "excited")
+      onResubmitted?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resubmission failed")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-800">
+        <p className="font-semibold">Resubmission sent!</p>
+        <p className="mt-1">Waiting for manager approval on the updated request.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col gap-3">
+      <div>
+        <p className="font-semibold text-red-800 text-sm">Request rejected</p>
+        {rejectionReason && (
+          <p className="text-red-700 text-xs mt-0.5">{rejectionReason}</p>
+        )}
+      </div>
+
+      {isLoading && (
+        <div className="flex items-center gap-2 text-gray-500 text-sm">
+          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          Finding a compliant alternative…
+        </div>
+      )}
+
+      {error && (
+        <p className="text-red-600 text-xs">{error}</p>
+      )}
+
+      {bundle && (
+        <div className="bg-white border border-gray-200 rounded-xl p-3 text-sm">
+          <p className="font-semibold text-gray-800">Alternative: Bundle {bundle.label}</p>
+          <p className="text-gray-600 mt-0.5">{bundle.description}</p>
+          <p className="text-gray-500 mt-1 text-xs">
+            Total: <span className="font-medium text-gray-800">${bundle.totalCostUsd}</span>
+            {" "}· Under ${policyCapUsd}/night cap
+          </p>
+        </div>
+      )}
+
+      <button
+        onClick={() => void handleResubmit()}
+        disabled={isSubmitting || isLoading || !bundle}
+        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2 rounded-xl text-sm active:scale-95 transition-all"
+      >
+        {isSubmitting ? "Sending…" : "Submit for Re-approval"}
+      </button>
+    </div>
+  )
+}

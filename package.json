@@ -16,6 +16,8 @@
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.43.0",
     "@google/generative-ai": "^0.24.1",
+    "@types/leaflet": "^1.9.21",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.8.0",
     "mongodb": "^7.1.1",
     "mongoose": "^9.4.1",
@@ -24,6 +26,7 @@
     "openai": "^6.34.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-leaflet": "^5.0.0",
     "serpapi": "^2.2.1"
   },
   "devDependencies": {

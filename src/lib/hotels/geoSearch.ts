@@ -15,37 +15,72 @@
 //   })
 // ============================================================
 
-// TODO: import clientPromise from "@/lib/mongodb/client"
+import clientPromise from "@/lib/mongodb/client"
+import type { Hotel, GeoPoint, HotelAmenity } from "@/types"
 
-// TODO: interface GeoSearchParams {
-//   lat: number;
-//   lng: number;
-//   radiusKm: number;
-//   country: string;
-//   type?: "hotel" | "airline";
-// }
+interface GeoSearchParams {
+  lat: number
+  lng: number
+  radiusKm: number
+  country: string
+  type?: "hotel" | "airline"
+}
 
-// TODO: export async function findVendorsNearOffice(params: GeoSearchParams) {
-//   // Run MongoDB $geoNear aggregation:
-//   // db.collection("preferred_vendors").aggregate([
-//   //   { $geoNear: {
-//   //     near: { type: "Point", coordinates: [params.lng, params.lat] },
-//   //     distanceField: "distanceFromOfficeKm",
-//   //     maxDistance: params.radiusKm * 1000,  // meters
-//   //     spherical: true,
-//   //     query: { country: params.country, type: params.type ?? "hotel" }
-//   //   }},
-//   //   { $limit: 10 }
-//   // ])
-//
-//   // EXAMPLE RETURN:
-//   // [
-//   //   { name: "Marriott Milan", distanceFromOfficeKm: 0.8, nightlyRateUsd: 185 },
-//   //   { name: "Hilton Garden Inn Milan", distanceFromOfficeKm: 1.4, nightlyRateUsd: 172 }
-//   // ]
-// }
+interface VendorDoc {
+  _id: { toString(): string }
+  name: string
+  location: GeoPoint
+  address: string
+  amenities: HotelAmenity
+  nightlyRateUsd: number
+  country: string
+  distMeters: number
+}
 
-// TODO: export async function markPreferredVendors(hotels: Hotel[], country: string): Promise<Hotel[]> {
-//   // Cross-reference hotel names with preferred_vendors collection
-//   // Set hotel.preferred = true if found
-// }
+export async function findVendorsNearOffice(
+  params: GeoSearchParams
+): Promise<(VendorDoc & { distMeters: number })[]> {
+  const client = await clientPromise
+  const db = client.db("hackku")
+
+  const results = await db
+    .collection("preferred_vendors")
+    .aggregate([
+      {
+        $geoNear: {
+          near: { type: "Point", coordinates: [params.lng, params.lat] },
+          distanceField: "distMeters",
+          maxDistance: params.radiusKm * 1000, // convert km → meters
+          spherical: true,
+          query: {
+            country: params.country,
+            type: params.type ?? "hotel",
+          },
+        },
+      },
+      { $limit: 10 },
+    ])
+    .toArray()
+
+  return results as (VendorDoc & { distMeters: number })[]
+}
+
+export async function markPreferredVendors(
+  hotels: Hotel[],
+  country: string
+): Promise<Hotel[]> {
+  const client = await clientPromise
+  const db = client.db("hackku")
+
+  const vendors = await db
+    .collection("preferred_vendors")
+    .find({ country, type: "hotel" }, { projection: { name: 1 } })
+    .toArray()
+
+  const preferredNames = new Set(vendors.map((v) => (v.name as string).toLowerCase()))
+
+  return hotels.map((h) => ({
+    ...h,
+    preferred: preferredNames.has(h.name.toLowerCase()),
+  }))
+}
