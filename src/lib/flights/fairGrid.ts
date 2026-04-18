@@ -80,6 +80,14 @@ export async function runFairGrid(params: FairGridParams): Promise<Flight[]> {
     radiusMiles = 100
   } = params;
 
+  if (windowDays < 1 || windowDays > 7) {
+    throw new Error("windowDays must be between 1 and 7");
+  }
+
+  if (radiusMiles < 0 || radiusMiles > 250) {
+    throw new Error("radiusMiles must be between 0 and 250");
+  }
+
   // Step 1: Expand airports
   const airports = getAirportsWithinRadius(homeAirport, radiusMiles);
 
