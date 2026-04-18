@@ -19,43 +19,148 @@
 //   })
 // ============================================================
 
-// TODO: import { searchFlights } from "./search"
-// TODO: import { getAirportsWithinRadius } from "./airports"
-// TODO: import type { Flight } from "@/types"
+import { searchFlights } from "./search";
+import { getAirportsWithinRadius } from "./airports";
+import type { Flight } from "@/types/flight";
 
-// TODO: interface FairGridParams {
-//   homeAirport: string;
-//   destination: string;
-//   targetDeparture: Date;
-//   targetReturn: Date;
-//   windowDays?: number;   // default: 5 (±2 days each side)
-//   radiusMiles?: number;  // default: 100
-// }
+export interface FairGridParams {
+  homeAirport: string;
+  destination: string;
+  targetDeparture: Date;
+  targetReturn: Date;
+  windowDays?: number;
+  radiusMiles?: number;
+}
 
-// TODO: export async function runFairGrid(params: FairGridParams): Promise<Flight[]> {
-//   // Step 1: expand airports
-//   // const airports = await getAirportsWithinRadius(params.homeAirport, params.radiusMiles ?? 100)
-//
-//   // Step 2: build date window (targetDeparture ± windowDays/2)
-//   // const dates = buildDateWindow(params.targetDeparture, params.windowDays ?? 5)
-//
-//   // Step 3: search all combinations in parallel
-//   // const promises = airports.flatMap(airport =>
-//   //   dates.map(date => searchFlights({ origin: airport, destination: params.destination, date }))
-//   // )
-//   // const allResults = (await Promise.all(promises)).flat()
-//
-//   // Step 4: calculate Sat-night delta for each result
-//   // Step 5: sort by price, return
-//
-//   // EXAMPLE RETURN (2 results from a 5-airport × 5-day grid):
-//   // [
-//   //   { priceUsd: 1060, originAirport: "MCI", saturdayNightSavingsUsd: 180 },
-//   //   { priceUsd: 1240, originAirport: "MCI", saturdayNightSavingsUsd: 0 },
-//   //   { priceUsd: 1310, originAirport: "STL", saturdayNightSavingsUsd: 220 }
-//   // ]
-// }
+/**
+ * Returns an array of ISO date strings (YYYY-MM-DD) centered on the target date.
+ */
+export function buildDateWindow(target: Date, days: number): string[] {
+  const result: string[] = [];
+  const startOffset = -Math.floor(days / 2);
+  
+  for (let i = 0; i < days; i++) {
+    const d = new Date(target.getTime());
+    d.setUTCDate(d.getUTCDate() + startOffset + i);
+    result.push(d.toISOString().split("T")[0]);
+  }
+  
+  return result;
+}
 
-// TODO: function buildDateWindow(target: Date, days: number): string[] {
-//   // Returns array of YYYY-MM-DD strings ±days/2 around target
-// }
+/**
+ * Checks if the trip includes a Saturday overnight stay.
+ * In airline pricing, a "Saturday night stay" means the return flight is 
+ * on or after the Sunday following the departure. This typically results 
+ * in lower fares for leisure travelers.
+ */
+function isSaturdayNightStay(departureDate: Date, returnDate: Date): boolean {
+  // Find the first Sunday strictly after the departure date
+  const nextSunday = new Date(departureDate);
+  nextSunday.setUTCHours(0, 0, 0, 0);
+  const daysUntilSunday = 7 - nextSunday.getUTCDay();
+  nextSunday.setUTCDate(nextSunday.getUTCDate() + daysUntilSunday);
+
+  // Compare the return date to that Sunday
+  const ret = new Date(returnDate);
+  ret.setUTCHours(0, 0, 0, 0);
+
+  return ret.getTime() >= nextSunday.getTime();
+}
+
+/**
+ * Runs the Fair Grid search algorithm across expanded airports and a date window.
+ */
+export async function runFairGrid(params: FairGridParams): Promise<Flight[]> {
+  const {
+    homeAirport,
+    destination,
+    targetDeparture,
+    targetReturn,
+    windowDays = 5,
+    radiusMiles = 100
+  } = params;
+
+  // Step 1: Expand airports
+  const airports = getAirportsWithinRadius(homeAirport, radiusMiles);
+
+  // Step 2: Build date window
+  const departureDates = buildDateWindow(targetDeparture, windowDays);
+  
+  // Trip duration in milliseconds to keep return dates consistent with departure shifts
+  const durationMs = targetReturn.getTime() - targetDeparture.getTime();
+
+  // Step 3: Fan out searchFlights for every (airport, date) combination
+  // Throttled in chunks of 5 to avoid SerpAPI rate limits and conserve quota
+  const CONCURRENCY_LIMIT = 5;
+  const searchTasks = airports.flatMap(airport =>
+    departureDates.map((depDateStr) => async () => {
+      const depDate = new Date(depDateStr);
+      const retDate = new Date(depDate.getTime() + durationMs);
+      const retDateStr = retDate.toISOString().split("T")[0];
+
+      const results = await searchFlights({
+        origin: airport.code,
+        destination,
+        date: depDateStr,
+        returnDate: retDateStr
+      });
+
+      // Attach originAirport and calculate Saturday night stay
+      return results.map(flight => ({
+        ...flight,
+        originAirport: airport.code,
+        distanceFromHomeAirportMiles: airport.distanceMiles,
+        saturdayNightStay: isSaturdayNightStay(depDate, retDate),
+        saturdayNightSavingsUsd: 0
+      }));
+    })
+  );
+
+  const allResultsNested: Flight[][] = [];
+  for (let i = 0; i < searchTasks.length; i += CONCURRENCY_LIMIT) {
+    const batch = searchTasks.slice(i, i + CONCURRENCY_LIMIT);
+    const batchResults = await Promise.all(batch.map(task => task()));
+    allResultsNested.push(...batchResults);
+  }
+
+  let allResults = allResultsNested.flat();
+
+  // Step 4: Deduplicate flights by ID
+  // Multiple date windows might resolve to the same flight; keep the cheapest instance
+  const uniqueFlights = new Map<string, Flight>();
+  for (const f of allResults) {
+    const existing = uniqueFlights.get(f.id);
+    if (!existing || f.priceUsd < existing.priceUsd) {
+      uniqueFlights.set(f.id, f);
+    }
+  }
+  allResults = Array.from(uniqueFlights.values());
+
+  // Step 5: Run Saturday-night savings delta calculation
+  // Group by origin airport to find the cheapest non-Saturday flight for each origin
+  const origins = Array.from(new Set(allResults.map(f => f.originAirport)));
+  
+  origins.forEach(origin => {
+    const originFlights = allResults.filter(f => f.originAirport === origin);
+    const nonSatFlights = originFlights.filter(f => !f.saturdayNightStay);
+    
+    if (nonSatFlights.length > 0) {
+      const cheapestNonSatPrice = Math.min(...nonSatFlights.map(f => f.priceUsd));
+      
+      // Update all flights for this origin with the savings delta
+      allResults = allResults.map(f => {
+        if (f.originAirport === origin && f.saturdayNightStay) {
+          return {
+            ...f,
+            saturdayNightSavingsUsd: Math.max(0, cheapestNonSatPrice - f.priceUsd)
+          };
+        }
+        return f;
+      });
+    }
+  });
+
+  // Step 6: Sort by priceUsd ascending and return
+  return allResults.sort((a, b) => a.priceUsd - b.priceUsd);
+}
