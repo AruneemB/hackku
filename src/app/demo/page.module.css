@@ -1039,6 +1039,7 @@
 .complianceIcon { font-size: 18px; line-height: 1.2; flex-shrink: 0; }
 .complianceTitle { font-size: 15px; font-weight: 700; color: var(--cc-text-primary); }
 .complianceBody { font-size: 13px; color: var(--cc-body, #5a6672); margin-top: 3px; }
+.applyLink { color: #1f6fa8; text-decoration: underline; white-space: nowrap; }
 
 /* ── Email draft (frames 6, 11) ── */
 

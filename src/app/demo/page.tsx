@@ -7,6 +7,7 @@ import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
 import type { FlightGroup } from "@/types/flight";
 import type { Hotel } from "@/types/hotel";
+import type { WeatherForecast } from "@/types/weather";
 import styles from "./page.module.css";
 import dynamic from "next/dynamic";
 
@@ -34,9 +35,9 @@ type DemoFrame = {
   message: string;
   sheetTitle: string;
   options: [string, string];
-  Visual: React.ComponentType;
+  Visual: React.ComponentType<any>;
   actionTitle: string;
-  ActionVisual: React.ComponentType;
+  ActionVisual: React.ComponentType<any>;
 };
 
 type DemoProgressSnapshot = {
@@ -53,6 +54,7 @@ type DemoProgressSnapshot = {
   selectedHotel: number;
   selectedReturn: number;
   selectedBundle: number | null;
+  liveWeather: WeatherForecast | null;
 };
 
 // ── Demo data (hardcoded for unimplemented integrations) ───────
@@ -159,14 +161,33 @@ const DEMO_HOTELS = [
   { id: "nh-collection", name: "NH Collection", address: "Piazza Cavour 2, Milan", pricePerNightUsd: 165, distanceKm: 2.1, isPreferred: false, confirmationNum: "NH-20250914-3312" },
 ];
 
-const DEMO_POLICY = {
-  hotelNightlyCapUsd: 200,
-  flightCapUsd: 800,
-  mealAllowancePerDayUsd: 75,
-  requiresManagerApproval: true,
-  approvalReason: "Hotel at $247/night exceeds $200 Milan cap",
-  mascotSummary: "Checked your company policy — no visa needed for US citizens in Italy, but Marriott Scala is $47 over the $200 cap and needs manager sign-off.",
+type DemoVisaInfo = {
+  visaRequired: boolean;
+  visaType: string | null;
+  stayLimitDays: number;
+  notes: string;
+  applicationUrl: string | null;
+  minApplicationLeadDays: number | null;
 };
+
+function buildDemoPolicy(country: string, visa: DemoVisaInfo) {
+  return {
+    visa: {
+      _id: "demo-visa",
+      destinationCountry: country,
+      citizenship: "US",
+      ...visa,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    hotelNightlyCapUsd: 200,
+    flightCapUsd: 800,
+    mealAllowancePerDayUsd: 75,
+    requiresManagerApproval: true,
+    approvalReason: "Hotel at $247/night exceeds $200 Milan cap",
+    mascotSummary: `Checked your company policy — ${visa.visaRequired ? `a ${visa.visaType} is required` : "no visa needed"} for US citizens visiting ${country}, but Marriott Scala is $47 over the $200 cap and needs manager sign-off.`,
+  };
+}
 
 const DEMO_PROGRESS_STORAGE_KEY = "hackku.demo.progress.v1";
 const HIDDEN_FRAME_INDEXES = new Set([4, 12, 15]);
@@ -220,7 +241,7 @@ async function patchTrip(tripId: string, data: Record<string, unknown>) {
 async function executeFrameAction(
   frameIdx: number,
   tripId: string,
-  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveHotels?: Hotel[] | null }
+  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveHotels?: Hotel[] | null; tripCountry?: string; visaInfo?: DemoVisaInfo | null }
 ) {
   const liveGroup = sel.liveFlightGroups?.[sel.flight];
   const flight = liveGroup?.outbound ?? DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
@@ -235,9 +256,12 @@ async function executeFrameAction(
       await patchTrip(tripId, { hotels: [hotel] });
       break;
     }
-    case 3:
-      await patchTrip(tripId, { policyFindings: DEMO_POLICY });
+    case 3: {
+      const country = sel.tripCountry ?? DEMO_DEFAULTS.country;
+      const visa: DemoVisaInfo = sel.visaInfo ?? { visaRequired: false, visaType: null, stayLimitDays: 90, notes: "Check your destination's entry requirements.", applicationUrl: null, minApplicationLeadDays: null };
+      await patchTrip(tripId, { policyFindings: buildDemoPolicy(country, visa) });
       break;
+    }
     case 4:
       await patchTrip(tripId, { selectedBundle: bundle });
       break;
@@ -600,37 +624,153 @@ function FlightSearchState({
   );
 }
 
-function ComplianceReport() {
+function ComplianceReport({
+  visa,
+  hotelName,
+  hotelNightlyRateUsd,
+  hotelCapUsd = 200,
+  flightNumber,
+  flightTotalUsd,
+  flightCapUsd = 800,
+  departure,
+  returnDate,
+}: {
+  visa?: DemoVisaInfo | null;
+  hotelName?: string;
+  hotelNightlyRateUsd?: number;
+  hotelCapUsd?: number;
+  flightNumber?: string;
+  flightTotalUsd?: number;
+  flightCapUsd?: number;
+  departure?: string;
+  returnDate?: string;
+}) {
+  const visaRequired = visa?.visaRequired ?? false;
+  const visaType = visa?.visaType ?? "Visa";
+  const leadDays = visa?.minApplicationLeadDays ?? null;
+  const applyUrl = visa?.applicationUrl ?? null;
+
+  const hotelOverCap = hotelNightlyRateUsd != null && hotelNightlyRateUsd > hotelCapUsd;
+  const hotelExcess = hotelNightlyRateUsd != null ? Math.round(hotelNightlyRateUsd - hotelCapUsd) : 0;
+
+  const flightOverCap = flightTotalUsd != null && flightTotalUsd > flightCapUsd;
+
+  let nights = 0;
+  let depLabel = "";
+  let retLabel = "";
+  if (departure && returnDate) {
+    const dep = new Date(`${departure}T12:00:00`);
+    const ret = new Date(`${returnDate}T12:00:00`);
+    nights = Math.round((ret.getTime() - dep.getTime()) / (1000 * 60 * 60 * 24));
+    depLabel = fmtDate(dep);
+    retLabel = fmtDate(ret);
+  }
+  const stayLimit = visa?.stayLimitDays ?? null;
+  const stayExceedsVisaLimit = stayLimit != null && nights > 0 && nights > stayLimit;
+
   return (
     <div className={styles.complianceList}>
-      <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
-        <span className={styles.complianceIcon}>⚠️</span>
-        <div>
-          <div className={styles.complianceTitle}>Type-C Visa Required</div>
-          <div className={styles.complianceBody}>US citizens must apply ≥ 15 days before departure</div>
+      {visaRequired ? (
+        <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+          <span className={styles.complianceIcon}>⚠️</span>
+          <div>
+            <div className={styles.complianceTitle}>{visaType} Required</div>
+            <div className={styles.complianceBody}>
+              {leadDays != null
+                ? `US citizens must apply ≥ ${leadDays} days before departure`
+                : "Visa required — check consulate for processing times"}
+              {applyUrl && (
+                <> · <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply →</a></>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
-        <span className={styles.complianceIcon}>⚠️</span>
-        <div>
-          <div className={styles.complianceTitle}>Hotel Exception Needed</div>
-          <div className={styles.complianceBody}>Marriott Scala at $247/night exceeds the $200 Milan cap</div>
+      ) : (
+        <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>✓</span>
+          <div>
+            <div className={styles.complianceTitle}>No Visa Required</div>
+            <div className={styles.complianceBody}>{visa?.notes ?? "US passport valid for this destination"}</div>
+          </div>
         </div>
-      </div>
-      <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
-        <span className={styles.complianceIcon}>✓</span>
-        <div>
-          <div className={styles.complianceTitle}>Flight within budget</div>
-          <div className={styles.complianceBody}>LH 8904 at $687 · approved cap is $800</div>
+      )}
+
+      {hotelNightlyRateUsd != null ? (
+        <div className={[styles.complianceItem, hotelOverCap ? styles.complianceWarn : styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>{hotelOverCap ? "⚠️" : "✓"}</span>
+          <div>
+            <div className={styles.complianceTitle}>
+              {hotelOverCap ? "Hotel Exception Needed" : "Hotel within budget"}
+            </div>
+            <div className={styles.complianceBody}>
+              {hotelName ?? "Selected hotel"} at ${hotelNightlyRateUsd}/night
+              {hotelOverCap
+                ? ` · $${hotelExcess} over the $${hotelCapUsd} cap`
+                : ` · within the $${hotelCapUsd} cap`}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
-        <span className={styles.complianceIcon}>✓</span>
-        <div>
-          <div className={styles.complianceTitle}>Travel dates policy-compliant</div>
-          <div className={styles.complianceBody}>Sep 14 to 19 · 5-night stay · within 10-day maximum</div>
+      ) : (
+        <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>✓</span>
+          <div>
+            <div className={styles.complianceTitle}>Hotel within budget</div>
+            <div className={styles.complianceBody}>Cap is ${hotelCapUsd}/night</div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {flightTotalUsd != null ? (
+        <div className={[styles.complianceItem, flightOverCap ? styles.complianceWarn : styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>{flightOverCap ? "⚠️" : "✓"}</span>
+          <div>
+            <div className={styles.complianceTitle}>
+              {flightOverCap ? "Flight over budget" : "Flight within budget"}
+            </div>
+            <div className={styles.complianceBody}>
+              {`${flightNumber ? `${flightNumber} · ` : ""}$${flightTotalUsd} total`}
+              {flightOverCap
+                ? ` · $${Math.round(flightTotalUsd - flightCapUsd)} over the $${flightCapUsd} cap`
+                : ` · approved cap is $${flightCapUsd}`}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>✓</span>
+          <div>
+            <div className={styles.complianceTitle}>Flight within budget</div>
+            <div className={styles.complianceBody}>Approved cap is ${flightCapUsd}</div>
+          </div>
+        </div>
+      )}
+
+      {nights > 0 && (
+        <div
+          className={[styles.complianceItem, stayExceedsVisaLimit ? styles.complianceWarn : styles.complianceOk].join(
+            " ",
+          )}
+        >
+          <span className={styles.complianceIcon}>{stayExceedsVisaLimit ? "⚠️" : "✓"}</span>
+          <div>
+            <div className={styles.complianceTitle}>
+              {stayExceedsVisaLimit ? "Stay exceeds visa limit" : "Travel dates policy-compliant"}
+            </div>
+            <div className={styles.complianceBody}>
+              {stayExceedsVisaLimit ? (
+                <>
+                  {depLabel} to {retLabel} · {nights}-night stay · exceeds {stayLimit}-day limit
+                </>
+              ) : (
+                <>
+                  {depLabel} to {retLabel} · {nights}-night stay
+                  {stayLimit != null ? ` · within ${stayLimit}-day limit` : ""}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -676,15 +816,84 @@ function HotelComparison() {
   );
 }
 
-function PrepChecklist() {
+type PrepChecklistItem = { text: string; urgent?: boolean };
+
+function buildChecklistItems(
+  visa: DemoVisaInfo | null,
+  passportExpiry: string | null,
+  departure: string,
+  weather: WeatherForecast | null,
+  hotelName: string,
+  hotelAddress: string,
+  checkInDate: string,
+): PrepChecklistItem[] {
+  const items: PrepChecklistItem[] = [];
+
+  // Visa item
+  if (visa?.visaRequired && visa.applicationUrl) {
+    let domain = visa.applicationUrl;
+    try { domain = new URL(visa.applicationUrl).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
+    items.push({ text: `Apply for ${visa.visaType ?? "visa"} at ${domain}`, urgent: true });
+  } else if (visa?.visaRequired) {
+    items.push({ text: `Visa required — check embassy website`, urgent: true });
+  } else if (visa) {
+    items.push({ text: `No visa required for this destination` });
+  } else {
+    items.push({ text: `Verify visa requirements before travel`, urgent: true });
+  }
+
+  // Passport expiry item
+  if (passportExpiry) {
+    const expiry = new Date(passportExpiry);
+    const dep = new Date(departure);
+    const sixMonthsBeforeExp = new Date(expiry);
+    sixMonthsBeforeExp.setMonth(sixMonthsBeforeExp.getMonth() - 6);
+    const expiryLabel = expiry.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const urgent = dep >= sixMonthsBeforeExp;
+    items.push({ text: `Passport expires ${expiryLabel}${urgent ? " — renew before travel" : ""}`, urgent });
+  }
+
+  // Weather / packing item
+  if (weather && weather.days.length > 0) {
+    const avgHigh = Math.round(weather.days.reduce((s, d) => s + d.tempHighC, 0) / weather.days.length);
+    const rainDays = weather.days.filter((d) => d.condition === "Rain" || d.condition === "Drizzle").length;
+    const weatherNote = rainDays > 0
+      ? `Pack for ${avgHigh}°C, rain expected on ${rainDays} day${rainDays > 1 ? "s" : ""}`
+      : `Pack for ${avgHigh}°C, ${weather.days[0].condition.toLowerCase()} conditions`;
+    items.push({ text: weatherNote });
+  } else {
+    items.push({ text: `Check weather forecast before packing` });
+  }
+
+  // Hotel check-in item
+  items.push({ text: `${hotelName} · ${hotelAddress} · Check-in ${checkInDate} at 3:00 PM` });
+
+  // Travel insurance (always static)
+  items.push({ text: "Confirm travel insurance coverage" });
+
+  return items;
+}
+
+function PrepChecklist({
+  visa,
+  passportExpiry,
+  departure,
+  weather,
+  hotelName,
+  hotelAddress,
+  checkInDate,
+}: {
+  visa: DemoVisaInfo | null;
+  passportExpiry: string | null;
+  departure: string;
+  weather: WeatherForecast | null;
+  hotelName: string;
+  hotelAddress: string;
+  checkInDate: string;
+}) {
   const [done, setDone] = useState<Set<number>>(new Set());
-  const items = [
-    { text: "Apply for Type-C Visa at italyvisa.com", urgent: true },
-    { text: "Renew passport after trip (expires Jan 2025)", urgent: true },
-    { text: "Pack for 24°C, light rain expected on days 2 to 4" },
-    { text: "Marriott Scala · Via della Spiga 31 · Check-in Sep 14 at 3:00 PM" },
-    { text: "Confirm travel insurance coverage" },
-  ];
+  const items = buildChecklistItems(visa, passportExpiry, departure, weather, hotelName, hotelAddress, checkInDate);
+
   function toggle(i: number) {
     setDone((prev) => {
       const next = new Set(prev);
@@ -990,14 +1199,24 @@ function HotelConfirmed() {
   );
 }
 
-function VisaGuide() {
+function VisaGuide({ visa }: { visa?: DemoVisaInfo | null }) {
   const [open, setOpen] = useState<number | null>(0);
-  const steps = [
-    { n: "1", title: "Complete online application", body: "Italian Consulate portal, select 'Schengen Short Stay (Type C), Business'" },
-    { n: "2", title: "Gather required documents", body: "Valid passport, invitation letter, travel insurance, hotel booking, flight itinerary, bank statements" },
-    { n: "3", title: "Book your appointment", body: "Italian Consulate Chicago, 500 N Michigan Ave. Allow at least 15 days for processing" },
-    { n: "4", title: "Pay the fee and submit", body: "80 EUR application fee. Bring originals and copies to your appointment" },
-  ];
+  const visaType = visa?.visaType ?? "Required Visa";
+  const leadDays = visa?.minApplicationLeadDays;
+  const applyUrl = visa?.applicationUrl;
+
+  const steps = visa?.visaRequired
+    ? [
+        { n: "1", title: "Complete online application", body: applyUrl ? `Apply for your ${visaType} at the official portal.` : `Contact the destination country's consulate to apply for your ${visaType}.` },
+        { n: "2", title: "Gather required documents", body: "Valid passport, invitation letter, travel insurance, hotel booking, flight itinerary, bank statements" },
+        { n: "3", title: "Submit and await processing", body: leadDays != null ? `Allow at least ${leadDays} days for processing. US citizens must apply ≥ ${leadDays} days before departure.` : "Check with the consulate for current processing times." },
+      ]
+    : [
+        { n: "1", title: "No visa required", body: visa?.notes ?? "Your US passport is sufficient for this destination." },
+        { n: "2", title: "Confirm passport validity", body: "Ensure your passport is valid for at least 6 months beyond your return date." },
+        { n: "3", title: "Check entry requirements", body: "Review any health, customs, or security requirements for your destination before departure." },
+      ];
+
   return (
     <div className={styles.guideWrap}>
       <div className={styles.guideSteps}>
@@ -1008,11 +1227,24 @@ function VisaGuide() {
               <span className={styles.stepTitle}>{step.title}</span>
               <span className={styles.stepChevron}>{open === i ? "▲" : "▼"}</span>
             </button>
-            {open === i && <div className={styles.stepBody}>{step.body}</div>}
+            {open === i && (
+              <div className={styles.stepBody}>
+                {step.body}
+                {i === 0 && applyUrl && visa?.visaRequired && (
+                  <> · <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply here →</a></>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
-      <div className={styles.guideLink}>italyvisa.com · Italian Consulate Chicago</div>
+      {applyUrl && visa?.visaRequired ? (
+        <div className={styles.guideLink}>
+          <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Official visa application portal →</a>
+        </div>
+      ) : (
+        <div className={styles.guideLink}>No visa required · US passport accepted</div>
+      )}
     </div>
   );
 }
@@ -1836,6 +2068,10 @@ export default function DemoPage() {
   const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
   const [liveHotels, setLiveHotels] = useState<Hotel[] | null>(null);
   const [isProgressHydrated, setIsProgressHydrated] = useState(false);
+  const [visaInfo, setVisaInfo] = useState<DemoVisaInfo | null>(null);
+  const visaFetchedForRef = useRef<string | null>(null);
+  const [liveWeather, setLiveWeather] = useState<WeatherForecast | null>(null);
+  const weatherFetchedForRef = useRef<string | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: session, status } = useSession();
@@ -1894,6 +2130,7 @@ export default function DemoPage() {
         if (typeof snapshot.selectedBundle === "number" || snapshot.selectedBundle === null) {
           setSelectedBundle(snapshot.selectedBundle);
         }
+        if (snapshot.liveWeather) setLiveWeather(snapshot.liveWeather);
       } catch {
         window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
       } finally {
@@ -1923,6 +2160,7 @@ export default function DemoPage() {
       selectedHotel,
       selectedReturn,
       selectedBundle,
+      liveWeather,
     };
 
     window.localStorage.setItem(DEMO_PROGRESS_STORAGE_KEY, JSON.stringify(snapshot));
@@ -1940,6 +2178,7 @@ export default function DemoPage() {
     selectedReturn,
     tripData,
     tripId,
+    liveWeather,
   ]);
 
   // Speak the frame greeting, then open the sheet once Lockey finishes talking.
@@ -1950,9 +2189,53 @@ export default function DemoPage() {
 
     async function run() {
       const firstName = session?.user?.name?.split(" ")[0];
-      const message = currentIndex === 0 && firstName
+      let message = currentIndex === 0 && firstName
         ? `Hey, ${firstName}! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.`
         : frame.message;
+
+      if (currentIndex === 3) {
+        const country = tripData?.country ?? DEMO_DEFAULTS.country;
+        const city = tripData?.city ?? DEMO_DEFAULTS.city;
+
+        let visaForGreeting: DemoVisaInfo | null = null;
+        if (visaFetchedForRef.current === country && visaInfo) {
+          visaForGreeting = visaInfo;
+        } else {
+          try {
+            const visaRes = await fetch("/api/demo/visa-lookup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ country }),
+            });
+            if (!cancelled && visaRes.ok) {
+              visaForGreeting = (await visaRes.json()) as DemoVisaInfo;
+              setVisaInfo(visaForGreeting);
+              visaFetchedForRef.current = country;
+            } else {
+              visaFetchedForRef.current = null;
+            }
+          } catch {
+            visaFetchedForRef.current = null;
+          }
+        }
+
+        try {
+          const res = await fetch("/api/demo/compliance-greeting", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              city,
+              country,
+              visaRequired: visaForGreeting?.visaRequired ?? false,
+              visaType: visaForGreeting?.visaType ?? null,
+            }),
+          });
+          if (!cancelled && res.ok) {
+            const data = (await res.json()) as { mascotMessage?: string };
+            if (data.mascotMessage) message = data.mascotMessage;
+          }
+        } catch { /* fall back to static frame message */ }
+      }
       // Store greeting in chat history (deduplicated)
       if (!greetedFrames.current.has(currentIndex)) {
         greetedFrames.current.add(currentIndex);
@@ -1971,7 +2254,28 @@ export default function DemoPage() {
     void run();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, isProgressHydrated, status]);
+  }, [currentIndex, isProgressHydrated, status, tripData?.country, tripData?.city]);
+
+  // Fetch weather forecast when entering frame 7 (prep checklist, index 7)
+  useEffect(() => {
+    if (!isProgressHydrated || currentIndex !== 7) return;
+    const city = tripData?.city ?? DEMO_DEFAULTS.city;
+    const country = tripData?.country ?? DEMO_DEFAULTS.country;
+    const key = `${city},${country}`;
+    if (weatherFetchedForRef.current === key) return;
+    weatherFetchedForRef.current = key;
+    let cancelled = false;
+
+    fetch(`/api/weather?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: WeatherForecast | null) => {
+        if (!cancelled && data && data.days) setLiveWeather(data);
+      })
+      .catch(() => { /* keep null — checklist shows fallback text */ });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated]);
 
   // Fetch real flights when entering frame 1 (flight picker)
   useEffect(() => {
@@ -2305,6 +2609,8 @@ export default function DemoPage() {
           bundle: selectedBundle,
           liveFlightGroups: liveFlightResults,
           liveHotels,
+          tripCountry: tripData?.country ?? DEMO_DEFAULTS.country,
+          visaInfo,
         });
       }
 
@@ -2395,7 +2701,47 @@ export default function DemoPage() {
           />
         );
       case 2: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
+      case 3: {
+        const flightGroups = liveFlights ?? DEMO_FLIGHT_GROUPS;
+        const flightGroup = flightGroups[selectedFlight] ?? flightGroups[0];
+        const returnFlight = flightGroup?.returns?.[selectedReturn] ?? flightGroup?.returns?.[0];
+        const liveHotel = liveHotels?.[selectedHotel] ?? liveHotels?.[0];
+        const demoHotel = DEMO_HOTELS[selectedHotel] ?? DEMO_HOTELS[0];
+        const hotelName = liveHotel?.name ?? demoHotel.name;
+        const hotelRate = liveHotel?.nightlyRateUsd ?? demoHotel.pricePerNightUsd;
+        return (
+          <ComplianceReport
+            visa={visaInfo}
+            hotelName={hotelName}
+            hotelNightlyRateUsd={hotelRate}
+            hotelCapUsd={200}
+            flightNumber={flightGroup?.flightNumber}
+            flightTotalUsd={returnFlight?.totalPriceUsd}
+            flightCapUsd={800}
+            departure={tripData?.departure ?? DEMO_DEFAULTS.departure}
+            returnDate={tripData?.returnDate ?? DEMO_DEFAULTS.returnDate}
+          />
+        );
+      }
       case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
+      case 7: {
+        const liveHotel = liveHotels?.[selectedHotel] ?? liveHotels?.[0];
+        const demoHotel = DEMO_HOTELS[selectedHotel] ?? DEMO_HOTELS[0];
+        const hotelName = liveHotel?.name ?? demoHotel.name;
+        const hotelAddress = liveHotel?.address ?? demoHotel.address;
+        const departure = tripData?.departure ?? DEMO_DEFAULTS.departure;
+        return (
+          <PrepChecklist
+            visa={visaInfo}
+            passportExpiry={tripData?.passportExpiry ?? DEMO_DEFAULTS.passportExpiry}
+            departure={departure}
+            weather={liveWeather}
+            hotelName={hotelName}
+            hotelAddress={hotelAddress}
+            checkInDate={fmtDate(departure)}
+          />
+        );
+      }
       default: { const V = frame.Visual; return <V />; }
     }
   }
