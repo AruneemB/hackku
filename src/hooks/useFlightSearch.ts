@@ -11,7 +11,7 @@
 //   search({ homeAirport: "MCI", destination: "MXP", ... })
 // ============================================================
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { Flight } from "@/types/flight";
 
 export interface FairGridSearchParams {
@@ -31,7 +31,7 @@ export function useFlightSearch() {
   /**
    * Executes a flight search using the Fair Grid algorithm.
    */
-  const search = async (params: FairGridSearchParams) => {
+  const search = useCallback(async (params: FairGridSearchParams) => {
     setIsLoading(true);
     setError(null);
 
@@ -62,7 +62,7 @@ export function useFlightSearch() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   return { flights, isLoading, error, search };
 }
