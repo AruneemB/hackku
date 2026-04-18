@@ -1,34 +1,52 @@
-// ============================================================
-// COMPONENT: SpeechBubble
-// OWNER: Track A (Frontend & UX)
-// DESCRIPTION: Animated speech bubble that displays the
-//   mascot's current text. Text is typed character-by-character
-//   (typewriter effect) using a simple useState + useEffect.
-//   Disappears after 8 seconds if not updated.
-//
-// PROPS:
-//   text: string  — the mascot's current speech
-//
-// EXAMPLE MESSAGES:
-//   "Hi Kelli! Where are we headed today?"
-//   "Great choice — your passport expires in 5 months though,
-//    you'll want to renew before this trip!"
-//   "Your trip to Milan is approved! Let's get you packed."
-// ============================================================
+"use client";
 
-// TODO: "use client"
-// TODO: import { useState, useEffect } from "react"
+import { useEffect, useState } from "react";
 
-// TODO: interface SpeechBubbleProps { text: string }
+interface SpeechBubbleProps {
+  text: string;
+}
 
-// TODO: export function SpeechBubble({ text }: SpeechBubbleProps) {
-//   // const [displayed, setDisplayed] = useState("")
-//   // useEffect typewriter: add one character every 30ms
-//   // return (
-//   //   <div className="relative bg-white border-2 border-gray-200 rounded-2xl p-4 shadow-lg max-w-xs
-//   //                   before:content-[''] before:absolute before:bottom-0 before:left-6
-//   //                   before:w-4 before:h-4 before:bg-white before:rotate-45 before:-translate-y-2">
-//   //     <p className="text-sm text-gray-800">{displayed}</p>
-//   //   </div>
-//   // )
-// }
+export function SpeechBubble({ text }: SpeechBubbleProps) {
+  const [displayed, setDisplayed] = useState("");
+
+  useEffect(() => {
+    let currentIndex = 0;
+
+    const intervalId = window.setInterval(() => {
+      currentIndex += 1;
+      setDisplayed(text.slice(0, currentIndex));
+
+      if (currentIndex >= text.length) {
+        window.clearInterval(intervalId);
+      }
+    }, 24);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [text]);
+
+  return (
+    <div
+      style={{
+        maxWidth: 260,
+        padding: "14px 16px",
+        border: "1px solid #e8eaec",
+        borderRadius: 18,
+        background: "#ffffff",
+        boxShadow: "0 16px 30px rgba(45, 59, 69, 0.08)",
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          color: "var(--cc-text-primary)",
+          fontSize: 13,
+          lineHeight: 1.45,
+        }}
+      >
+        {displayed}
+      </p>
+    </div>
+  );
+}

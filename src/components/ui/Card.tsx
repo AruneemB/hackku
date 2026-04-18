@@ -1,18 +1,53 @@
-// ============================================================
-// COMPONENT: Card (Base UI)
-// OWNER: Track A (Frontend & UX)
-// DESCRIPTION: Generic card container with optional header,
-//   body, and footer slots. Used by FlightCard, HotelCard,
-//   BundleCard, and PolicySummary.
-// ============================================================
+import type { HTMLAttributes, ReactNode } from "react";
+import styles from "./Card.module.css";
 
-// TODO: interface CardProps {
-//   title?: string;
-//   children: React.ReactNode;
-//   className?: string;
-//   highlight?: "green" | "amber" | "red" | "blue";
-// }
+interface CardProps extends HTMLAttributes<HTMLElement> {
+  title?: string;
+  subtitle?: string;
+  eyebrow?: string;
+  footer?: ReactNode;
+  highlight?: "green" | "amber" | "red" | "blue";
+  children: ReactNode;
+}
 
-// TODO: export function Card({ title, children, className, highlight }: CardProps) {
-//   // Border color changes based on highlight prop
-// }
+const HIGHLIGHT_STYLES = {
+  green: styles.green,
+  amber: styles.amber,
+  red: styles.red,
+  blue: styles.blue,
+} as const;
+
+export function Card({
+  title,
+  subtitle,
+  eyebrow,
+  footer,
+  highlight,
+  children,
+  className = "",
+  ...props
+}: CardProps) {
+  const classes = [
+    styles.card,
+    highlight ? HIGHLIGHT_STYLES[highlight] : "",
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <article className={classes} {...props}>
+      {(eyebrow || title || subtitle) && (
+        <header className={styles.header}>
+          {eyebrow ? <p className={styles.eyebrow}>{eyebrow}</p> : null}
+          {title ? <h2 className={styles.title}>{title}</h2> : null}
+          {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}
+        </header>
+      )}
+
+      <div className={styles.body}>{children}</div>
+
+      {footer ? <footer className={styles.footer}>{footer}</footer> : null}
+    </article>
+  );
+}
