@@ -113,7 +113,11 @@ async function main() {
   console.log("🎉 Seeding complete!")
 }
 
-main().catch((err) => {
-  console.error("❌ Seeding failed:", err)
-  process.exit(1)
-})
+export { main }
+
+if (process.env.NODE_ENV !== "test") {
+  main().catch((err) => {
+    console.error("❌ Seeding failed:", err)
+    process.exit(1)
+  })
+}
