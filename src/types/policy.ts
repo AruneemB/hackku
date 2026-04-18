@@ -31,6 +31,7 @@ export interface VisaRequirement {
   stayLimitDays: number;
   notes: string;
   applicationUrl: string | null;
+  minApplicationLeadDays?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
