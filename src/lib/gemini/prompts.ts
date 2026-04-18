@@ -81,13 +81,46 @@ Ensure the JSON is valid and includes all fields.
 If costs are provided, compare them against the policy caps to determine "requiresManagerApproval" and "approvalReason".`;
 }
 
-// TODO: export function buildCrisisPrompt(delayMinutes: number, alternativeFlights: Flight[]) {
-//   // Frame 10 — empathetic tone, explains disruption + next steps
-// }
+export function buildCrisisPrompt(delayMinutes: number, alternativeFlights: { flightNumber: string; carrier: string; departureTime: string; priceUsd: number }[]) {
+  const altList = alternativeFlights.length
+    ? alternativeFlights.map(f => `- ${f.carrier} ${f.flightNumber} departing ${f.departureTime} ($${f.priceUsd})`).join("\n")
+    : "No alternatives currently available.";
 
-// TODO: export function buildExceptionRequestPrompt(trip: Trip, overageUsd: number) {
-//   // Frame 11 — drafts a manager email explaining why over-budget rebooking was needed
-// }
+  return `You are a helpful, empathetic AI travel concierge. Kelli's flight has been delayed by ${delayMinutes} minutes, which will cause her to miss her connection.
+
+Compose a brief, calm reassurance message (2-3 sentences) that:
+1. Acknowledges the disruption with empathy
+2. Mentions you've already found alternative options
+3. Ends with a confident, action-oriented statement
+
+Available alternatives:
+${altList}
+
+Return ONLY the spoken message text — no JSON, no bullet points.`;
+}
+
+export function buildExceptionRequestPrompt(trip: { destination: { city: string; country: string }; dates: { departure: Date; return: Date }; budgetCapUsd: string; selectedBundle: { totalCostUsd: number; flight: { outbound: { flightNumber: string; carrier: string } }; hotel: { name: string; pricePerNightUsd: number } } | null }, overageUsd: number) {
+  const bundle = trip.selectedBundle;
+  const flightInfo = bundle ? `${bundle.flight.outbound.carrier} ${bundle.flight.outbound.flightNumber}` : "original flight";
+  const hotelInfo = bundle ? `${bundle.hotel.name} ($${bundle.hotel.pricePerNightUsd}/night)` : "original hotel";
+
+  return `Draft a professional manager exception request email for an emergency rebooking that exceeds the travel budget by $${overageUsd}.
+
+Trip context:
+- Destination: ${trip.destination.city}, ${trip.destination.country}
+- Dates: ${new Date(trip.dates.departure).toDateString()} – ${new Date(trip.dates.return).toDateString()}
+- Original booking: ${flightInfo} + ${hotelInfo}
+- Budget cap: $${trip.budgetCapUsd}
+- Overage: $${overageUsd}
+
+The rebooking was required due to a flight delay that caused a missed connection.
+
+Return ONLY a JSON object:
+{
+  "subject": "email subject line",
+  "body": "full email body (plain text, 3-4 short paragraphs)"
+}`;
+}
 
 // TODO: export function buildExpenseReportPrompt(trip: Trip) {
 //   // Frame 15 — summarizes spend vs budget, lists receipts by category
