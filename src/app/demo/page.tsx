@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { ArrowBigLeft, Ellipsis, Pencil, Send as SendIcon } from "lucide-react";
+import { ArrowBigLeft, Ellipsis, Pencil, Plane, Send as SendIcon } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
 import type { Flight, FlightGroup } from "@/types/flight";
@@ -445,6 +445,171 @@ function FlightPicker({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function formatTripDateLabel(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+function getTripLengthDays(start: string, end: string) {
+  const startDate = new Date(`${start}T12:00:00`);
+  const endDate = new Date(`${end}T12:00:00`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
+  return Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000));
+}
+
+function parseRouteAirports(route: string) {
+  return route
+    .split(/\s*(?:→|â†’|->)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getStopDetail(route: string) {
+  const airports = parseRouteAirports(route);
+  const vias = airports.slice(1, -1);
+  if (vias.length === 0) return "Nonstop";
+  return `${vias.length === 1 ? "1 stop" : `${vias.length} stops`} · ${vias.join(", ")}`;
+}
+
+function FlightPickerV2({
+  value, onOutboundChange, returnValue, onReturnChange, groups, tripData,
+}: {
+  value?: number;
+  onOutboundChange?: (i: number) => void;
+  returnValue?: number;
+  onReturnChange?: (i: number) => void;
+  groups?: DisplayFlightGroup[] | null;
+  tripData?: TripData | null;
+}) {
+  const [localSel, setLocalSel] = useState(0);
+  const [localRetSel, setLocalRetSel] = useState(0);
+  const sel = value ?? localSel;
+  const retSel = returnValue ?? localRetSel;
+  const list = groups?.length ? groups : DEMO_FLIGHT_GROUPS;
+  const activeTrip = tripData ?? DEMO_DEFAULTS;
+  const tripLengthDays = getTripLengthDays(activeTrip.departure, activeTrip.returnDate);
+
+  function selectOutbound(i: number) {
+    (onOutboundChange ?? setLocalSel)(i);
+    (onReturnChange ?? setLocalRetSel)(0);
+  }
+
+  function selectReturn(i: number) {
+    (onReturnChange ?? setLocalRetSel)(i);
+  }
+
+  const tags: Record<number, string> = {};
+  if (list.length > 0) {
+    tags[0] = list[0].tag ?? "Best pick";
+    const cheapestIdx = list.reduce((ci, g, i) => {
+      const gPrice = g.returns[0]?.totalPriceUsd ?? Infinity;
+      const cPrice = list[ci].returns[0]?.totalPriceUsd ?? Infinity;
+      return gPrice < cPrice ? i : ci;
+    }, 0);
+    if (cheapestIdx !== 0) tags[cheapestIdx] = list[cheapestIdx].tag ?? "Cheapest";
+  }
+
+  return (
+    <div className={styles.fpWrap}>
+      {/* Route + date header */}
+      <div className={styles.fpHeader}>
+        <span className={styles.fpRoute}>{activeTrip.originCity} → {activeTrip.city}</span>
+        <span className={styles.fpHeaderMeta}>
+          {formatTripDateLabel(activeTrip.departure)} – {formatTripDateLabel(activeTrip.returnDate)}
+          {tripLengthDays ? ` · ${tripLengthDays} nights` : ""}
+        </span>
+      </div>
+
+      {/* Outbound + inline returns */}
+      <div className={styles.fpCards}>
+        {list.map((g, i) => {
+          const isSelected = sel === i;
+          const airports = parseRouteAirports(g.route);
+          const depCode = airports[0] ?? "";
+          const arrCode = airports[airports.length - 1] ?? "";
+          const minPrice = g.returns.reduce((m, r) => Math.min(m, r.totalPriceUsd), Infinity);
+          return (
+            <div key={g.id} className={styles.fpFlightGroup}>
+              <button
+                className={[styles.fpCard, isSelected ? styles.fpCardSelected : ""].join(" ")}
+                onClick={() => selectOutbound(i)}
+                type="button"
+              >
+                <div className={styles.fpCardTop}>
+                  <span className={styles.fpAirline}>{g.carrier} · {g.flightNumber}</span>
+                  {tags[i] && (
+                    <span className={[styles.cardTag, isSelected ? styles.cardTagSelected : ""].join(" ")}>
+                      {tags[i]}
+                    </span>
+                  )}
+                </div>
+                <div className={styles.fpTimes}>
+                  <span className={styles.fpTimeVal}>{g.dep}</span>
+                  <div className={styles.fpArrowWrap}>
+                    <div className={styles.fpArrowLine} />
+                    <Plane className={styles.fpArrowPlane} size={11} />
+                    <div className={styles.fpArrowLine} />
+                  </div>
+                  <span className={styles.fpTimeVal}>{g.arr}</span>
+                </div>
+                <div className={styles.fpAirports}>
+                  <span className={styles.fpAirport}>{depCode}</span>
+                  <span className={[styles.fpAirport, styles.fpAirportRight].join(" ")}>{arrCode}</span>
+                </div>
+                <div className={styles.fpCardBottom}>
+                  <span className={styles.fpStopsMeta}>{getStopDetail(g.route)} · {g.dur}</span>
+                  {minPrice !== Infinity && <span className={styles.fpFromPrice}>from ${minPrice}</span>}
+                </div>
+              </button>
+
+              {isSelected && g.returns.length > 0 && (
+                <div className={styles.fpReturnsInline}>
+                  <span className={styles.fpReturnInlineLabel}>↩ Return</span>
+                  <div className={styles.fpReturnRows}>
+                    {g.returns.map((r, ri) => {
+                      const isRetSel = retSel === ri;
+                      return (
+                        <button
+                          key={r.id}
+                          className={[styles.fpReturnRow, isRetSel ? styles.fpReturnRowSelected : ""].join(" ")}
+                          onClick={() => selectReturn(ri)}
+                          type="button"
+                        >
+                          <div className={[styles.fpRadioDot, isRetSel ? styles.fpRadioDotSelected : ""].join(" ")}>
+                            {isRetSel && <div className={styles.fpRadioInner} />}
+                          </div>
+                          <div className={styles.fpReturnRowBody}>
+                            <div className={styles.fpReturnRowTimeLine}>
+                              <span className={styles.fpReturnTime}>{r.dep}</span>
+                              <div className={styles.fpArrowWrap}>
+                                <div className={styles.fpArrowLine} />
+                                <Plane className={styles.fpArrowPlane} size={10} />
+                                <div className={styles.fpArrowLine} />
+                              </div>
+                              <span className={styles.fpReturnTime}>{r.arr}</span>
+                            </div>
+                            <div className={styles.fpReturnRowBottom}>
+                              <span className={styles.fpReturnRowMeta}>
+                                {r.returnDate} · {r.flightNumber}{r.returnVia ? ` · ${r.returnVia}` : ""} · {r.dur}
+                              </span>
+                              <span className={styles.fpReturnRowPrice}>${r.totalPriceUsd}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1768,7 +1933,9 @@ export default function DemoPage() {
       }
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -2274,7 +2441,16 @@ export default function DemoPage() {
             />
           );
         }
-        return <FlightPicker groups={liveFlights} onOutboundChange={setSelectedFlight} onReturnChange={setSelectedReturn} returnValue={selectedReturn} value={selectedFlight} />;
+        return (
+          <FlightPickerV2
+            groups={liveFlights}
+            onOutboundChange={setSelectedFlight}
+            onReturnChange={setSelectedReturn}
+            returnValue={selectedReturn}
+            tripData={tripData}
+            value={selectedFlight}
+          />
+        );
       case 2: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
       case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
       default: { const V = frame.Visual; return <V />; }
