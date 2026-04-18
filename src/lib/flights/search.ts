@@ -17,21 +17,13 @@
 // ============================================================
 
 import { getJson } from "serpapi";
-import type { Flight, FlightLeg } from "@/types/flight";
-
-export interface FlightSearchParams {
-  origin: string;       // IATA airport code
-  destination: string;
-  date: string;         // YYYY-MM-DD
-  returnDate?: string;
-  adults?: number;
-}
+import type { Flight, FlightLeg, FlightSearchParams } from "@/types/flight";
+import { withFlightCache } from "./cache";
 
 /**
- * Searches for flights using SerpAPI's Google Flights engine.
- * Maps the results to the project's internal Flight type.
+ * Internal implementation of flight search using SerpAPI.
  */
-export async function searchFlights(params: FlightSearchParams): Promise<Flight[]> {
+async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight[]> {
   const apiKey = process.env.SERPAPI_KEY;
 
   if (!apiKey) {
@@ -111,4 +103,12 @@ export async function searchFlights(params: FlightSearchParams): Promise<Flight[
     console.warn("SerpAPI request failed:", error);
     return [];
   }
+}
+
+/**
+ * Searches for flights using SerpAPI's Google Flights engine.
+ * Results are cached for 60 seconds to prevent redundant API hits.
+ */
+export async function searchFlights(params: FlightSearchParams): Promise<Flight[]> {
+  return withFlightCache(params, searchFlightsInternal);
 }
