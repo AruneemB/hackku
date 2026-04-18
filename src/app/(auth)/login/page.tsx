@@ -17,11 +17,11 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
       <div className="flex flex-col items-center gap-6 text-center max-w-sm">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Kelli</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Lockey</h1>
           <p className="text-gray-400 text-sm mt-1">AI Travel Concierge · Lockton</p>
         </div>
         <button
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={() => signIn("google", { callbackUrl: "/demo" })}
           className="flex items-center gap-3 bg-white text-gray-900 font-semibold px-6 py-3 rounded-xl hover:bg-gray-100 active:scale-95 transition-all"
         >
           <GoogleIcon />

@@ -17,8 +17,20 @@ import type { Flight, Hotel, Policy, PolicyFindings, Trip, WeatherForecast } fro
 // Helpers
 // ---------------------------------------------------------------------------
 
+function getOrdinalSuffix(i: number): string {
+  const j = i % 10, k = i % 100;
+  if (j === 1 && k !== 11) return "st";
+  if (j === 2 && k !== 12) return "nd";
+  if (j === 3 && k !== 13) return "rd";
+  return "th";
+}
+
 function fmtDate(d: Date | string): string {
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return String(d);
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const day = date.getDate();
+  return `${month} ${day}${getOrdinalSuffix(day)}, ${date.getFullYear()}`;
 }
 
 function flightSummary(f: Flight): string {
@@ -52,7 +64,7 @@ function hotelSummary(h: Hotel): string {
 
 export function buildPassportWarningPrompt(expiryDate: Date, destination: string): string {
   const expiry = fmtDate(expiryDate)
-  return `You are Kelli, a friendly AI travel concierge for a corporate traveler. \
+  return `You are Lockey, a friendly AI travel concierge for a corporate traveler. \
 Write a brief, warm warning message (2–3 sentences, first person as the AI assistant) \
 telling the traveler their passport expires on ${expiry}, which is within 6 months \
 of their planned trip to ${destination}. Advise them to renew it. \
@@ -64,7 +76,7 @@ Do NOT use JSON. Plain conversational text only.`
 // ---------------------------------------------------------------------------
 
 export function buildFlightSearchStatusPrompt(destination: string): string {
-  return `You are Kelli, a friendly AI travel concierge. \
+  return `You are Lockey, a friendly AI travel concierge. \
 Write a single short sentence (under 20 words) telling the traveler you are now \
 searching flights to ${destination}, checking multiple nearby airports and a \
 5-day date window for the best fares. Conversational tone. No JSON.`
@@ -124,7 +136,7 @@ complianceFlags should list any policy violations (e.g. "hotel_over_cap", "fligh
 
 export function buildPolicySummaryPrompt(findings: PolicyFindings): string {
   const visa = findings.visa
-  return `You are Kelli, a friendly AI travel concierge. \
+  return `You are Lockey, a friendly AI travel concierge. \
 Write a concise 2–3 sentence plain-language summary of these travel policy findings \
 for the traveler. Be warm and direct. Mention visa status, hotel cap, and whether \
 manager approval is needed.
@@ -151,7 +163,7 @@ export function buildCrisisPrompt(
 ): string {
   const altList = alternativeFlights.slice(0, 3).map(flightSummary).join("\n")
 
-  return `You are Kelli, an AI travel concierge handling a live flight disruption. \
+  return `You are Lockey, an AI travel concierge handling a live flight disruption. \
 The traveler's flight is delayed by ${delayMinutes} minutes.
 
 ${alternativeFlights.length > 0
