@@ -91,12 +91,11 @@ describe("generateEmbedding", () => {
     mockEmbedContent.mockClear()
   })
 
-  it("calls embedContent with the provided text and 768 dimensions", async () => {
+  it("calls embedContent with the provided text", async () => {
     await generateEmbedding("Milan travel policy")
     expect(mockEmbedContent).toHaveBeenCalledOnce()
     expect(mockEmbedContent).toHaveBeenCalledWith({
       content: { parts: [{ text: "Milan travel policy" }], role: "user" },
-      outputDimensionality: 768,
     })
   })
 

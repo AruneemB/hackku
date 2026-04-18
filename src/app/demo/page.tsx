@@ -12,29 +12,26 @@ type DemoFrame = {
   tone: Tone;
   message: string;
   sheetTitle: string;
-  sheetSubtitle: string;
-  techStack: string[];
   options: [string, string];
   Visual: React.FC;
+  actionTitle: string;
+  ActionVisual: React.FC;
 };
 
-// ── Visual components ──────────────────────────────────────────
+// ── Main Visual components ─────────────────────────────────────
 
 function TripCard() {
   return (
     <div className={styles.tripCard}>
       <div className={styles.tripDestination}>
-        <span className={styles.tripFlag}>🇮🇹</span>
-        <div>
-          <div className={styles.tripCity}>Milan, Italy</div>
-          <div className={styles.tripDates}>Sep 14 – Sep 19, 2025 · 5 nights</div>
-        </div>
+        <div className={styles.tripCity}>Milan, Italy</div>
+        <div className={styles.tripDates}>Sep 14 to Sep 19, 2025 · 5 nights</div>
       </div>
       <div className={styles.alertBox}>
         <span className={styles.alertIcon}>⚠️</span>
         <div>
           <div className={styles.alertTitle}>Passport expires Jan 2025</div>
-          <div className={styles.alertBody}>Within 6 months of travel — renewal recommended after this trip</div>
+          <div className={styles.alertBody}>Within 6 months of travel - renewal recommended after this trip</div>
         </div>
       </div>
       <div className={styles.infoGrid}>
@@ -136,28 +133,28 @@ function ComplianceReport() {
         <span className={styles.complianceIcon}>⚠️</span>
         <div>
           <div className={styles.complianceTitle}>Type-C Visa Required</div>
-          <div className={styles.complianceBody}>US citizens must apply ≥ 15 days before departure · italyvisa.com</div>
+          <div className={styles.complianceBody}>US citizens must apply ≥ 15 days before departure</div>
         </div>
       </div>
       <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
         <span className={styles.complianceIcon}>⚠️</span>
         <div>
           <div className={styles.complianceTitle}>Hotel Exception Needed</div>
-          <div className={styles.complianceBody}>Marriott Scala at $247/night exceeds the $200 Milan cap · manager sign-off required</div>
+          <div className={styles.complianceBody}>Marriott Scala at $247/night exceeds the $200 Milan cap</div>
         </div>
       </div>
       <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
         <span className={styles.complianceIcon}>✓</span>
         <div>
           <div className={styles.complianceTitle}>Flight within budget</div>
-          <div className={styles.complianceBody}>LH 8904 at $687 · approved cap is $800 · nonstop, MXP</div>
+          <div className={styles.complianceBody}>LH 8904 at $687 · approved cap is $800</div>
         </div>
       </div>
       <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
         <span className={styles.complianceIcon}>✓</span>
         <div>
           <div className={styles.complianceTitle}>Travel dates policy-compliant</div>
-          <div className={styles.complianceBody}>Sep 14–19 · 5-night stay · within 10-day maximum</div>
+          <div className={styles.complianceBody}>Sep 14 to 19 · 5-night stay · within 10-day maximum</div>
         </div>
       </div>
     </div>
@@ -165,31 +162,19 @@ function ComplianceReport() {
 }
 
 function ApprovalEmail() {
-  const [sent, setSent] = useState(false);
-  if (sent) {
-    return (
-      <div className={styles.sentBanner}>
-        <span>✓</span>
-        <span>Sent to mgr.sarah@lockton.com</span>
-      </div>
-    );
-  }
   return (
     <div className={styles.emailDraft}>
       <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Travel Approval — Milan, Sep 14–19</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Travel Approval - Milan, Sep 14-19</span></div>
       <div className={styles.emailBody}>
         <p>Hi Sarah,</p>
-        <p>I&#39;m requesting approval for a business trip to <strong>Milan, Italy, Sep 14–19, 2025</strong> for an on-site client meeting.</p>
-        <p><strong>Flight:</strong> LH 8904, ORD → MXP · $687 (nonstop)<br />
-        <strong>Hotel:</strong> Marriott Scala · $247/night × 5 = $1,235<br />
-        <strong>Note:</strong> Hotel is $47 over the $200 cap. It is 0.4 km from the client office — the closest preferred vendor.</p>
+        <p>I&#39;m requesting approval for a business trip to <strong>Milan, Italy, Sep 14-19, 2025</strong> for an on-site client meeting.</p>
+        <p><strong>Flight:</strong> LH 8904, ORD to MXP · $687 (nonstop)<br />
+        <strong>Hotel:</strong> Marriott Scala · $247/night x 5 = $1,235<br />
+        <strong>Note:</strong> Hotel is $47 over the $200 cap - closest preferred vendor to client office.</p>
         <p>Total estimated: $2,010. Please let me know if you have any questions.</p>
         <p>Thanks,<br />Kelli</p>
       </div>
-      <button className={styles.emailSend} onClick={() => setSent(true)} type="button">
-        Send Request
-      </button>
     </div>
   );
 }
@@ -220,14 +205,22 @@ function HotelComparison() {
 function PrepChecklist() {
   const [done, setDone] = useState<Set<number>>(new Set());
   const items = [
-    { text: "Apply for Type-C visa — italyvisa.com", urgent: true },
-    { text: "Passport expires Jan 2025 — renew after trip", urgent: true },
-    { text: "Pack for 24 °C with chance of rain, days 2–4" },
-    { text: "Marriott Scala · Via della Spiga 31 · Check-in Sep 14, 3:00 PM" },
+    { text: "Apply for Type-C Visa at italyvisa.com", urgent: true },
+    { text: "Renew passport after trip (expires Jan 2025)", urgent: true },
+    { text: "Pack for 24°C, light rain expected on days 2 to 4" },
+    { text: "Marriott Scala · Via della Spiga 31 · Check-in Sep 14 at 3:00 PM" },
     { text: "Confirm travel insurance coverage" },
   ];
   function toggle(i: number) {
-    setDone(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+    setDone((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) {
+        next.delete(i);
+      } else {
+        next.add(i);
+      }
+      return next;
+    });
   }
   return (
     <div className={styles.checklist}>
@@ -250,10 +243,10 @@ function LiveDashboard() {
   return (
     <div className={styles.dashboard}>
       {[
-        { icon: "✈️", title: "LH 8904 · Gate B22", sub: "Boards 8:15 AM · Departs 8:45 AM", badge: "On time", ok: true },
-        { icon: "🌤️", title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight", badge: "", ok: false },
-        { icon: "🏨", title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM", badge: "Ready", ok: true },
-        { icon: "🚗", title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM to make your gate", badge: "", ok: false },
+        { icon: "✈️", title: "LH 8904 · Gate B22", sub: "Boards 8:15 AM · Departs 8:45 AM", badge: "On time" },
+        { icon: "🌤️", title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight", badge: "" },
+        { icon: "🏨", title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM", badge: "Ready" },
+        { icon: "🚗", title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM to make your gate", badge: "" },
       ].map(item => (
         <div className={styles.dashCard} key={item.title}>
           <span className={styles.dashIcon}>{item.icon}</span>
@@ -289,29 +282,17 @@ function FlightRebooking() {
 }
 
 function ExceptionEmail() {
-  const [sent, setSent] = useState(false);
-  if (sent) {
-    return (
-      <div className={styles.sentBanner}>
-        <span>✓</span>
-        <span>Exception request sent to mgr.sarah@lockton.com</span>
-      </div>
-    );
-  }
   return (
     <div className={styles.emailDraft}>
       <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Priority</span><span className={[styles.emailVal, styles.emailUrgent].join(" ")}>HIGH — Action required</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception — Milan Rebooking</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Priority</span><span className={[styles.emailVal, styles.emailUrgent].join(" ")}>HIGH - Action required</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - Milan Rebooking</span></div>
       <div className={styles.emailBody}>
         <p>Hi Sarah,</p>
         <p><strong>LH 8904 was cancelled due to a thunderstorm</strong> at O&#39;Hare. The only available rebooking is LH 9012 at <strong>$1,067</strong>, which is $380 over the approved $687 budget.</p>
-        <p>This is a carrier-initiated cancellation (force majeure). I&#39;m requesting an emergency exception to proceed immediately — my hotel hold expires in 2 hours.</p>
+        <p>Force majeure - requesting emergency exception. Hotel hold expires in 2 hours.</p>
         <p>Kelli</p>
       </div>
-      <button className={styles.emailSend} onClick={() => setSent(true)} type="button">
-        Send Exception Request
-      </button>
     </div>
   );
 }
@@ -381,7 +362,6 @@ function ReceiptCapture() {
       <div className={styles.receiptTags}>
         <span className={styles.receiptTag}>✓ Categorized: Meals</span>
         <span className={styles.receiptTag}>✓ PII sanitized</span>
-        <span className={styles.receiptTag}>✓ Stored as Decimal128</span>
       </div>
     </div>
   );
@@ -403,7 +383,7 @@ function ContactCards() {
         <div className={styles.contactBody}>
           <div className={styles.contactName}>US Embassy Milan</div>
           <div className={styles.contactDetail}>Via Principe Amedeo 2/10</div>
-          <div className={styles.contactDetail}>Mon–Fri · 8:00 AM – 5:00 PM</div>
+          <div className={styles.contactDetail}>Mon to Fri · 8:00 AM to 5:00 PM</div>
         </div>
       </div>
     </div>
@@ -443,9 +423,9 @@ function PrivacySummary() {
   return (
     <div className={styles.privacyList}>
       {[
-        { icon: "📍", label: "Location tracking", detail: "Active Sep 14–19 only", status: "Stopped" },
+        { icon: "📍", label: "Location tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
         { icon: "💳", label: "Financial data", detail: "Card numbers sanitized before storage", status: "Done" },
-        { icon: "🔑", label: "OAuth tokens", detail: "Encrypted at rest in MongoDB Atlas", status: "Secured" },
+        { icon: "🔑", label: "OAuth tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
         { icon: "📅", label: "Data retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
       ].map(item => (
         <div className={styles.privacyItem} key={item.label}>
@@ -487,152 +467,482 @@ function BundlePicker() {
   );
 }
 
+// ── Action Visual components (shown after primary button tap) ───
+
+function TripConfirmed() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>✅</span>
+        <div className={styles.confirmTitle}>Trip Draft Saved</div>
+        <div className={styles.confirmBody}>Milan · Sep 14 to 19 · Trip #TRP-20250914 is now active in your travel dashboard.</div>
+      </div>
+    </div>
+  );
+}
+
+function FlightConfirmed() {
+  return (
+    <div className={styles.eticket}>
+      <div className={styles.eticketRow}>
+        <div className={styles.eticketAirport}>
+          <div className={styles.eticketCode}>ORD</div>
+          <div className={styles.eticketCity}>Chicago</div>
+        </div>
+        <div className={styles.eticketPlane}>✈</div>
+        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}>
+          <div className={styles.eticketCode}>MXP</div>
+          <div className={styles.eticketCity}>Milan</div>
+        </div>
+      </div>
+      <div className={styles.eticketGrid}>
+        {[
+          ["Flight", "LH 8904"],
+          ["Date", "Sep 14, 2025"],
+          ["Departs", "8:45 AM"],
+          ["Seat", "14A (Window)"],
+          ["PNR", "XKMR74"],
+          ["Class", "Economy"],
+        ].map(([k, v]) => (
+          <div className={styles.eticketItem} key={k}>
+            <div className={styles.eticketKey}>{k}</div>
+            <div className={styles.eticketVal}>{v}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HotelConfirmed() {
+  return (
+    <div className={styles.confirmList}>
+      {[
+        { icon: "🏨", label: "Hotel", val: "Marriott Scala, Milan" },
+        { icon: "📅", label: "Check-in", val: "Sep 14 · 3:00 PM" },
+        { icon: "📅", label: "Check-out", val: "Sep 19 · 12:00 noon" },
+        { icon: "🔑", label: "Conf. #", val: "MR-20250914-7741" },
+        { icon: "💰", label: "Total", val: "$1,235 (5 nights)" },
+      ].map(item => (
+        <div className={styles.confirmRow} key={item.label}>
+          <span className={styles.confirmIcon}>{item.icon}</span>
+          <span className={styles.confirmLabel}>{item.label}</span>
+          <span className={styles.confirmVal}>{item.val}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function VisaGuide() {
+  const [open, setOpen] = useState<number | null>(0);
+  const steps = [
+    { n: "1", title: "Complete online application", body: "Italian Consulate portal, select 'Schengen Short Stay (Type C), Business'" },
+    { n: "2", title: "Gather required documents", body: "Valid passport, invitation letter, travel insurance, hotel booking, flight itinerary, bank statements" },
+    { n: "3", title: "Book your appointment", body: "Italian Consulate Chicago, 500 N Michigan Ave. Allow at least 15 days for processing" },
+    { n: "4", title: "Pay the fee and submit", body: "80 EUR application fee. Bring originals and copies to your appointment" },
+  ];
+  return (
+    <div className={styles.guideWrap}>
+      <div className={styles.guideSteps}>
+        {steps.map((step, i) => (
+          <div className={styles.stepItem} key={step.n}>
+            <button
+              className={styles.stepHeader}
+              onClick={() => setOpen(open === i ? null : i)}
+              type="button"
+            >
+              <span className={styles.stepNum}>{step.n}</span>
+              <span className={styles.stepTitle}>{step.title}</span>
+              <span className={styles.stepChevron}>{open === i ? "▲" : "▼"}</span>
+            </button>
+            {open === i && <div className={styles.stepBody}>{step.body}</div>}
+          </div>
+        ))}
+      </div>
+      <div className={styles.guideLink}>italyvisa.com · Italian Consulate Chicago</div>
+    </div>
+  );
+}
+
+function BundleConfirmed() {
+  return (
+    <div className={styles.itinerary}>
+      <div className={styles.itineraryHeader}>
+        <div className={styles.itineraryTitle}>Path C · Confirmed</div>
+        <div className={styles.itineraryTotal}>$2,010</div>
+      </div>
+      {[
+        { icon: "✈️", label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
+        { icon: "🏨", label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
+        { icon: "📋", label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
+      ].map(item => (
+        <div className={styles.itineraryRow} key={item.label}>
+          <span className={styles.itineraryIcon}>{item.icon}</span>
+          <div>
+            <div className={styles.itineraryLabel}>{item.val}</div>
+            <div className={styles.itinerarySub}>{item.sub}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ApprovalWatching() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>📬</span>
+        <div className={styles.confirmTitle}>Watching for Reply</div>
+        <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds - usually within 2 hours.</div>
+      </div>
+      <div className={styles.watchStatus}>
+        <div className={styles.watchDot} />
+        <span>Monitoring inbox · Last checked just now</span>
+      </div>
+    </div>
+  );
+}
+
+function ResubmitEmail() {
+  const [sent, setSent] = useState(false);
+  if (sent) {
+    return (
+      <div className={styles.sentBanner}>
+        <span>✓</span>
+        <span>Resubmission sent to mgr.sarah@lockton.com</span>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.emailDraft}>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Updated - Milan Approval, Hotel Revised</span></div>
+      <div className={styles.emailBody}>
+        <p>Hi Sarah,</p>
+        <p>Following your feedback, I&#39;ve switched to <strong>AC Hotel Milan at $189/night</strong> - fully within the $200 cap. Total drops to $1,840.</p>
+        <p>Everything else is the same. Please let me know if you&#39;re happy to approve.</p>
+        <p>Thanks,<br />Kelli</p>
+      </div>
+      <button className={styles.emailSend} onClick={() => setSent(true)} type="button">Send Updated Request</button>
+    </div>
+  );
+}
+
+function TripReady() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🎒</span>
+        <div className={styles.confirmTitle}>You&#39;re Ready to Travel</div>
+        <div className={styles.confirmBody}>All checklist items reviewed. Documents, bookings, and reminders are in order.</div>
+      </div>
+      <div className={styles.countdownCard}>
+        <div className={styles.countdownNum}>12</div>
+        <div className={styles.countdownLabel}>days until departure</div>
+      </div>
+    </div>
+  );
+}
+
+function LiveConfirmed() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>📡</span>
+        <div className={styles.confirmTitle}>Live Monitoring Active</div>
+        <div className={styles.confirmBody}>Gate, weather, hotel, and traffic updates will push to your device automatically throughout the trip.</div>
+      </div>
+      <div className={styles.watchStatus}>
+        <div className={styles.watchDot} />
+        <span>Updating every 60 seconds</span>
+      </div>
+    </div>
+  );
+}
+
+function RebookingConfirmed() {
+  return (
+    <div className={styles.eticket}>
+      <div className={styles.eticketRow}>
+        <div className={styles.eticketAirport}>
+          <div className={styles.eticketCode}>ORD</div>
+          <div className={styles.eticketCity}>Chicago</div>
+        </div>
+        <div className={styles.eticketPlane}>✈</div>
+        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}>
+          <div className={styles.eticketCode}>MXP</div>
+          <div className={styles.eticketCity}>Milan</div>
+        </div>
+      </div>
+      <div className={styles.eticketGrid}>
+        {[
+          ["Flight", "LH 9012"],
+          ["Date", "Sep 14, 2025"],
+          ["Departs", "9:00 PM"],
+          ["Seat", "14A (Window)"],
+          ["PNR", "XKMR74"],
+          ["Change fee", "None"],
+        ].map(([k, v]) => (
+          <div className={styles.eticketItem} key={k}>
+            <div className={styles.eticketKey}>{k}</div>
+            <div className={styles.eticketVal}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div className={[styles.eticketBadge, styles.eticketBadgeGreen].join(" ")}>Hotel notified · No further action needed</div>
+    </div>
+  );
+}
+
+function ExceptionPending() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>⏳</span>
+        <div className={styles.confirmTitle}>Exception Pending</div>
+        <div className={styles.confirmBody}>Urgent request sent. Sarah typically responds within 30 minutes for force majeure cases.</div>
+      </div>
+      <div className={styles.watchStatus}>
+        <div className={styles.watchDotUrgent} />
+        <span>Monitoring inbox · Hotel hold expires in 2 hours</span>
+      </div>
+    </div>
+  );
+}
+
+function TransportConfirmed() {
+  return (
+    <div className={styles.confirmList}>
+      {[
+        { icon: "🚕", label: "Transport", val: "Company taxi" },
+        { icon: "📍", label: "Pickup", val: "MXP Arrivals Hall B" },
+        { icon: "🏨", label: "Drop-off", val: "Marriott Scala, Milan" },
+        { icon: "⏱", label: "ETA", val: "18 min · $14" },
+        { icon: "📞", label: "Driver", val: "+39 02 555 0122" },
+      ].map(item => (
+        <div className={styles.confirmRow} key={item.label}>
+          <span className={styles.confirmIcon}>{item.icon}</span>
+          <span className={styles.confirmLabel}>{item.label}</span>
+          <span className={styles.confirmVal}>{item.val}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReceiptSubmitted() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>✅</span>
+        <div className={styles.confirmTitle}>Submitted to Expense System</div>
+        <div className={styles.confirmBody}>Ristorante Al Porto · €87.50 · Ref #EXP-20250916-09 · Categorized as &quot;Meals&quot;</div>
+      </div>
+      <div className={styles.receiptTags}>
+        <span className={styles.receiptTag}>✓ Within daily allowance</span>
+        <span className={styles.receiptTag}>✓ Manager notified</span>
+      </div>
+    </div>
+  );
+}
+
+function ContactsSaved() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>📱</span>
+        <div className={styles.confirmTitle}>Contacts Saved</div>
+        <div className={styles.confirmBody}>Corporate Travel Desk and US Embassy Milan added to your emergency contacts for this trip.</div>
+      </div>
+    </div>
+  );
+}
+
+function TripArchived() {
+  return (
+    <div className={styles.archiveWrap}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>📁</span>
+        <div className={styles.confirmTitle}>Trip #TRP-20250914 Archived</div>
+        <div className={styles.confirmBody}>Expense report drafted and sent to mgr.sarah@lockton.com for final sign-off.</div>
+      </div>
+      <div className={styles.archiveSummary}>
+        {[
+          ["Total spent", "$2,187"],
+          ["Under budget by", "$153"],
+          ["Receipts logged", "7"],
+          ["Days on trip", "5"],
+        ].map(([k, v]) => (
+          <div className={styles.archiveRow} key={k}>
+            <span className={styles.archiveKey}>{k}</span>
+            <span className={styles.archiveVal}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DataCleared() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🔒</span>
+        <div className={styles.confirmTitle}>Your Data Is Protected</div>
+        <div className={styles.confirmBody}>Location tracking stopped. Financial data sanitized. OAuth tokens expired. Trip data scheduled for deletion Dec 18.</div>
+      </div>
+    </div>
+  );
+}
+
 // ── Frame data ─────────────────────────────────────────────────
 
 const FRAMES: DemoFrame[] = [
   {
     tone: "neutral",
     message: "Hi Kelli. Tell me where you are going and the dates, and I will start a draft trip.",
-    sheetTitle: "Milan, Italy · Sep 14–19",
-    sheetSubtitle: "Identity & intent captured",
-    techStack: ["MongoDB Atlas", "Gemini", "ElevenLabs"],
-    options: ["Looks right", "Adjust"],
+    sheetTitle: "Your Trip",
+    options: ["Looks Right", "Adjust"],
     Visual: TripCard,
+    actionTitle: "Trip Confirmed",
+    ActionVisual: TripConfirmed,
   },
   {
     tone: "neutral",
     message: "I am searching nearby airports, a five-day window, and Saturday-night savings.",
-    sheetTitle: "Choose a flight",
-    sheetSubtitle: "Automated flight algorithm",
-    techStack: ["Atlas Search", "Gemini"],
-    options: ["Confirm flight", "Adjust"],
+    sheetTitle: "Choose a Flight",
+    options: ["Confirm Flight", "Adjust"],
     Visual: FlightPicker,
+    actionTitle: "Your E-Ticket",
+    ActionVisual: FlightConfirmed,
   },
   {
     tone: "neutral",
     message: "I found nearby hotels and highlighted preferred vendors close to the client office.",
-    sheetTitle: "Hotels near client office",
-    sheetSubtitle: "Proximity-based hotel search",
-    techStack: ["MongoDB GeoJSON", "Atlas"],
-    options: ["Looks right", "Adjust"],
+    sheetTitle: "Hotels Near Client Office",
+    options: ["Looks Right", "Adjust"],
     Visual: HotelMap,
+    actionTitle: "Hotel Booked",
+    ActionVisual: HotelConfirmed,
   },
   {
     tone: "empathetic",
     message: "I checked the rules. You need a Type-C visa and this hotel needs a quick sign-off.",
-    sheetTitle: "Compliance check complete",
-    sheetSubtitle: "Policy & visa verification",
-    techStack: ["Atlas Vector Search", "Gemini"],
-    options: ["Looks right", "Adjust"],
+    sheetTitle: "Compliance Check Complete",
+    options: ["Apply for Visa", "Adjust"],
     Visual: ComplianceReport,
+    actionTitle: "Visa Application Guide",
+    ActionVisual: VisaGuide,
   },
   {
     tone: "excited",
     message: "Here are three bundle paths. I can optimize for policy, savings, or proximity.",
-    sheetTitle: "Choose your bundle",
-    sheetSubtitle: "Tradeoff presentation",
-    techStack: ["Gemini", "Atlas"],
-    options: ["Confirm bundle", "Adjust"],
+    sheetTitle: "Choose Your Bundle",
+    options: ["Confirm Bundle", "Adjust"],
     Visual: BundlePicker,
+    actionTitle: "Itinerary Confirmed",
+    ActionVisual: BundleConfirmed,
   },
   {
     tone: "neutral",
     message: "I drafted the approval email and started watching the manager thread.",
-    sheetTitle: "Approval request ready",
-    sheetSubtitle: "Invisible approval handshake",
-    techStack: ["Google OAuth", "Gmail API", "Atlas Triggers"],
-    options: ["Sent!", "Edit draft"],
+    sheetTitle: "Approval Request Ready",
+    options: ["Send", "Edit Draft"],
     Visual: ApprovalEmail,
+    actionTitle: "Approval Sent",
+    ActionVisual: ApprovalWatching,
   },
   {
     tone: "empathetic",
     message: "The manager rejected the hotel cost. Here is a compliant alternative ready to resubmit.",
-    sheetTitle: "Recovery option prepared",
-    sheetSubtitle: "Rejection detected & resolved",
-    techStack: ["Atlas Triggers", "Gemini", "ElevenLabs"],
+    sheetTitle: "Recovery Option Prepared",
     options: ["Resubmit", "Adjust"],
     Visual: HotelComparison,
+    actionTitle: "Resubmitting to Manager",
+    ActionVisual: ResubmitEmail,
   },
   {
     tone: "excited",
     message: "Your trip is approved. I generated the checklist, visa link, and packing reminders.",
-    sheetTitle: "Your travel checklist",
-    sheetSubtitle: "Automated traveler prep",
-    techStack: ["Gemini", "MongoDB"],
-    options: ["All set", "Adjust"],
+    sheetTitle: "Your Travel Checklist",
+    options: ["All Set", "Adjust"],
     Visual: PrepChecklist,
+    actionTitle: "All Packed!",
+    ActionVisual: TripReady,
   },
   {
     tone: "neutral",
     message: "Live mode is active. Your gate, weather, hotel, and travel conditions are updating.",
-    sheetTitle: "Live travel mode",
-    sheetSubtitle: "TimeSeries situational dashboard",
-    techStack: ["MongoDB TimeSeries", "ElevenLabs"],
-    options: ["Looks right", "Adjust"],
+    sheetTitle: "Live Travel Mode",
+    options: ["Looks Right", "Adjust"],
     Visual: LiveDashboard,
+    actionTitle: "You're Covered",
+    ActionVisual: LiveConfirmed,
   },
   {
     tone: "urgent",
     message: "I detected a delay. I already found a later flight and notified your hotel.",
-    sheetTitle: "Disruption handled",
-    sheetSubtitle: "Proactive crisis intervention",
-    techStack: ["ElevenLabs", "Atlas Triggers", "Gemini"],
-    options: ["Accept rebooking", "Adjust"],
+    sheetTitle: "Disruption Handled",
+    options: ["Accept Rebooking", "Adjust"],
     Visual: FlightRebooking,
+    actionTitle: "New E-Ticket",
+    ActionVisual: RebookingConfirmed,
   },
   {
     tone: "urgent",
     message: "The only rebooking is over budget. I drafted an emergency exception for your manager.",
-    sheetTitle: "Emergency exception",
-    sheetSubtitle: "Over-budget escalation",
-    techStack: ["Gemini", "Atlas", "Gmail API"],
-    options: ["Sent!", "Edit draft"],
+    sheetTitle: "Emergency Exception",
+    options: ["Send", "Edit Draft"],
     Visual: ExceptionEmail,
+    actionTitle: "Exception Requested",
+    ActionVisual: ExceptionPending,
   },
   {
     tone: "neutral",
     message: "You have arrived. Here is the fastest route to the hotel and your daily meal allowance.",
-    sheetTitle: "On-the-ground support",
-    sheetSubtitle: "Spatial & allowance guidance",
-    techStack: ["MongoDB GeoJSON", "Gemini"],
-    options: ["Got it", "Adjust"],
+    sheetTitle: "On-the-Ground Support",
+    options: ["Got It", "Adjust"],
     Visual: ArrivalSupport,
+    actionTitle: "Transport Booked",
+    ActionVisual: TransportConfirmed,
   },
   {
     tone: "neutral",
     message: "Hold the receipt to the camera. I will extract the merchant, total, and date.",
-    sheetTitle: "Receipt captured",
-    sheetSubtitle: "Multimodal receipt harvesting",
-    techStack: ["Gemini Vision", "MongoDB Decimal128"],
-    options: ["Looks right", "Adjust"],
+    sheetTitle: "Receipt Captured",
+    options: ["Looks Right", "Adjust"],
     Visual: ReceiptCapture,
+    actionTitle: "Receipt Logged",
+    ActionVisual: ReceiptSubmitted,
   },
   {
     tone: "urgent",
     message: "This requires a human touch. Here is the travel desk and the nearest embassy.",
-    sheetTitle: "Human support contacts",
-    sheetSubtitle: "AI escalation & safety net",
-    techStack: ["MongoDB", "ElevenLabs"],
-    options: ["Got it", "Dismiss"],
+    sheetTitle: "Human Support Contacts",
+    options: ["Got It", "Dismiss"],
     Visual: ContactCards,
+    actionTitle: "Contacts Saved",
+    ActionVisual: ContactsSaved,
   },
   {
     tone: "excited",
     message: "I summarized your final spend and drafted the expense report. This trip is ready to archive.",
-    sheetTitle: "Trip spend summary",
-    sheetSubtitle: "Post-trip closure",
-    techStack: ["Google OAuth", "Gmail API", "MongoDB"],
-    options: ["Archive trip", "Review"],
+    sheetTitle: "Trip Spend Summary",
+    options: ["Archive Trip", "Review"],
     Visual: SpendSummary,
+    actionTitle: "Trip Archived",
+    ActionVisual: TripArchived,
   },
   {
     tone: "neutral",
     message: "Here is exactly how your travel data was used, limited, and protected.",
-    sheetTitle: "Privacy & data summary",
-    sheetSubtitle: "Transparency screen",
-    techStack: ["MongoDB Atlas", "Google OAuth"],
-    options: ["Done", "Review again"],
+    sheetTitle: "Privacy & Data Summary",
+    options: ["Done", "Adjust"],
     Visual: PrivacySummary,
+    actionTitle: "Data Protected",
+    ActionVisual: DataCleared,
   },
 ];
 
@@ -672,13 +982,15 @@ function MessageCircleMoreIcon() {
 // ── Phone shell ────────────────────────────────────────────────
 
 function PhoneShell({
-  sheetContent,
+  sheetScrollContent,
+  sheetFooter,
   sheetOpen,
   onSheetClose,
   showEllipsis,
   onEllipsisOpen,
 }: {
-  sheetContent: React.ReactNode;
+  sheetScrollContent: React.ReactNode;
+  sheetFooter: React.ReactNode;
   sheetOpen: boolean;
   onSheetClose: () => void;
   showEllipsis: boolean;
@@ -758,30 +1070,10 @@ function PhoneShell({
           <div className={styles.sheetDragArea} onPointerCancel={handlePointerCancel} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
             <div className={styles.sheetHandle} />
           </div>
-          <div className={styles.sheetScroll}>{sheetContent}</div>
+          <div className={styles.sheetScroll}>{sheetScrollContent}</div>
+          <div className={styles.sheetFooter}>{sheetFooter}</div>
         </div>
       </section>
-    </div>
-  );
-}
-
-// ── Sheet body ─────────────────────────────────────────────────
-
-function SheetBody({ frame, onSelect }: { frame: DemoFrame; onSelect: (v: string) => void }) {
-  return (
-    <div className={styles.sheetContent}>
-      <div className={styles.sheetHeader}>
-        <p className={styles.sheetSubtitle}>{frame.sheetSubtitle}</p>
-        <h2 className={styles.sheetTitle}>{frame.sheetTitle}</h2>
-      </div>
-      <frame.Visual />
-      <div className={styles.techStack}>
-        {frame.techStack.map(tech => <span className={styles.techBadge} key={tech}>{tech}</span>)}
-      </div>
-      <div className={styles.sheetActions}>
-        <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={() => onSelect(frame.options[0])} type="button">{frame.options[0]}</button>
-        <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={() => onSelect(frame.options[1])} type="button">{frame.options[1]}</button>
-      </div>
     </div>
   );
 }
@@ -792,6 +1084,7 @@ export default function DemoPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [overlayReady, setOverlayReady] = useState(false);
   const [overlayDismissed, setOverlayDismissed] = useState(false);
+  const [actionMode, setActionMode] = useState(false);
   const { say, stopSpeaking } = useMascot();
   const frame = FRAMES[currentIndex];
   const sheetOpen = overlayReady && !overlayDismissed;
@@ -809,23 +1102,55 @@ export default function DemoPage() {
     return () => { cancelled = true; if (timeoutId) window.clearTimeout(timeoutId); };
   }, [currentIndex, frame.message, frame.tone, say]);
 
-  function handleSelect() { setOverlayDismissed(true); }
-  function handleEllipsisOpen() { setOverlayDismissed(false); }
-  function handleBack() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setCurrentIndex(v => Math.max(0, v - 1)); }
-  function handleNext() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setCurrentIndex(v => Math.min(FRAMES.length - 1, v + 1)); }
+  function handlePrimary() { setActionMode(true); }
+  function handleSecondary() { setOverlayDismissed(true); }
+  function handleActionDone() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setActionMode(false); setCurrentIndex(v => Math.min(FRAMES.length - 1, v + 1)); }
+  function handleActionBack() { setActionMode(false); }
+  function handleEllipsisOpen() { setOverlayDismissed(false); setActionMode(false); }
+  function handleSheetClose() { setOverlayDismissed(true); setActionMode(false); }
+  function handleBack() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setActionMode(false); setCurrentIndex(v => Math.max(0, v - 1)); }
+  function handleNext() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setActionMode(false); setCurrentIndex(v => Math.min(FRAMES.length - 1, v + 1)); }
+
+  const scrollContent = actionMode ? (
+    <div className={styles.sheetContent}>
+      <h2 className={styles.sheetTitle}>{frame.actionTitle}</h2>
+      <frame.ActionVisual />
+    </div>
+  ) : (
+    <div className={styles.sheetContent}>
+      <h2 className={styles.sheetTitle}>{frame.sheetTitle}</h2>
+      <frame.Visual />
+    </div>
+  );
+
+  const footerContent = actionMode ? (
+    <div className={styles.sheetActions}>
+      <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={handleActionDone} type="button">Done</button>
+      <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={handleActionBack} type="button">Back</button>
+    </div>
+  ) : (
+    <div className={styles.sheetActions}>
+      <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={handlePrimary} type="button">{frame.options[0]}</button>
+      <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={handleSecondary} type="button">{frame.options[1]}</button>
+    </div>
+  );
 
   return (
     <main className={styles.page}>
       <PhoneShell
         onEllipsisOpen={handleEllipsisOpen}
-        onSheetClose={() => setOverlayDismissed(true)}
-        sheetContent={<SheetBody frame={frame} onSelect={handleSelect} />}
+        onSheetClose={handleSheetClose}
+        sheetFooter={footerContent}
+        sheetScrollContent={scrollContent}
         sheetOpen={sheetOpen}
         showEllipsis={showEllipsis}
       />
       <div className={styles.nav}>
-        <button className={[styles.navButton, styles.navButtonSecondary].join(" ")} disabled={currentIndex === 0} onClick={handleBack} type="button">Back</button>
-        <button className={[styles.navButton, styles.navButtonPrimary].join(" ")} disabled={currentIndex === FRAMES.length - 1} onClick={handleNext} type="button">Next</button>
+        <div className={styles.navRow}>
+          <button className={[styles.navButton, styles.navButtonSecondary].join(" ")} disabled={currentIndex === 0} onClick={handleBack} type="button">Back</button>
+          <button className={[styles.navButton, styles.navButtonPrimary].join(" ")} disabled={currentIndex === FRAMES.length - 1} onClick={handleNext} type="button">Next</button>
+        </div>
+        <span className={styles.counter}>{currentIndex + 1} <span className={styles.counterOf}>of</span> {FRAMES.length}</span>
       </div>
     </main>
   );
