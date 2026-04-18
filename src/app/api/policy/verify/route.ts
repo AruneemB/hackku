@@ -38,12 +38,43 @@
 //   // Return findings
 // }
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { queryPolicyForTrip } from "@/lib/policy/vectorSearch";
+import { connectToDatabase } from "@/lib/mongodb/client";
+import Trip from "@/lib/mongodb/models/Trip";
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
+export async function POST(req: NextRequest) {
+  try {
+    const { tripId, hotelNightlyRateUsd, flightCostUsd } = await req.json();
+
+    if (!tripId) {
+      return NextResponse.json({ message: "tripId is required" }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    const trip = await Trip.findById(tripId);
+    if (!trip) {
+      return NextResponse.json({ message: "Trip not found" }, { status: 404 });
+    }
+
+    // Call queryPolicyForTrip with optional costs
+    const findings = await queryPolicyForTrip(trip, {
+      hotelNightlyRateUsd,
+      flightCostUsd
+    });
+
+    // Save findings to the trip
+    trip.policyFindings = findings;
+    await trip.save();
+
+    return NextResponse.json({ findings });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "An error occurred";
+    console.error("Policy verification error:", error);
+    return NextResponse.json({ message: errorMessage }, { status: 500 });
+  }
 }
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+export async function GET() {
+  return NextResponse.json({ message: "Policy verification API is active. Use POST to verify." });
 }
