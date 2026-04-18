@@ -62,7 +62,7 @@ export async function PATCH(req: NextRequest, context: TripRouteContext) {
     await connectToDatabase();
     const body = await req.json();
     
-    const trip = await Trip.findByIdAndUpdate(id, body, { new: true });
+    const trip = await Trip.findByIdAndUpdate(id, { $set: body }, { new: true, runValidators: true });
     if (!trip) {
       return NextResponse.json({ message: "Trip not found" }, { status: 404 });
     }
