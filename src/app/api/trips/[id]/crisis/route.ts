@@ -13,11 +13,22 @@ import { connectToDatabase } from "@/lib/mongodb/client";
 import clientPromise from "@/lib/mongodb/client";
 import Trip from "@/lib/mongodb/models/Trip";
 import { geminiModel } from "@/lib/gemini/client";
-import { buildExceptionRequestPrompt } from "@/lib/gemini/prompts";
+import { buildCrisisPrompt, buildExceptionRequestPrompt } from "@/lib/gemini/prompts";
 
 const CONNECTION_BUFFER_MINUTES = 45;
 
 type CrisisRouteContext = { params: Promise<{ id: string }> };
+
+// Decimal128 objects returned by Mongoose .lean() have a toString() method.
+// parseFloat("123.45") works; parseFloat(Decimal128Instance) would return NaN.
+function decimal128ToString(val: unknown, fallback: string): string {
+  if (val == null) return fallback;
+  if (typeof val === "string") return val;
+  if (typeof val === "object" && "toString" in (val as object)) {
+    return (val as { toString(): string }).toString();
+  }
+  return fallback;
+}
 
 export async function GET(req: NextRequest, context: CrisisRouteContext) {
   const { id } = await context.params;
@@ -36,7 +47,19 @@ export async function GET(req: NextRequest, context: CrisisRouteContext) {
   const mongoClient = await clientPromise;
   const db = mongoClient.db("hackku");
 
-  const destination = (trip as { destination?: { country?: string } }).destination?.country ?? "IT";
+  const tripDoc = trip as Record<string, unknown> & {
+    destination?: { city?: string; country?: string };
+    budgetCapUsd?: unknown;
+    totalSpendUsd?: unknown;
+    selectedBundle?: {
+      totalCostUsd?: number;
+      flight?: { outbound?: { flightNumber?: string; carrier?: string } };
+      hotel?: { name?: string; nightlyRateUsd?: number };
+    };
+    dates?: { departure?: Date; return?: Date };
+  };
+
+  const destination = tripDoc.destination?.country ?? "IT";
   const altFlight = await db
     .collection("demo_alternatives")
     .findOne({ destinationCountry: destination });
@@ -53,18 +76,44 @@ export async function GET(req: NextRequest, context: CrisisRouteContext) {
       }
     : null;
 
-  const budgetCap = parseFloat((trip as { budgetCapUsd?: string }).budgetCapUsd ?? "2800");
+  const budgetCap = parseFloat(decimal128ToString(tripDoc.budgetCapUsd, "2800"));
   const altPrice = alternative?.priceUsd ?? 0;
-  const currentSpend = parseFloat((trip as { totalSpendUsd?: string }).totalSpendUsd ?? "0");
+  const currentSpend = parseFloat(decimal128ToString(tripDoc.totalSpendUsd, "0"));
   const isOverBudget = alternative ? currentSpend + altPrice > budgetCap : false;
   const overageUsd = isOverBudget ? Math.round(currentSpend + altPrice - budgetCap) : 0;
+
+  // Use Gemini to generate the mascot's spoken crisis message (buildCrisisPrompt)
+  let mascotMessage = "";
+  try {
+    const crisisPrompt = buildCrisisPrompt(
+      delayMinutes,
+      alternative ? [alternative] : []
+    );
+    const crisisResult = await geminiModel.generateContent(crisisPrompt);
+    mascotMessage = crisisResult.response.text().trim();
+  } catch {
+    mascotMessage = alternative
+      ? `Kelli, your flight is delayed by ${delayMinutes} minutes — past your connection window. I've found ${alternative.carrier} ${alternative.flightNumber} as an alternative.`
+      : `Kelli, your flight is delayed by ${delayMinutes} minutes, which will cause you to miss your connection. Please check with the airline desk for options.`;
+  }
 
   let exceptionDraft: { subject: string; body: string } | null = null;
 
   if (isOverBudget) {
     try {
       const prompt = buildExceptionRequestPrompt(
-        trip as Parameters<typeof buildExceptionRequestPrompt>[0],
+        {
+          destination: { city: tripDoc.destination?.city ?? "", country: tripDoc.destination?.country ?? "" },
+          dates: { departure: tripDoc.dates?.departure ?? new Date(), return: tripDoc.dates?.return ?? new Date() },
+          budgetCapUsd: decimal128ToString(tripDoc.budgetCapUsd, "2800"),
+          selectedBundle: tripDoc.selectedBundle
+            ? {
+                totalCostUsd: tripDoc.selectedBundle.totalCostUsd ?? 0,
+                flight: { outbound: { flightNumber: tripDoc.selectedBundle.flight?.outbound?.flightNumber ?? "", carrier: tripDoc.selectedBundle.flight?.outbound?.carrier ?? "" } },
+                hotel: { name: tripDoc.selectedBundle.hotel?.name ?? "", nightlyRateUsd: tripDoc.selectedBundle.hotel?.nightlyRateUsd ?? 0 },
+              }
+            : null,
+        },
         overageUsd
       );
       const result = await geminiModel.generateContent(prompt);
@@ -76,7 +125,7 @@ export async function GET(req: NextRequest, context: CrisisRouteContext) {
       }
     } catch {
       exceptionDraft = {
-        subject: `Emergency Rebooking Exception — ${(trip as { destination?: { city?: string } }).destination?.city ?? "Trip"}`,
+        subject: `Emergency Rebooking Exception — ${tripDoc.destination?.city ?? "Trip"}`,
         body: `Hi,\n\nI need approval for an emergency rebooking that exceeds the travel budget by $${overageUsd}. My original flight was delayed beyond the connection buffer, requiring an immediate alternative booking.\n\nPlease approve at your earliest convenience.\n\nThank you,\nKelli Thompson`,
       };
     }
@@ -87,6 +136,7 @@ export async function GET(req: NextRequest, context: CrisisRouteContext) {
     alternative,
     isOverBudget,
     overageUsd,
+    mascotMessage,
     exceptionDraft,
   });
 }
