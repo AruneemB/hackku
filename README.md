@@ -301,5 +301,6 @@ Copy `.env.example` to `.env.local`. Required keys:
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: Google Cloud Console
 - `GEMINI_API_KEY`: Google AI Studio
 - `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`: ElevenLabs dashboard
+- Optional: `ELEVENLABS_MODEL_ID` to trade latency for naturalness, `ELEVENLABS_PREFERRED_VOICE_NAMES` for fallback voice ordering
 - `SERPAPI_KEY`: SerpAPI (Google Flights wrapper)
 - `OPENWEATHERMAP_KEY`: OpenWeatherMap free tier

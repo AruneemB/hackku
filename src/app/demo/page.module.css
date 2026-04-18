@@ -73,12 +73,44 @@
   position: absolute;
   top: 48px;
   left: 50%;
-  width: 214px;
-  height: 214px;
+  width: 193px;
+  height: 193px;
   border: 1px solid rgba(159, 171, 183, 0.38);
   border-radius: 999px;
   background: rgba(159, 171, 183, 0.14);
   transform: translateX(-50%);
+  transition: background 0.4s ease, border-color 0.4s ease;
+}
+
+/* Talking-head: inner circle breathes, outer ring ripples */
+.figure[data-speaking="true"]::before {
+  border-color: rgba(243, 91, 79, 0.50);
+  background: rgba(243, 91, 79, 0.09);
+  animation: figureBreath 1.3s ease-in-out infinite;
+}
+
+.figure[data-speaking="true"]::after {
+  content: "";
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  width: 193px;
+  height: 193px;
+  border: 1.5px solid rgba(243, 91, 79, 0.30);
+  border-radius: 999px;
+  transform: translateX(-50%) scale(1);
+  animation: figureRipple 1.3s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes figureBreath {
+  0%, 100% { transform: translateX(-50%) scale(1);    background: rgba(243, 91, 79, 0.07); }
+  50%       { transform: translateX(-50%) scale(1.07); background: rgba(243, 91, 79, 0.15); }
+}
+
+@keyframes figureRipple {
+  0%   { transform: translateX(-50%) scale(1);    opacity: 0.7; }
+  100% { transform: translateX(-50%) scale(1.45); opacity: 0;   }
 }
 
 .figure :global(img) {
@@ -90,7 +122,10 @@
 
 .speech {
   max-width: 320px;
-  min-height: 86px;
+  height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
 }
 
@@ -274,6 +309,15 @@
   border-bottom-width: 2px;
 }
 
+.actionButton:disabled {
+  background: rgba(159, 171, 183, 0.22);
+  border-color: rgba(159, 171, 183, 0.28);
+  color: rgba(45, 59, 69, 0.56);
+  opacity: 1;
+  cursor: not-allowed;
+  filter: saturate(0.35);
+}
+
 .primaryButton {
   width: 76px;
   height: 76px;
@@ -333,6 +377,10 @@
   border-color: rgba(159, 171, 183, 0.3);
 }
 
+.buttonLoading {
+  letter-spacing: 0.02em;
+}
+
 .navButtonPrimary {
   background: var(--cc-accent);
   color: #ffffff;
@@ -380,8 +428,8 @@
   }
 
   .figure::before {
-    width: 194px;
-    height: 194px;
+    width: 175px;
+    height: 175px;
   }
 
   .primaryButton {

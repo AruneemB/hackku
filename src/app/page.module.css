@@ -51,8 +51,8 @@
   position: absolute;
   top: 48px;
   left: 50%;
-  width: 214px;
-  height: 214px;
+  width: 193px;
+  height: 193px;
   border: 1px solid rgba(159, 171, 183, 0.38);
   border-radius: 999px;
   background: rgba(159, 171, 183, 0.14);
@@ -68,7 +68,10 @@
 
 .speech {
   max-width: 320px;
-  min-height: 86px;
+  height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
 }
 
@@ -150,8 +153,8 @@
   }
 
   .figure::before {
-    width: 194px;
-    height: 194px;
+    width: 175px;
+    height: 175px;
   }
 
   .primaryButton {
