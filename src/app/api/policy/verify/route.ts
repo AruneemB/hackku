@@ -28,16 +28,6 @@
 // }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import { queryPolicyForTrip } from "@/lib/policy/vectorSearch"
-
-// TODO: export async function POST(req: NextRequest) {
-//   // Parse body
-//   // queryPolicyForTrip(trip) → PolicyFindings
-//   // PATCH trip.policyFindings = findings
-//   // Return findings
-// }
-
 import { NextRequest, NextResponse } from "next/server";
 import { queryPolicyForTrip } from "@/lib/policy/vectorSearch";
 import { connectToDatabase } from "@/lib/mongodb/client";
