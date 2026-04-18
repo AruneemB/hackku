@@ -33,13 +33,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb/client";
 import Trip from "@/lib/mongodb/models/Trip";
 
+type TripRouteContext = { params: Promise<{ id: string }> };
+
 /**
  * GET /api/trips/[id]
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: TripRouteContext) {
   try {
+    const { id } = await context.params;
     await connectToDatabase();
-    const trip = await Trip.findById(params.id);
+    const trip = await Trip.findById(id);
     if (!trip) {
       return NextResponse.json({ message: "Trip not found" }, { status: 404 });
     }
@@ -53,12 +56,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 /**
  * PATCH /api/trips/[id]
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: TripRouteContext) {
   try {
+    const { id } = await context.params;
     await connectToDatabase();
     const body = await req.json();
     
-    const trip = await Trip.findByIdAndUpdate(params.id, body, { new: true });
+    const trip = await Trip.findByIdAndUpdate(id, body, { new: true });
     if (!trip) {
       return NextResponse.json({ message: "Trip not found" }, { status: 404 });
     }

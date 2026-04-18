@@ -83,9 +83,10 @@ export default function PlanningPage() {
 
   // Trigger search when trip data is available
   useEffect(() => {
-    if (trip && !hasSearched) {
+    if (!trip || hasSearched) return;
+    queueMicrotask(() => {
       triggerSearch();
-    }
+    });
   }, [trip, hasSearched, triggerSearch]);
 
   // Mascot reaction when results load
