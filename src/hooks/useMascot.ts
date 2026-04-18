@@ -14,6 +14,7 @@ type MascotState = {
   visibleLength: number;
   tone: ToneKey;
   isSpeaking: boolean;
+  isThinking: boolean;
 };
 
 const listeners = new Set<() => void>();
@@ -23,6 +24,7 @@ let mascotState: MascotState = {
   visibleLength: 0,
   tone: "neutral",
   isSpeaking: false,
+  isThinking: false,
 };
 
 let fallbackTimer: number | null = null;
@@ -258,6 +260,10 @@ function setTone(tone: ToneKey) {
   setMascotState({ tone });
 }
 
+function setThinking(isThinking: boolean) {
+  setMascotState({ isThinking });
+}
+
 function stopSpeaking() {
   if (typeof window === "undefined") return;
   clearSpeechWork();
@@ -278,5 +284,5 @@ export function useMascot() {
     };
   }, []);
 
-  return { ...state, say, setTone, stopSpeaking };
+  return { ...state, say, setTone, setThinking, stopSpeaking };
 }
