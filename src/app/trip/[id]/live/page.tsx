@@ -25,3 +25,12 @@
 //   // if (hasLanded) return <OnGroundSupport trip={trip} policy={policy} />
 //   // return <LiveDashboard trip={trip} />
 // }
+
+export default function LivePage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <p className="text-xl text-gray-500">Live Dashboard — scaffold in progress</p>
+    </main>
+  );
+}
+

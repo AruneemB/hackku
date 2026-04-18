@@ -39,3 +39,14 @@
 //   // await writeFlightStatus(update)
 //   // return NextResponse.json({ success: true })
 // }
+
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "Live flight route scaffold" });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "Live flight route scaffold" });
+}
+

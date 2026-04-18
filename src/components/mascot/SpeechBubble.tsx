@@ -1,34 +1,106 @@
-// ============================================================
-// COMPONENT: SpeechBubble
-// OWNER: Track A (Frontend & UX)
-// DESCRIPTION: Animated speech bubble that displays the
-//   mascot's current text. Text is typed character-by-character
-//   (typewriter effect) using a simple useState + useEffect.
-//   Disappears after 8 seconds if not updated.
-//
-// PROPS:
-//   text: string  — the mascot's current speech
-//
-// EXAMPLE MESSAGES:
-//   "Hi Kelli! Where are we headed today?"
-//   "Great choice — your passport expires in 5 months though,
-//    you'll want to renew before this trip!"
-//   "Your trip to Milan is approved! Let's get you packed."
-// ============================================================
+"use client";
 
-// TODO: "use client"
-// TODO: import { useState, useEffect } from "react"
+interface SpeechBubbleProps {
+  text: string;
+  visibleLength?: number;
+  variant?: "card" | "plain";
+  size?: "sm" | "lg";
+  className?: string;
+}
 
-// TODO: interface SpeechBubbleProps { text: string }
+export function SpeechBubble({
+  text,
+  visibleLength,
+  variant = "card",
+  size = "sm",
+  className = "",
+}: SpeechBubbleProps) {
+  const displayed = text.slice(0, visibleLength ?? text.length);
+  const length = displayed.length;
 
-// TODO: export function SpeechBubble({ text }: SpeechBubbleProps) {
-//   // const [displayed, setDisplayed] = useState("")
-//   // useEffect typewriter: add one character every 30ms
-//   // return (
-//   //   <div className="relative bg-white border-2 border-gray-200 rounded-2xl p-4 shadow-lg max-w-xs
-//   //                   before:content-[''] before:absolute before:bottom-0 before:left-6
-//   //                   before:w-4 before:h-4 before:bg-white before:rotate-45 before:-translate-y-2">
-//   //     <p className="text-sm text-gray-800">{displayed}</p>
-//   //   </div>
-//   // )
-// }
+  let fontSize = size === "lg" ? 22 : 13;
+  let lineHeight = size === "lg" ? 1.24 : 1.45;
+
+  if (size === "lg") {
+    if (length > 220) {
+      fontSize = 15;
+      lineHeight = 1.18;
+    } else if (length > 170) {
+      fontSize = 17;
+      lineHeight = 1.2;
+    } else if (length > 125) {
+      fontSize = 19;
+      lineHeight = 1.22;
+    }
+  } else {
+    if (length > 150) {
+      fontSize = 10.5;
+      lineHeight = 1.32;
+    } else if (length > 110) {
+      fontSize = 11.5;
+      lineHeight = 1.36;
+    } else if (length > 80) {
+      fontSize = 12;
+      lineHeight = 1.4;
+    }
+  }
+
+  const textStyle =
+    size === "lg"
+      ? {
+          fontSize,
+          lineHeight,
+          letterSpacing: "-0.03em",
+          fontWeight: 600,
+        }
+      : {
+          fontSize,
+          lineHeight,
+          letterSpacing: "0",
+          fontWeight: 500,
+        };
+
+  const bubbleHeight = size === "lg" ? 108 : 86;
+
+  const wrapperStyle =
+    variant === "plain"
+      ? {
+          maxWidth: 320,
+          height: bubbleHeight,
+          padding: 0,
+          border: "none",
+          borderRadius: 0,
+          background: "transparent",
+          boxShadow: "none",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }
+      : {
+          maxWidth: 260,
+          height: bubbleHeight,
+          padding: "14px 16px",
+          border: "1px solid #e8eaec",
+          borderRadius: 18,
+          background: "#ffffff",
+          boxShadow: "0 16px 30px rgba(45, 59, 69, 0.08)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        };
+
+  return (
+    <div className={className} style={wrapperStyle}>
+      <p
+        style={{
+          margin: 0,
+          color: "var(--cc-text-primary)",
+          textAlign: "center",
+          ...textStyle,
+        }}
+      >
+        {displayed}
+      </p>
+    </div>
+  );
+}

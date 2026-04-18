@@ -1,31 +1,54 @@
-// ============================================================
-// LIB: MongoDB Client (Singleton)
-// OWNER: Track C (Data & Integrations)
-// DESCRIPTION: Exports a single MongoClient promise that is
-//   reused across all API routes in the Next.js server runtime.
-//   Next.js hot-reload would create multiple connections without
-//   the global cache pattern below.
-//
-// USAGE:
-//   import clientPromise from "@/lib/mongodb/client";
-//   const client = await clientPromise;
-//   const db = client.db("hackku");
-//   const trips = db.collection("trips");
-//
-// ENV REQUIRED: MONGODB_URI (Atlas connection string)
-// ============================================================
+import { MongoClient } from "mongodb";
+import mongoose from "mongoose";
 
-import { MongoClient } from "mongodb"
+if (!process.env.MONGODB_URI) {
+  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"');
+}
 
-const uri = process.env.MONGODB_URI!
+const uri = process.env.MONGODB_URI;
 
 declare global {
-  var _mongoClientPromise: Promise<MongoClient> | undefined
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
+  var mongoose: {
+    conn: typeof import("mongoose") | null;
+    promise: Promise<typeof import("mongoose")> | null;
+  };
 }
 
-if (!global._mongoClientPromise) {
-  const client = new MongoClient(uri)
-  global._mongoClientPromise = client.connect()
+let clientPromise: Promise<MongoClient>;
+
+if (process.env.NODE_ENV === "development") {
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(uri);
+    global._mongoClientPromise = client.connect();
+  }
+  clientPromise = global._mongoClientPromise;
+} else {
+  const client = new MongoClient(uri);
+  clientPromise = client.connect();
 }
 
-export default global._mongoClientPromise
+export async function connectToDatabase() {
+  if (global.mongoose && global.mongoose.conn) {
+    return global.mongoose.conn;
+  }
+
+  if (!global.mongoose) {
+    global.mongoose = { conn: null, promise: null };
+  }
+
+  if (!global.mongoose.promise) {
+    global.mongoose.promise = mongoose.connect(uri, { bufferCommands: false }).then((m) => m);
+  }
+
+  try {
+    global.mongoose.conn = await global.mongoose.promise;
+  } catch (e) {
+    global.mongoose.promise = null;
+    throw e;
+  }
+
+  return global.mongoose.conn;
+}
+
+export default clientPromise;

@@ -17,3 +17,12 @@
 //   // const packingList = await generatePackingList(trip.destination, weather)  ← Gemini
 //   // return <TripChecklist trip={trip} packingList={packingList} weatherForecast={weather} />
 // }
+
+export default function ChecklistPage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <p className="text-xl text-gray-500">Checklist — scaffold in progress</p>
+    </main>
+  );
+}
+
