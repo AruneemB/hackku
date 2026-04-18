@@ -34,11 +34,17 @@ export function LiveDashboard({ trip }: { trip: Trip }) {
 
   useEffect(() => {
     if (!isInCrisis || fetchedCrisis.current) return;
-    fetchedCrisis.current = true;
 
-    fetch(`/api/trips/${trip._id}/crisis?delayMinutes=${delayMinutes}`)
-      .then((r) => r.json())
+    const controller = new AbortController();
+    fetch(`/api/trips/${trip._id}/crisis?delayMinutes=${delayMinutes}`, {
+      signal: controller.signal,
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`crisis fetch failed: ${r.status}`);
+        return r.json();
+      })
       .then((data) => {
+        fetchedCrisis.current = true;
         setCrisisPayload({
           alternative: data.alternative ?? null,
           isOverBudget: data.isOverBudget ?? false,
@@ -48,10 +54,14 @@ export function LiveDashboard({ trip }: { trip: Trip }) {
           mascot.say(data.mascotMessage, "urgent");
         }
       })
-      .catch(() => {
-        setCrisisPayload({ alternative: null, isOverBudget: false, exceptionDraft: null });
+      .catch((err) => {
+        if (err?.name !== "AbortError") {
+          // allow a retry on next render
+          console.error("crisis fetch failed", err);
+        }
       });
-  }, [isInCrisis, delayMinutes, trip._id]);
+    return () => controller.abort();
+  }, [isInCrisis, delayMinutes, trip._id, mascot]);
 
   if (isInCrisis) {
     if (!crisisPayload) {
