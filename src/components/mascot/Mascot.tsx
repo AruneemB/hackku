@@ -1,36 +1,97 @@
-// ============================================================
-// COMPONENT: Mascot
-// OWNER: Track A (Frontend & UX)
-// FRAME: All frames — persistent across the app
-// DESCRIPTION: Root mascot component. Renders the placeholder
-//   image + SpeechBubble overlay. Position is fixed bottom-left
-//   so it persists as Kelli navigates pages. When isSpeaking,
-//   a subtle bounce animation plays on the image.
-//
-// PROPS:
-//   Uses useMascot hook (no props needed — hook provides state)
-//
-// VISUAL LAYOUT:
-//   [Mascot Image] ← bottom-left, fixed
-//   [SpeechBubble] ← floats above the image
-//   [ToneIndicator] ← small badge on mascot (color = tone)
-// ============================================================
+"use client";
 
-// TODO: "use client"
-// TODO: import Image from "next/image"
-// TODO: import { useMascot } from "@/hooks/useMascot"
-// TODO: import { SpeechBubble } from "./SpeechBubble"
-// TODO: import { ToneIndicator } from "./ToneIndicator"
+import Image from "next/image";
+import { useMascot } from "@/hooks/useMascot";
+import type { ToneKey } from "@/lib/elevenlabs/tones";
+import { SpeechBubble } from "./SpeechBubble";
 
-// TODO: export function Mascot() {
-//   // const { speech, tone, isSpeaking } = useMascot()
-//   // return (
-//   //   <div className="fixed bottom-4 left-4 z-50 flex flex-col items-center">
-//   //     {speech && <SpeechBubble text={speech} />}
-//   //     <div className={isSpeaking ? "animate-bounce" : ""}>
-//   //       <Image src="/mascot/mascot-placeholder.png" alt="Travel Mascot" width={120} height={120} />
-//   //       <ToneIndicator tone={tone} />
-//   //     </div>
-//   //   </div>
-//   // )
-// }
+const MASCOT_IMAGES: Record<ToneKey, { src: string; alt: string }> = {
+  neutral: {
+    src: "/mascot/greeting.png",
+    alt: "Kelli mascot greeting the traveler",
+  },
+  excited: {
+    src: "/mascot/happy.png",
+    alt: "Kelli mascot looking happy",
+  },
+  empathetic: {
+    src: "/mascot/confused.png",
+    alt: "Kelli mascot looking concerned",
+  },
+  urgent: {
+    src: "/mascot/confused.png",
+    alt: "Kelli mascot in an alert state",
+  },
+};
+
+interface MascotProps {
+  bubblePosition?: "above" | "below";
+  bubbleVariant?: "card" | "plain";
+  bubbleSize?: "sm" | "lg";
+  className?: string;
+  figureClassName?: string;
+  bubbleClassName?: string;
+}
+
+export function Mascot({
+  bubblePosition = "above",
+  bubbleVariant = "card",
+  bubbleSize = "sm",
+  className = "",
+  figureClassName = "",
+  bubbleClassName = "",
+}: MascotProps) {
+  const { speech, visibleLength, tone, isSpeaking } = useMascot();
+  const mascotImage = MASCOT_IMAGES[tone];
+  const imageNode = (
+    <div
+      className={figureClassName}
+      data-speaking={String(isSpeaking)}
+      style={{
+        position: "relative",
+        display: "grid",
+        placeItems: "center",
+        transform: isSpeaking ? "translateY(-2px)" : "translateY(0)",
+        transition: "transform 150ms ease",
+      }}
+    >
+      <Image
+        alt={mascotImage.alt}
+        height={280}
+        priority
+        src={mascotImage.src}
+        style={{
+          width: "min(280px, 60vw)",
+          height: "auto",
+        }}
+        width={280}
+      />
+    </div>
+  );
+
+  const bubbleNode = speech ? (
+    <SpeechBubble
+      className={bubbleClassName}
+      key={speech}
+      size={bubbleSize}
+      text={speech}
+      visibleLength={visibleLength}
+      variant={bubbleVariant}
+    />
+  ) : null;
+
+  return (
+    <div
+      className={className}
+      style={{
+        display: "grid",
+        justifyItems: "center",
+        gap: 16,
+      }}
+    >
+      {bubblePosition === "above" ? bubbleNode : null}
+      {imageNode}
+      {bubblePosition === "below" ? bubbleNode : null}
+    </div>
+  );
+}

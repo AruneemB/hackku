@@ -132,7 +132,7 @@ Configure Google provider with Gmail scopes (`gmail.compose`, `gmail.readonly`).
 ### Step 8: Gemini AI Client + Prompts
 **Owner: Track B**
 
-`src/lib/gemini/client.ts` — Initialize `gemini-1.5-pro` + `text-embedding-004`.
+`src/lib/gemini/client.ts` — Initialize `gemini-1.5-pro` + `gemini-embedding-001` (renamed from `text-embedding-004`; same 768-dim model).
 `src/lib/gemini/prompts.ts` — All prompt templates (bundle ranking, packing list, policy summary, crisis message, expense report).
 
 All prompts should request JSON output for reliable parsing.
@@ -301,5 +301,6 @@ Copy `.env.example` to `.env.local`. Required keys:
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: Google Cloud Console
 - `GEMINI_API_KEY`: Google AI Studio
 - `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`: ElevenLabs dashboard
+- Optional: `ELEVENLABS_MODEL_ID` to trade latency for naturalness, `ELEVENLABS_PREFERRED_VOICE_NAMES` for fallback voice ordering
 - `SERPAPI_KEY`: SerpAPI (Google Flights wrapper)
 - `OPENWEATHERMAP_KEY`: OpenWeatherMap free tier

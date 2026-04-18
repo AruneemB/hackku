@@ -17,4 +17,5 @@ export type { Hotel, GeoPoint, HotelAmenity } from "./hotel";
 export type { Policy, VisaRequirement, PolicyFindings } from "./policy";
 export type { Receipt, GeminiReceiptExtraction } from "./receipt";
 export type { WeatherForecast, DayForecast } from "./weather";
+export type { PreferredVendor } from "./vendor";
 // next-auth.d.ts augments next-auth module globally — no explicit export needed

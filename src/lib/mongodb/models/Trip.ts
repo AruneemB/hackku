@@ -15,50 +15,75 @@
 // EXAMPLE DOC → see src/types/trip.ts
 // ============================================================
 
-import { Schema, model, models, Types } from "mongoose"
+import { Schema, model, models, Types } from "mongoose";
 
-const ReceiptSubSchema = new Schema({
-  merchant: String,
-  category: { type: String, enum: ["meal", "transport", "hotel", "other"], default: "other" },
-  total: Types.Decimal128,
-  currency: String,
-  originalAmount: Types.Decimal128,
-  date: Date,
-  sanitized: { type: Boolean, default: false },
-  extractedByAI: { type: Boolean, default: true },
-  imageUrl: { type: String, default: null },
-})
+const ReceiptSubSchema = new Schema(
+  {
+    merchant: { type: String, required: true },
+    category: {
+      type: String,
+      enum: ["meal", "transport", "hotel", "other"],
+      required: true,
+    },
+    total: { type: Types.Decimal128, required: true },
+    currency: { type: String, required: true },
+    originalAmount: { type: Types.Decimal128, default: null },
+    date: { type: Date, required: true },
+    sanitized: { type: Boolean, default: false },
+    extractedByAI: { type: Boolean, default: true },
+    imageUrl: { type: String, default: null },
+  },
+  { _id: false }
+);
 
 const TripSchema = new Schema(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User" },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     status: {
       type: String,
-      enum: ["draft", "pending_approval", "approved", "rejected", "active", "archived"],
+      enum: [
+        "draft",
+        "pending_approval",
+        "approved",
+        "rejected",
+        "active",
+        "archived",
+      ],
+      required: true,
       default: "draft",
     },
-    destination: { city: String, country: String, officeLat: Number, officeLng: Number },
-    dates: { departure: Date, return: Date },
-    selectedBundle: Schema.Types.Mixed,
-    flights: [Schema.Types.Mixed],
-    hotels: [Schema.Types.Mixed],
-    receipts: [ReceiptSubSchema],
-    policyFindings: Schema.Types.Mixed,
+    destination: {
+      city: { type: String, required: true },
+      country: { type: String, required: true },
+      officeLat: { type: Number, required: true },
+      officeLng: { type: Number, required: true },
+    },
+    dates: {
+      departure: { type: Date, required: true },
+      return: { type: Date, required: true },
+    },
+    selectedBundle: { type: Schema.Types.Mixed, default: null },
+    flights: { type: [Schema.Types.Mixed], default: [] },
+    hotels: { type: [Schema.Types.Mixed], default: [] },
+    receipts: { type: [ReceiptSubSchema], default: [] },
+    policyFindings: { type: Schema.Types.Mixed, default: null },
     approvalThread: {
       gmailThreadId: { type: String, default: null },
-      status: { type: String, default: null },
+      status: {
+        type: String,
+        enum: ["pending", "approved", "rejected", null],
+        default: null,
+      },
       reason: { type: String, default: null },
     },
-    totalSpend: {
-      type: Types.Decimal128,
-      default: () => Types.Decimal128.fromString("0.00"),
-    },
-    budgetCap: {
-      type: Types.Decimal128,
-      default: () => Types.Decimal128.fromString("2800.00"),
-    },
+    totalSpendUsd: { type: Types.Decimal128, default: 0 },
+    budgetCapUsd: { type: Types.Decimal128, required: true },
   },
   { timestamps: true }
-)
+);
 
-export default models.Trip || model("Trip", TripSchema)
+TripSchema.index({ userId: 1 });
+TripSchema.index({ status: 1 });
+TripSchema.index({ "destination.country": 1 });
+
+export default models.Trip || model("Trip", TripSchema);

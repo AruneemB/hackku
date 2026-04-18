@@ -61,3 +61,11 @@ export interface FlightStatusUpdate {
   delayMinutes: number;
   destination: string;
 }
+
+export interface FlightSearchParams {
+  origin: string;       // IATA airport code
+  destination: string;
+  date: string;         // YYYY-MM-DD
+  returnDate?: string;
+  adults?: number;
+}

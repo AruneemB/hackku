@@ -6,15 +6,65 @@
 //   Sizes: sm, md, lg
 // ============================================================
 
-// TODO: "use client"
+"use client";
 
-// TODO: interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-//   variant?: "primary" | "secondary" | "danger" | "ghost";
-//   size?: "sm" | "md" | "lg";
-//   isLoading?: boolean;
-// }
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import styles from "./Button.module.css";
 
-// TODO: export function Button({ variant = "primary", size = "md", isLoading, children, ...props }) {
-//   // Map variant + size to Tailwind classes
-//   // Show spinner if isLoading
-// }
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  size?: "sm" | "md" | "lg";
+  isLoading?: boolean;
+  children: ReactNode;
+}
+
+const VARIANT_STYLES = {
+  primary: styles.primary,
+  secondary: styles.secondary,
+  danger: styles.danger,
+  ghost: styles.ghost,
+} as const;
+
+const SIZE_STYLES = {
+  sm: styles.sm,
+  md: styles.md,
+  lg: styles.lg,
+} as const;
+
+export function Button({
+  variant = "primary",
+  size = "md",
+  isLoading = false,
+  children,
+  className = "",
+  disabled,
+  type = "button",
+  ...props
+}: ButtonProps) {
+  const classes = [
+    styles.button,
+    VARIANT_STYLES[variant],
+    SIZE_STYLES[size],
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <button
+      className={classes}
+      disabled={disabled || isLoading}
+      type={type}
+      {...props}
+    >
+      {isLoading ? (
+        <>
+          <span aria-hidden="true" className={styles.spinner} />
+          <span>Loading</span>
+        </>
+      ) : (
+        children
+      )}
+    </button>
+  );
+}

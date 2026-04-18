@@ -1,0 +1,169 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 0 16px;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(243, 91, 79, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(243, 91, 79, 0.03) 0%, #fffdfb 28%, var(--cc-bg) 100%);
+}
+
+.shell {
+  width: min(100%, 390px);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 76px 1fr 122px;
+  padding: 0 4px 28px;
+}
+
+.menuButton {
+  align-self: center;
+  justify-self: start;
+  width: 52px;
+  height: 52px;
+  margin-left: 8px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--cc-text-primary);
+  cursor: pointer;
+}
+
+.stage {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding-top: 0;
+}
+
+.mascot {
+  gap: 18px !important;
+}
+
+.figure {
+  position: relative !important;
+  min-height: 308px;
+  width: 100%;
+}
+
+.figure::before {
+  content: "";
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  width: 193px;
+  height: 193px;
+  border: 1px solid rgba(159, 171, 183, 0.38);
+  border-radius: 999px;
+  background: rgba(159, 171, 183, 0.14);
+  transform: translateX(-50%);
+}
+
+.figure :global(img) {
+  position: relative;
+  z-index: 1;
+  width: min(226px, 58vw) !important;
+  transform: translateY(-8px);
+}
+
+.speech {
+  max-width: 320px;
+  height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.controls {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  gap: 20px;
+  padding-bottom: 18px;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(192, 72, 62, 0.22);
+  border-bottom-width: 5px;
+  border-radius: 24px;
+  background: var(--cc-accent);
+  color: #ffffff;
+  cursor: pointer;
+  transition:
+    transform 110ms ease,
+    border-bottom-width 110ms ease,
+    filter 150ms ease,
+    opacity 150ms ease;
+}
+
+.iconButton:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.iconButton:active:not(:disabled) {
+  transform: translateY(4px);
+  border-bottom-width: 2px;
+}
+
+.primaryButton {
+  width: 84px;
+  height: 84px;
+}
+
+.sideButton {
+  width: 62px;
+  height: 62px;
+  background: rgba(159, 171, 183, 0.18);
+  border-color: rgba(159, 171, 183, 0.35);
+  color: var(--cc-text-primary);
+}
+
+.buttonActive {
+  border-color: rgba(192, 72, 62, 0.3);
+}
+
+.disabledButton {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.leftButton {
+  transform: rotate(-5deg);
+}
+
+.rightButton {
+  transform: rotate(5deg);
+}
+
+.leftButton:active:not(:disabled) {
+  transform: translateY(4px) rotate(-5deg);
+}
+
+.rightButton:active:not(:disabled) {
+  transform: translateY(4px) rotate(5deg);
+}
+
+@media (max-width: 360px) {
+  .shell {
+    grid-template-rows: 72px 1fr 112px;
+  }
+
+  .figure::before {
+    width: 175px;
+    height: 175px;
+  }
+
+  .primaryButton {
+    width: 78px;
+    height: 78px;
+  }
+
+  .sideButton {
+    width: 58px;
+    height: 58px;
+  }
+}
