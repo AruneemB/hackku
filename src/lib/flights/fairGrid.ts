@@ -21,7 +21,7 @@
 
 import { searchFlights } from "./search";
 import { getAirportsWithinRadius } from "./airports";
-import type { Flight } from "@/types/flight";
+import type { Flight, FlightGroup } from "@/types/flight";
 
 export interface FairGridParams {
   homeAirport: string;
@@ -69,8 +69,10 @@ function isSaturdayNightStay(departureDate: Date, returnDate: Date): boolean {
 
 /**
  * Runs the Fair Grid search algorithm across expanded airports and a date window.
+ * Returns one FlightGroup per unique outbound flight, each with all available
+ * return options sorted cheapest first.
  */
-export async function runFairGrid(params: FairGridParams): Promise<Flight[]> {
+export async function runFairGrid(params: FairGridParams): Promise<FlightGroup[]> {
   const {
     homeAirport,
     destination,
@@ -97,77 +99,78 @@ export async function runFairGrid(params: FairGridParams): Promise<Flight[]> {
   // Trip duration in milliseconds to keep return dates consistent with departure shifts
   const durationMs = targetReturn.getTime() - targetDeparture.getTime();
 
-  // Step 3: Fan out searchFlights for every (airport, date) combination
-  // Throttled in chunks of 5 to avoid SerpAPI rate limits and conserve quota
+  // Step 3: Fan out searchFlights for every (airport, date) combination.
+  // Each task fires two parallel one-way searches (outbound + return) and
+  // returns a FlightGroup[] — one group per outbound, each with all available
+  // return options sorted cheapest first.
+  // Throttled in chunks of 5 tasks to respect SerpAPI rate limits.
   const CONCURRENCY_LIMIT = 5;
   const searchTasks = airports.flatMap(airport =>
-    departureDates.map((depDateStr) => async () => {
+    departureDates.map((depDateStr) => async (): Promise<FlightGroup[]> => {
       const depDate = new Date(depDateStr);
       const retDate = new Date(depDate.getTime() + durationMs);
       const retDateStr = retDate.toISOString().split("T")[0];
 
-      const results = await searchFlights({
-        origin: airport.code,
-        destination,
-        date: depDateStr,
-        returnDate: retDateStr
-      });
+      const [outboundResults, returnResults] = await Promise.all([
+        searchFlights({ origin: airport.code, destination, date: depDateStr }),
+        searchFlights({ origin: destination, destination: airport.code, date: retDateStr }),
+      ]);
 
-      // Attach originAirport and calculate Saturday night stay
-      return results.map(flight => ({
-        ...flight,
-        originAirport: airport.code,
-        distanceFromHomeAirportMiles: airport.distanceMiles,
-        saturdayNightStay: isSaturdayNightStay(depDate, retDate),
-        saturdayNightSavingsUsd: 0
-      }));
+      const sortedReturns = [...returnResults].sort((a, b) => a.priceUsd - b.priceUsd);
+      const cheapestReturnPrice = sortedReturns[0]?.priceUsd ?? 0;
+
+      return outboundResults.map(flight => {
+        const outbound: Flight = {
+          ...flight,
+          originAirport: airport.code,
+          distanceFromHomeAirportMiles: airport.distanceMiles,
+          saturdayNightStay: isSaturdayNightStay(depDate, retDate),
+          saturdayNightSavingsUsd: 0,
+        };
+        return {
+          outbound,
+          returns: sortedReturns,
+          cheapestTotalUsd: flight.priceUsd + cheapestReturnPrice,
+        };
+      });
     })
   );
 
-  const allResultsNested: Flight[][] = [];
+  const allGroupsNested: FlightGroup[][] = [];
   for (let i = 0; i < searchTasks.length; i += CONCURRENCY_LIMIT) {
     const batch = searchTasks.slice(i, i + CONCURRENCY_LIMIT);
     const batchResults = await Promise.all(batch.map(task => task()));
-    allResultsNested.push(...batchResults);
+    allGroupsNested.push(...batchResults);
   }
 
-  let allResults = allResultsNested.flat();
-
-  // Step 4: Deduplicate flights by ID
-  // Multiple date windows might resolve to the same flight; keep the cheapest instance
-  const uniqueFlights = new Map<string, Flight>();
-  for (const f of allResults) {
-    const existing = uniqueFlights.get(f.id);
-    if (!existing || f.priceUsd < existing.priceUsd) {
-      uniqueFlights.set(f.id, f);
+  // Step 4: Deduplicate groups by outbound ID, keeping the cheapest total
+  const groupMap = new Map<string, FlightGroup>();
+  for (const group of allGroupsNested.flat()) {
+    const existing = groupMap.get(group.outbound.id);
+    if (!existing || group.cheapestTotalUsd < existing.cheapestTotalUsd) {
+      groupMap.set(group.outbound.id, group);
     }
   }
-  allResults = Array.from(uniqueFlights.values());
+  let allGroups = Array.from(groupMap.values());
 
-  // Step 5: Run Saturday-night savings delta calculation
-  // Group by origin airport to find the cheapest non-Saturday flight for each origin
-  const origins = Array.from(new Set(allResults.map(f => f.originAirport)));
-  
+  // Step 5: Saturday-night savings delta calculation
+  const origins = Array.from(new Set(allGroups.map(g => g.outbound.originAirport)));
   origins.forEach(origin => {
-    const originFlights = allResults.filter(f => f.originAirport === origin);
-    const nonSatFlights = originFlights.filter(f => !f.saturdayNightStay);
-    
-    if (nonSatFlights.length > 0) {
-      const cheapestNonSatPrice = Math.min(...nonSatFlights.map(f => f.priceUsd));
-      
-      // Update all flights for this origin with the savings delta
-      allResults = allResults.map(f => {
-        if (f.originAirport === origin && f.saturdayNightStay) {
-          return {
-            ...f,
-            saturdayNightSavingsUsd: Math.max(0, cheapestNonSatPrice - f.priceUsd)
-          };
+    const originGroups = allGroups.filter(g => g.outbound.originAirport === origin);
+    const nonSatGroups = originGroups.filter(g => !g.outbound.saturdayNightStay);
+
+    if (nonSatGroups.length > 0) {
+      const cheapestNonSatPrice = Math.min(...nonSatGroups.map(g => g.cheapestTotalUsd));
+      allGroups = allGroups.map(g => {
+        if (g.outbound.originAirport === origin && g.outbound.saturdayNightStay) {
+          const savings = Math.max(0, cheapestNonSatPrice - g.cheapestTotalUsd);
+          return { ...g, outbound: { ...g.outbound, saturdayNightSavingsUsd: savings } };
         }
-        return f;
+        return g;
       });
     }
   });
 
-  // Step 6: Sort by priceUsd ascending and return
-  return allResults.sort((a, b) => a.priceUsd - b.priceUsd);
+  // Step 6: Sort by cheapestTotalUsd ascending
+  return allGroups.sort((a, b) => a.cheapestTotalUsd - b.cheapestTotalUsd);
 }
