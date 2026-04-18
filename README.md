@@ -132,7 +132,7 @@ Configure Google provider with Gmail scopes (`gmail.compose`, `gmail.readonly`).
 ### Step 8: Gemini AI Client + Prompts
 **Owner: Track B**
 
-`src/lib/gemini/client.ts` — Initialize `gemini-1.5-pro` + `text-embedding-004`.
+`src/lib/gemini/client.ts` — Initialize `gemini-1.5-pro` + `gemini-embedding-001` (renamed from `text-embedding-004`; same 768-dim model).
 `src/lib/gemini/prompts.ts` — All prompt templates (bundle ranking, packing list, policy summary, crisis message, expense report).
 
 All prompts should request JSON output for reliable parsing.

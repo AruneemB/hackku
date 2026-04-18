@@ -212,7 +212,15 @@ function PrepChecklist() {
     { text: "Confirm travel insurance coverage" },
   ];
   function toggle(i: number) {
-    setDone(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+    setDone((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) {
+        next.delete(i);
+      } else {
+        next.add(i);
+      }
+      return next;
+    });
   }
   return (
     <div className={styles.checklist}>
@@ -730,7 +738,7 @@ function ReceiptSubmitted() {
       <div className={styles.confirmCard}>
         <span className={styles.confirmEmoji}>✅</span>
         <div className={styles.confirmTitle}>Submitted to Expense System</div>
-        <div className={styles.confirmBody}>Ristorante Al Porto · €87.50 · Ref #EXP-20250916-09 · Categorized as "Meals"</div>
+        <div className={styles.confirmBody}>Ristorante Al Porto · €87.50 · Ref #EXP-20250916-09 · Categorized as &quot;Meals&quot;</div>
       </div>
       <div className={styles.receiptTags}>
         <span className={styles.receiptTag}>✓ Within daily allowance</span>

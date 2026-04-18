@@ -39,6 +39,16 @@
 //   // 3. sanitizeReceiptData(extraction) — strip PII
 //   // 4. convertCurrency(amount, currency, "USD")
 //   // 5. toDecimal128(usdAmount)
-//   // 6. Append to trip.receipts[] and update trip.totalSpend
+//   // 6. Append to trip.receipts[] and update trip.totalSpendUsd
 //   // 7. Return receipt doc
 // }
+
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "scaffold" });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "scaffold" });
+}
