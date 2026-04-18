@@ -38,3 +38,13 @@
 //   // if (!doc) return 404
 //   // return NextResponse.json(doc)
 // }
+
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "scaffold" });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "scaffold" });
+}
