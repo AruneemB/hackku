@@ -1,21 +1,31 @@
-// ============================================================
-// LIB: MongoDB Client (Singleton)
-// OWNER: Track C (Data & Integrations)
-// DESCRIPTION: Exports a single MongoClient promise that is
-//   reused across all API routes in the Next.js server runtime.
-//   Next.js hot-reload would create multiple connections without
-//   the global cache pattern below.
-//
-// USAGE:
-//   import clientPromise from "@/lib/mongodb/client";
-//   const client = await clientPromise;
-//   const db = client.db("hackku");
-//   const trips = db.collection("trips");
-//
-// ENV REQUIRED: MONGODB_URI (Atlas connection string)
-// ============================================================
+import { MongoClient } from "mongodb";
 
-// TODO: import MongoClient from "mongodb"
-// TODO: declare global { var _mongoClientPromise: Promise<MongoClient> }
-// TODO: if (!global._mongoClientPromise) create new MongoClient(uri)
-// TODO: export default global._mongoClientPromise
+if (!process.env.MONGODB_URI) {
+  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"');
+}
+
+const uri = process.env.MONGODB_URI;
+
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
+}
+
+let clientPromise: Promise<MongoClient>;
+
+if (process.env.NODE_ENV === "development") {
+  // In development mode, use a global variable so that the value
+  // is preserved across module reloads caused by HMR.
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(uri);
+    global._mongoClientPromise = client.connect();
+  }
+  clientPromise = global._mongoClientPromise;
+} else {
+  // In production mode, it's best to not use a global variable.
+  const client = new MongoClient(uri);
+  clientPromise = client.connect();
+}
+
+// Export a module-scoped MongoClient promise. By doing this in a
+// separate module, the client can be shared across functions.
+export default clientPromise;
