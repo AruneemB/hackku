@@ -1,0 +1,59 @@
+{
+  "_comment": "Hardcoded visa requirements for demo. Only covers US citizens visiting 6 destination countries. Seeded into 'visa_requirements' MongoDB collection. Indexed on { destinationCountry: 1, citizenship: 1 }.",
+  "requirements": [
+    {
+      "destinationCountry": "IT",
+      "citizenship": "US",
+      "visaRequired": false,
+      "visaType": null,
+      "stayLimitDays": 90,
+      "notes": "Italy is part of the Schengen Area. US citizens can stay up to 90 days in any 180-day period without a visa. ETIAS authorization will be required from 2025.",
+      "applicationUrl": null
+    },
+    {
+      "destinationCountry": "GB",
+      "citizenship": "US",
+      "visaRequired": false,
+      "visaType": null,
+      "stayLimitDays": 180,
+      "notes": "US citizens can visit the UK for up to 6 months without a visa for tourism or business. Electronic Travel Authorisation (ETA) is required from 2024.",
+      "applicationUrl": "https://apply.visas-immigration.service.gov.uk/product/euss-family-visa"
+    },
+    {
+      "destinationCountry": "FR",
+      "citizenship": "US",
+      "visaRequired": false,
+      "visaType": null,
+      "stayLimitDays": 90,
+      "notes": "France is part of the Schengen Area. US citizens can stay up to 90 days in any 180-day period without a visa.",
+      "applicationUrl": null
+    },
+    {
+      "destinationCountry": "JP",
+      "citizenship": "US",
+      "visaRequired": false,
+      "visaType": null,
+      "stayLimitDays": 90,
+      "notes": "US citizens can visit Japan without a visa for up to 90 days for business or tourism.",
+      "applicationUrl": null
+    },
+    {
+      "destinationCountry": "CA",
+      "citizenship": "US",
+      "visaRequired": false,
+      "visaType": null,
+      "stayLimitDays": 180,
+      "notes": "US citizens do not need a visa or eTA to enter Canada. A valid US passport is sufficient.",
+      "applicationUrl": null
+    },
+    {
+      "destinationCountry": "MX",
+      "citizenship": "US",
+      "visaRequired": false,
+      "visaType": null,
+      "stayLimitDays": 180,
+      "notes": "US citizens do not need a visa to enter Mexico. A valid US passport is required. Tourists receive a free multiple-entry permit (FMM).",
+      "applicationUrl": null
+    }
+  ]
+}
