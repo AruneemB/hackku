@@ -3,9 +3,7 @@
   display: grid;
   place-items: center;
   padding: 0 16px;
-  background:
-    radial-gradient(circle at 18% 14%, rgba(243, 91, 79, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(243, 91, 79, 0.03) 0%, #fffdfb 28%, var(--cc-bg) 100%);
+  background: var(--cc-bg);
 }
 
 .shell {
@@ -63,7 +61,6 @@
   position: relative;
   z-index: 1;
   width: min(226px, 58vw) !important;
-  transform: translateY(-8px);
 }
 
 .speech {
