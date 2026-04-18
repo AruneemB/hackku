@@ -10,6 +10,12 @@
 !.yarn/releases
 !.yarn/versions
 
+# local development files
+.specstory
+.history
+.claude/
+.vscode/
+
 # testing
 /coverage
 
