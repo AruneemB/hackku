@@ -99,10 +99,10 @@ ${altList}
 Return ONLY the spoken message text — no JSON, no bullet points.`;
 }
 
-export function buildExceptionRequestPrompt(trip: { destination: { city: string; country: string }; dates: { departure: Date; return: Date }; budgetCapUsd: string; selectedBundle: { totalCostUsd: number; flight: { outbound: { flightNumber: string; carrier: string } }; hotel: { name: string; pricePerNightUsd: number } } | null }, overageUsd: number) {
+export function buildExceptionRequestPrompt(trip: { destination: { city: string; country: string }; dates: { departure: Date; return: Date }; budgetCapUsd: string; selectedBundle: { totalCostUsd: number; flight: { outbound: { flightNumber: string; carrier: string } }; hotel: { name: string; nightlyRateUsd: number } } | null }, overageUsd: number) {
   const bundle = trip.selectedBundle;
   const flightInfo = bundle ? `${bundle.flight.outbound.carrier} ${bundle.flight.outbound.flightNumber}` : "original flight";
-  const hotelInfo = bundle ? `${bundle.hotel.name} ($${bundle.hotel.pricePerNightUsd}/night)` : "original hotel";
+  const hotelInfo = bundle ? `${bundle.hotel.name} ($${bundle.hotel.nightlyRateUsd}/night)` : "original hotel";
 
   return `Draft a professional manager exception request email for an emergency rebooking that exceeds the travel budget by $${overageUsd}.
 

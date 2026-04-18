@@ -86,7 +86,7 @@ export function LiveDashboard({ trip }: { trip: Trip }) {
           <div className="text-sm text-gray-400 space-y-1">
             <div className="text-white font-medium">{trip.selectedBundle.hotel.name}</div>
             <div>{trip.selectedBundle.hotel.address}</div>
-            <div>${trip.selectedBundle.hotel.pricePerNightUsd}/night</div>
+            <div>${trip.selectedBundle.hotel.nightlyRateUsd}/night</div>
           </div>
         </div>
       )}
