@@ -6,6 +6,7 @@ interface SpeechBubbleProps {
   variant?: "card" | "plain";
   size?: "sm" | "lg";
   className?: string;
+  isThinking?: boolean;
 }
 
 export function SpeechBubble({
@@ -14,6 +15,7 @@ export function SpeechBubble({
   variant = "card",
   size = "sm",
   className = "",
+  isThinking = false,
 }: SpeechBubbleProps) {
   const displayed = text.slice(0, visibleLength ?? text.length);
   const length = displayed.length;
@@ -91,16 +93,24 @@ export function SpeechBubble({
 
   return (
     <div className={className} style={wrapperStyle}>
-      <p
-        style={{
-          margin: 0,
-          color: "var(--cc-text-primary)",
-          textAlign: "center",
-          ...textStyle,
-        }}
-      >
-        {displayed}
-      </p>
+      {isThinking ? (
+        <div className="thinking-dots">
+          <span />
+          <span />
+          <span />
+        </div>
+      ) : (
+        <p
+          style={{
+            margin: 0,
+            color: "var(--cc-text-primary)",
+            textAlign: "center",
+            ...textStyle,
+          }}
+        >
+          {displayed}
+        </p>
+      )}
     </div>
   );
 }

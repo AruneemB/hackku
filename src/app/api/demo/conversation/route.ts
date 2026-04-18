@@ -31,14 +31,52 @@ function sanitizeKnownFields(fields: KnownFields): KnownFields {
   return sanitized;
 }
 
+function getOrdinalSuffix(i: number): string {
+  const j = i % 10, k = i % 100;
+  if (j === 1 && k !== 11) return "st";
+  if (j === 2 && k !== 12) return "nd";
+  if (j === 3 && k !== 13) return "rd";
+  return "th";
+}
+
+function formatDateForSpeech(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      if (!isNaN(date.getTime())) {
+        const month = date.toLocaleDateString("en-US", { month: "long" });
+        const day = date.getDate();
+        return `${month} ${day}${getOrdinalSuffix(day)}, ${date.getFullYear()}`;
+      }
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+}
+
+function getCountryName(code: string): string {
+  try {
+    const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    return regionNames.of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
 function describeTripBasics(known: KnownFields): string {
+  const countryName = known.country ? getCountryName(known.country) : "";
   const destination =
-    known.city && known.country
-      ? `${known.city}, ${known.country}`
+    known.city && countryName
+      ? `${known.city}, ${countryName}`
       : known.city ?? "";
 
   if (destination && known.departure && known.return) {
-    return `I have ${destination} from ${known.departure} to ${known.return}.`;
+    const dep = formatDateForSpeech(known.departure);
+    const ret = formatDateForSpeech(known.return);
+    return `I have ${destination} from ${dep} to ${ret}.`;
   }
 
   if (destination) {
@@ -74,7 +112,7 @@ function buildFrameZeroReply(known: KnownFields) {
 
   if (!known.departure && !known.return) {
     return {
-      mascotMessage: `${summary} What are your departure and return dates?`.trim(),
+      mascotMessage: "Got it. What are your departure and return dates?",
       extractedData: null,
       isComplete: false,
     };
@@ -82,7 +120,7 @@ function buildFrameZeroReply(known: KnownFields) {
 
   if (!known.departure) {
     return {
-      mascotMessage: `${summary} I still need your departure date. What day are you leaving?`.trim(),
+      mascotMessage: "Got it. I still need your departure date. What day are you leaving?",
       extractedData: null,
       isComplete: false,
     };
@@ -90,7 +128,7 @@ function buildFrameZeroReply(known: KnownFields) {
 
   if (!known.return) {
     return {
-      mascotMessage: `${summary} I still need your return date. What day are you coming back?`.trim(),
+      mascotMessage: "Got it. I still need your return date. What day are you coming back?",
       extractedData: null,
       isComplete: false,
     };
@@ -98,7 +136,7 @@ function buildFrameZeroReply(known: KnownFields) {
 
   if (!known.passportExpiry) {
     return {
-      mascotMessage: `${summary} What date does your passport expire?`.trim(),
+      mascotMessage: "What date does your passport expire?",
       extractedData: null,
       isComplete: false,
     };
@@ -107,15 +145,15 @@ function buildFrameZeroReply(known: KnownFields) {
   if (!known.purpose) {
     const prefix = passportHeadsUp ? `${passportHeadsUp} ` : "";
     return {
-      mascotMessage: `${prefix}${summary} What is the purpose of the trip?`.trim(),
+      mascotMessage: `${prefix}What is the purpose of the trip?`.trim(),
       extractedData: null,
       isComplete: false,
     };
   }
 
   const closing = passportHeadsUp
-    ? `${passportHeadsUp} You are all set. I have everything I need to build the trip.`
-    : "Perfect. I have everything I need to build the trip.";
+    ? `${summary} ${passportHeadsUp} You are all set. I have everything I need to build the trip.`
+    : `${summary} Perfect. I have everything I need to build the trip.`;
 
   return {
     mascotMessage: closing,
@@ -143,7 +181,7 @@ function buildFrameSystem(frameIndex: number): string {
     15: "The trip is archived. Close it out with warmth.",
   };
   const description = ctx[frameIndex] ?? "The traveler is interacting with their AI travel concierge.";
-  return `You are Kelli, a warm and energetic AI travel concierge. ${description} Reply in 1 to 2 sentences. Be helpful, friendly, and direct. No filler phrases and no em dashes.`;
+  return `You are Lockey, a warm and energetic AI travel concierge. ${description} Reply in 1 to 2 sentences. Be helpful, friendly, and direct. No filler phrases and no em dashes.`;
 }
 
 async function extractFrameZeroKnownFields(
@@ -154,7 +192,7 @@ async function extractFrameZeroKnownFields(
   const year = new Date().getFullYear();
 
   const transcript = messages
-    .map((message) => `${message.role === "user" ? "Traveler" : "Kelli"}: ${message.content}`)
+    .map((message) => `${message.role === "user" ? "Traveler" : "Lockey"}: ${message.content}`)
     .join("\n");
 
   const prompt = `Extract the trip details already known in this conversation.
@@ -254,17 +292,17 @@ export async function POST(req: NextRequest) {
   const systemPrompt = buildFrameSystem(frameIndex);
   const historyLines = messages
     .slice(0, -1)
-    .map((m) => `${m.role === "user" ? "Traveler" : "Kelli"}: ${m.content}`)
+    .map((m) => `${m.role === "user" ? "Traveler" : "Lockey"}: ${m.content}`)
     .join("\n");
   const lastUserMessage = messages[messages.length - 1].content;
 
   const fullPrompt = historyLines.length > 0
-    ? `${systemPrompt}\n\n--- Conversation so far ---\n${historyLines}\nTraveler: ${lastUserMessage}\n\nRespond as Kelli without adding "Kelli:" at the start.`
-    : `${systemPrompt}\n\nTraveler: ${lastUserMessage}\n\nRespond as Kelli without adding "Kelli:" at the start.`;
+    ? `${systemPrompt}\n\n--- Conversation so far ---\n${historyLines}\nTraveler: ${lastUserMessage}\n\nRespond as Lockey without adding "Lockey:" at the start.`
+    : `${systemPrompt}\n\nTraveler: ${lastUserMessage}\n\nRespond as Lockey without adding "Lockey:" at the start.`;
 
   try {
     const result = await geminiModel.generateContent(fullPrompt);
-    const cleanText = result.response.text().trim().replace(/^Kelli:\s*/i, "").trim();
+    const cleanText = result.response.text().trim().replace(/^Lockey:\s*/i, "").trim();
 
     let tone: ToneKey = "excited";
     if (/delay|cancel|miss|issue|problem|sorry|unfortunate|concern/i.test(cleanText)) {

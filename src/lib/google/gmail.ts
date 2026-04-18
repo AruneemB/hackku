@@ -106,7 +106,7 @@ ${bundle.complianceFlags.length ? `\n  ⚠️  Policy flags: ${bundle.compliance
 Please reply APPROVED or REJECTED (with optional reason).
 
 Thank you,
-Kelli — AI Travel Concierge`
+Lockey — AI Travel Concierge`
 
   const { threadId } = await sendEmail(accessToken, managerEmail, fromEmail, subject, body)
   return threadId

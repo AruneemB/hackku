@@ -1359,3 +1359,58 @@
 
 .archiveKey { color: var(--cc-body, #5a6672); }
 .archiveVal { font-weight: 700; color: var(--cc-text-primary); }
+
+/* ── Hamburger menu ── */
+
+.menuWrap {
+  position: relative;
+  align-self: center;
+  justify-self: start;
+}
+
+.menuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+}
+
+.menuPanel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 8px;
+  min-width: 160px;
+  padding: 6px;
+  border: 1px solid var(--cc-border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(45, 59, 69, 0.14);
+  z-index: 12;
+  animation: fadeUp 160ms ease both;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  color: var(--cc-text-primary);
+  transition: background 120ms ease;
+}
+
+.menuItem:hover {
+  background: rgba(159, 171, 183, 0.1);
+}
+
+.menuItemDanger {
+  color: var(--cc-accent);
+}
+
+.menuItemDanger:hover {
+  background: rgba(243, 91, 79, 0.08);
+}
