@@ -223,7 +223,7 @@ describe("policies with embeddings", () => {
   it("seeds all 6 expected city codes", async () => {
     await main()
     const seededCodes = COLS.policies.insertOne.mock.calls.map(
-      ([doc]: [Record<string, unknown>]) => doc.cityCode
+      (args: Record<string, unknown>[]) => args[0].cityCode
     )
     expect(seededCodes).toEqual(expect.arrayContaining(["MIL", "LON", "PAR", "TYO", "YTO", "MEX"]))
   })
