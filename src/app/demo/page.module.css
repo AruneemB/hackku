@@ -743,6 +743,52 @@
   flex-shrink: 0;
 }
 
+.mapDotOffice {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #1a2530;
+  flex-shrink: 0;
+}
+
+.hotelMapContainer {
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(45, 59, 69, 0.10);
+  border: 1px solid rgba(159, 171, 183, 0.14);
+  position: relative;
+  z-index: 1;
+}
+
+.hotelCardName {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--cc-text-primary);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  overflow: hidden;
+}
+
+.hotelCardNameText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hotelCardPrice {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cc-text-primary);
+}
+
 .hotelList {
   display: flex;
   flex-direction: column;
@@ -757,17 +803,17 @@
 }
 
 .hotelBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   width: 24px;
   height: 24px;
   border-radius: 50%;
   background: var(--cc-accent);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .hotelName {
@@ -887,7 +933,124 @@
   color: var(--cc-body, #5a6672);
 }
 
-/* ── Spend summary ── */
+/* ── Spend summary v2 (Frame 15) ── */
+
+.spendV2 {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.spendV2Hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid rgba(159, 171, 183, 0.25);
+  border-radius: 16px;
+  background: rgba(159, 171, 183, 0.05);
+}
+
+.spendV2Amount {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--cc-text-primary);
+  line-height: 1;
+}
+
+.spendV2Meta {
+  font-size: 13px;
+  color: var(--cc-body, #5a6672);
+  margin-bottom: 4px;
+}
+
+.spendV2Bar {
+  height: 9px;
+  border-radius: 5px;
+  background: rgba(159, 171, 183, 0.2);
+  overflow: hidden;
+}
+
+.spendV2Fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--cc-accent);
+  transition: width 600ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.spendV2FillOver {
+  background: rgba(243, 91, 79, 0.85);
+}
+
+.spendV2Badge {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.spendV2BadgeGreen {
+  background: rgba(72, 180, 120, 0.12);
+  color: #48b478;
+}
+
+.spendV2BadgeRed {
+  background: rgba(243, 91, 79, 0.1);
+  color: var(--cc-accent);
+}
+
+.spendV2Cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.spendV2Card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1.5px solid rgba(159, 171, 183, 0.3);
+  border-radius: 14px;
+  background: rgba(159, 171, 183, 0.06);
+}
+
+.spendV2CardLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cc-body, #5a6672);
+}
+
+.spendV2CardAmt {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cc-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.spendV2CardAmtZero {
+  font-size: 18px;
+  color: var(--cc-body, #5a6672);
+  font-weight: 500;
+}
+
+.spendV2CardBottom {
+  margin-top: 2px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(159, 171, 183, 0.18);
+}
+
+.spendV2CardMeta {
+  font-size: 10px;
+  color: var(--cc-body, #5a6672);
+}
+
+
+/* ── Spend summary (legacy, keep for reference) ── */
 
 .spend {
   display: flex;
@@ -983,7 +1146,62 @@
   background: rgba(243, 91, 79, 0.7) !important;
 }
 
+.foxLoadingCard {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+}
+
+.foxLoadingFigure {
+  --fox-loading-patch-size: 222px;
+  --fox-loading-center-y: 159px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 308px;
+  width: 100%;
+  isolation: isolate;
+}
+
+.foxLoadingFigure::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--fox-loading-center-y) - (var(--fox-loading-patch-size) / 2));
+  left: 50%;
+  width: var(--fox-loading-patch-size);
+  height: var(--fox-loading-patch-size);
+  border: 1px solid rgba(159, 171, 183, 0.38);
+  border-radius: 999px;
+  background: rgba(159, 171, 183, 0.14);
+  transform: translateX(-50%);
+  z-index: 0;
+}
+
+.foxLoadingImage {
+  position: relative;
+  z-index: 1;
+  width: min(226px, 58vw);
+  height: auto;
+}
+
+@media (max-width: 360px) {
+  .foxLoadingFigure {
+    --fox-loading-patch-size: 198px;
+    --fox-loading-center-y: 147px;
+  }
+}
+
 /* ── Trip card (frame 1) ── */
+
+.foxLoadingCard :global(.thinking-dots) {
+  gap: 8px;
+}
+
+.foxLoadingCard :global(.thinking-dots span) {
+  width: 10px;
+  height: 10px;
+}
 
 .tripCard { display: flex; flex-direction: column; gap: 14px; }
 
@@ -1547,7 +1765,6 @@
   border: 1px solid var(--cc-border);
   border-radius: 14px;
   background: #ffffff;
-  box-shadow: 0 8px 24px rgba(45, 59, 69, 0.14);
   z-index: 12;
   animation: fadeUp 160ms ease both;
 }
@@ -1973,8 +2190,8 @@
 
 .fpReturnRow:hover { background: rgba(159, 171, 183, 0.07); }
 
-.fpReturnRowSelected { background: rgba(243, 91, 79, 0.04); }
-.fpReturnRowSelected:hover { background: rgba(243, 91, 79, 0.06); }
+.fpReturnRowSelected { background: transparent; }
+.fpReturnRowSelected:hover { background: rgba(159, 171, 183, 0.07); }
 
 .fpRadioDot {
   position: relative;
@@ -2011,7 +2228,8 @@
 .fpReturnRowTimeLine {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .fpReturnTime {
@@ -2120,7 +2338,7 @@
 
 .fpArrowPlane {
   font-size: 11px;
-  color: var(--cc-accent);
+  color: var(--cc-body, #5a6672);
   flex-shrink: 0;
 }
 

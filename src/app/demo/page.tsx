@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { ArrowBigLeft, Ellipsis, Pencil, Plane, Send as SendIcon } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
+import { SpeechBubble } from "@/components/mascot/SpeechBubble";
 import { useMascot } from "@/hooks/useMascot";
 import type { FlightGroup } from "@/types/flight";
 import type { Hotel } from "@/types/hotel";
@@ -40,7 +42,7 @@ type DemoFrame = {
 };
 
 type DemoProgressSnapshot = {
-  version: 1;
+  version: 2;
   currentIndex: number;
   overlayReady: boolean;
   overlayDismissed: boolean;
@@ -169,7 +171,7 @@ const DEMO_POLICY = {
 };
 
 const DEMO_PROGRESS_STORAGE_KEY = "hackku.demo.progress.v1";
-const HIDDEN_FRAME_INDEXES = new Set([4, 12, 15]);
+const HIDDEN_FRAME_INDEXES = new Set([5, 13, 16]);
 
 function isVisibleFrameIndex(index: number): boolean {
   return index >= 0 && index < FRAMES.length && !HIDDEN_FRAME_INDEXES.has(index);
@@ -227,27 +229,27 @@ async function executeFrameAction(
   const bundle = sel.bundle !== null ? DEMO_BUNDLES[sel.bundle] : DEMO_BUNDLES[2];
 
   switch (frameIdx) {
-    case 1:
+    case 2:
       await patchTrip(tripId, { flights: [flight] });
       break;
-    case 2: {
+    case 3: {
       const hotel = sel.liveHotels?.[sel.hotel] ?? DEMO_HOTELS[sel.hotel] ?? DEMO_HOTELS[0];
       await patchTrip(tripId, { hotels: [hotel] });
       break;
     }
-    case 3:
+    case 4:
       await patchTrip(tripId, { policyFindings: DEMO_POLICY });
       break;
-    case 4:
+    case 5:
       await patchTrip(tripId, { selectedBundle: bundle });
       break;
-    case 5:
+    case 6:
       await patchTrip(tripId, {
         status: "pending_approval",
         approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
       });
       break;
-    case 6: {
+    case 7: {
       const altHotel = sel.liveHotels?.find((h) => !h.overPolicyCap) ?? sel.liveHotels?.[1] ?? DEMO_HOTELS[1];
       await patchTrip(tripId, {
         hotels: [altHotel],
@@ -255,27 +257,27 @@ async function executeFrameAction(
       });
       break;
     }
-    case 7:
+    case 8:
       await patchTrip(tripId, { status: "approved" });
       break;
-    case 8:
+    case 9:
       await patchTrip(tripId, { status: "active" });
       break;
-    case 9:
+    case 10:
       await patchTrip(tripId, { flights: [REBOOKED_FLIGHT] });
       break;
-    case 10:
+    case 11:
       await patchTrip(tripId, {
         approvalThread: { gmailThreadId: "exception-thread-001", status: "pending", reason: "Emergency rebooking $380 over approved budget" },
       });
       break;
-    case 11:
-    case 13:
-      break;
     case 12:
+    case 14:
+      break;
+    case 13:
       await patchTrip(tripId, { receipts: [DEMO_RECEIPT] });
       break;
-    case 14:
+    case 15:
       await patchTrip(tripId, { status: "archived", totalSpendUsd: "2187.00" });
       break;
     default:
@@ -552,11 +554,6 @@ function FlightPickerV2({
                           <div className={styles.fpReturnRowBody}>
                             <div className={styles.fpReturnRowTimeLine}>
                               <span className={styles.fpReturnTime}>{r.dep}</span>
-                              <div className={styles.fpArrowWrap}>
-                                <div className={styles.fpArrowLine} />
-                                <Plane className={styles.fpArrowPlane} size={10} />
-                                <div className={styles.fpArrowLine} />
-                              </div>
                               <span className={styles.fpReturnTime}>{r.arr}</span>
                             </div>
                             <div className={styles.fpReturnRowBottom}>
@@ -860,31 +857,82 @@ function ContactCards() {
   );
 }
 
-function SpendSummary() {
-  const cats = [
-    { name: "Flights", spent: 687, budget: 800 },
-    { name: "Hotel (5 nights)", spent: 945, budget: 1000 },
-    { name: "Meals", spent: 312, budget: 375 },
-    { name: "Transport", spent: 243, budget: 165 },
-  ];
-  const total = cats.reduce((a, c) => a + c.spent, 0);
-  const approved = 2340;
+type SpendCategory = { name: string; icon: string; amountUsd: number; meta?: string };
+type SpendSummaryData = {
+  totalSpendUsd: number;
+  budgetCapUsd: number;
+  nights: number;
+  receiptsCount: number;
+  categories: SpendCategory[];
+};
+
+const SPEND_FALLBACK: SpendSummaryData = {
+  totalSpendUsd: 2187,
+  budgetCapUsd: 2340,
+  nights: 5,
+  receiptsCount: 7,
+  categories: [
+    { name: "Flights", icon: "✈️", amountUsd: 687, meta: "LH 8904 · ORD → MXP" },
+    { name: "Hotel (5 nights)", icon: "🏨", amountUsd: 945, meta: "Marriott Scala" },
+    { name: "Meals", icon: "🍽️", amountUsd: 312, meta: "7 receipts logged" },
+    { name: "Transport", icon: "🚕", amountUsd: 243, meta: "" },
+  ],
+};
+
+function SpendSummary({ tripId }: { tripId?: string | null }) {
+  const [data, setData] = useState<SpendSummaryData | null>(null);
+
+  useEffect(() => {
+    if (!tripId) return;
+    fetch(`/api/trips/${tripId}/summary`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: SpendSummaryData) => {
+        if (d.totalSpendUsd > 0 || d.categories.some((c) => c.amountUsd > 0)) setData(d);
+      })
+      .catch(() => {});
+  }, [tripId]);
+
+  const d = data ?? SPEND_FALLBACK;
+  const pct = Math.min(100, Math.round((d.totalSpendUsd / d.budgetCapUsd) * 100));
+  const delta = d.budgetCapUsd - d.totalSpendUsd;
+  const isUnder = delta >= 0;
+
   return (
-    <div className={styles.spend}>
-      <div className={styles.spendHeader}>
-        <span className={styles.spendTotal}>${total.toLocaleString()}</span>
-        <span className={styles.spendMeta}>of ${approved.toLocaleString()} approved &nbsp;·&nbsp; <strong className={styles.spendUnder}>${approved - total} under</strong></span>
+    <div className={styles.spendV2}>
+      {/* Hero */}
+      <div className={styles.spendV2Hero}>
+        <div className={styles.spendV2Amount}>${d.totalSpendUsd.toLocaleString()}</div>
+        <div className={styles.spendV2Meta}>of ${d.budgetCapUsd.toLocaleString()} approved budget</div>
+        <div className={styles.spendV2Bar}>
+          <div
+            className={[styles.spendV2Fill, !isUnder ? styles.spendV2FillOver : ""].join(" ")}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className={[styles.spendV2Badge, isUnder ? styles.spendV2BadgeGreen : styles.spendV2BadgeRed].join(" ")}>
+          {isUnder
+            ? `$${delta.toLocaleString()} under budget`
+            : `$${Math.abs(delta).toLocaleString()} over budget`}
+        </span>
       </div>
-      <div className={styles.spendBar}><div className={styles.spendFill} style={{ width: `${Math.round((total / approved) * 100)}%` }} /></div>
-      <div className={styles.spendItems}>
-        {cats.map(c => (
-          <div className={styles.spendItem} key={c.name}>
-            <span className={styles.spendName}>{c.name}</span>
-            <div className={styles.spendItemBar}><div className={[styles.spendItemFill, c.spent > c.budget ? styles.spendOver : ""].join(" ")} style={{ width: `${Math.min(100, Math.round((c.spent / c.budget) * 100))}%` }} /></div>
-            <span className={[styles.spendAmt, c.spent > c.budget ? styles.spendOver : ""].join(" ")}>${c.spent}</span>
+
+      {/* Category cards */}
+      <div className={styles.spendV2Cards}>
+        {d.categories.map((cat) => (
+          <div className={styles.spendV2Card} key={cat.name}>
+            <span className={styles.spendV2CardLabel}>{cat.name}</span>
+            <span className={[styles.spendV2CardAmt, cat.amountUsd === 0 ? styles.spendV2CardAmtZero : ""].join(" ")}>
+              {cat.amountUsd > 0 ? `$${cat.amountUsd.toLocaleString()}` : "—"}
+            </span>
+            {cat.meta ? (
+              <div className={styles.spendV2CardBottom}>
+                <span className={styles.spendV2CardMeta}>{cat.meta}</span>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
+
     </div>
   );
 }
@@ -1230,7 +1278,32 @@ function DataCleared() {
 
 // ── Frame definitions ──────────────────────────────────────────
 
+function FoxLoadingFrame() {
+  return (
+    <div className={styles.foxLoadingCard}>
+      <div className={styles.foxLoadingFigure}>
+        <Image
+          alt="Lockey fox mascot loading"
+          className={styles.foxLoadingImage}
+          height={220}
+          priority
+          src="/mascot/thinking.png"
+          width={220}
+        />
+      </div>
+      <SpeechBubble
+        className={styles.speech}
+        isThinking
+        size="lg"
+        text=""
+        variant="plain"
+      />
+    </div>
+  );
+}
+
 const FRAMES: DemoFrame[] = [
+  { frameNumber: 0, tone: "neutral", message: "Lockey is loading and getting your travel workspace ready.", sheetTitle: "Lockey Is Loading", options: ["Ready", "Dismiss"], Visual: FoxLoadingFrame, actionTitle: "Lockey Ready", ActionVisual: FoxLoadingFrame },
   { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
   { frameNumber: 2, tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
   { frameNumber: 3, tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
@@ -1252,6 +1325,12 @@ const FRAMES: DemoFrame[] = [
 // ── Roadmap data ───────────────────────────────────────────────
 
 const ROADMAP_PHASES = [
+  {
+    label: "Start",
+    steps: [
+      { index: 0, label: "Load Lockey", icon: "🦊" },
+    ],
+  },
   {
     label: "Planning",
     steps: [
@@ -1296,13 +1375,20 @@ const ROADMAP_PHASES = [
 ];
 
 function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number; frameCompleted: Record<number, boolean> }) {
-  const allSteps = ROADMAP_PHASES.flatMap((p) => p.steps).filter((step) => isVisibleFrameIndex(step.index));
+  const roadmapPhases = ROADMAP_PHASES.map((phase) => ({
+    ...phase,
+    steps: phase.steps.map((step) => ({
+      ...step,
+      index: phase.label === "Start" ? step.index : step.index + 1,
+    })),
+  }));
+  const allSteps = roadmapPhases.flatMap((p) => p.steps).filter((step) => isVisibleFrameIndex(step.index));
   const total = allSteps.length;
 
   return (
     <div className={styles.roadmapWrap}>
       <h2 className={styles.sheetTitle}>Your Journey</h2>
-      {ROADMAP_PHASES.map((phase) => (
+      {roadmapPhases.map((phase) => (
         <div key={phase.label}>
           <div className={styles.roadmapPhaseLabel}>{phase.label}</div>
           {phase.steps.filter((step) => isVisibleFrameIndex(step.index)).map((step) => {
@@ -1675,19 +1761,23 @@ function PhoneShell({
             </div>
           ) : (
             <div className={styles.stage}>
-              <Mascot
-                bubbleAfterTextSlot={showEllipsis ? (
-                  <button aria-label="View details" className={styles.ellipsisButton} onClick={onEllipsisOpen} type="button">
-                    <Ellipsis size={18} />
-                  </button>
-                ) : null}
-                bubbleClassName={styles.speech}
-                bubblePosition="below"
-                bubbleSize="lg"
-                bubbleVariant="plain"
-                className={styles.mascot}
-                figureClassName={styles.figure}
-              />
+              {currentFrameIndex === 0 ? (
+                <FoxLoadingFrame />
+              ) : (
+                <Mascot
+                  bubbleAfterTextSlot={showEllipsis ? (
+                    <button aria-label="View details" className={styles.ellipsisButton} onClick={onEllipsisOpen} type="button">
+                      <Ellipsis size={18} />
+                    </button>
+                  ) : null}
+                  bubbleClassName={styles.speech}
+                  bubblePosition="below"
+                  bubbleSize="lg"
+                  bubbleVariant="plain"
+                  className={styles.mascot}
+                  figureClassName={styles.figure}
+                />
+              )}
             </div>
           )}
 
@@ -1872,7 +1962,7 @@ export default function DemoPage() {
         if (!raw) return;
 
         const snapshot = JSON.parse(raw) as Partial<DemoProgressSnapshot>;
-        if (snapshot.version !== 1) {
+        if (snapshot.version !== 2) {
           window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
           return;
         }
@@ -1910,7 +2000,7 @@ export default function DemoPage() {
     if (!isProgressHydrated || typeof window === "undefined") return;
 
     const snapshot: DemoProgressSnapshot = {
-      version: 1,
+      version: 2,
       currentIndex,
       overlayReady,
       overlayDismissed,
@@ -1943,14 +2033,21 @@ export default function DemoPage() {
   ]);
 
   // Speak the frame greeting, then open the sheet once Lockey finishes talking.
-  // Frame 0 is special: sheet only opens after Gemini parses the user's speech.
+  // Frame 1 is special: sheet only opens after Gemini parses the user's speech.
   useEffect(() => {
     if (!isProgressHydrated || status !== "authenticated") return;
     let cancelled = false;
 
     async function run() {
+      if (currentIndex === 0) {
+        setOverlayReady(false);
+        setOverlayDismissed(false);
+        setThinking(true);
+        return;
+      }
+
       const firstName = session?.user?.name?.split(" ")[0];
-      const message = currentIndex === 0 && firstName
+      const message = currentIndex === 1 && firstName
         ? `Hey, ${firstName}! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.`
         : frame.message;
       // Store greeting in chat history (deduplicated)
@@ -1965,7 +2062,7 @@ export default function DemoPage() {
         });
       }
       await say(message, frame.tone);
-      if (!cancelled && currentIndex !== 0) setOverlayReady(true);
+      if (!cancelled && currentIndex !== 1) setOverlayReady(true);
     }
 
     void run();
@@ -1973,10 +2070,10 @@ export default function DemoPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated, status]);
 
-  // Fetch real flights when entering frame 1 (flight picker)
+  // Fetch real flights when entering frame 2 (flight picker)
   useEffect(() => {
     if (!isProgressHydrated) return;
-    if (currentIndex !== 1) return;
+    if (currentIndex !== 2) return;
     const trip = tripData ?? DEMO_DEFAULTS;
     const homeAirport = CITY_TO_AIRPORT[trip.originCity?.toLowerCase() ?? ""] ?? "ORD";
     const destAirport = CITY_TO_AIRPORT[trip.city.toLowerCase()] ?? "MXP";
@@ -2050,10 +2147,10 @@ export default function DemoPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
 
-  // Fetch real hotels when entering frame 2 (hotel picker)
+  // Fetch real hotels when entering frame 3 (hotel picker)
   useEffect(() => {
     if (!isProgressHydrated) return;
-    if (currentIndex !== 2) return;
+    if (currentIndex !== 3) return;
     const trip = tripData ?? DEMO_DEFAULTS;
     let cancelled = false;
 
@@ -2254,7 +2351,7 @@ export default function DemoPage() {
 
       if (data.knownFields) setKnownFields(data.knownFields);
 
-      if (data.extractedData && currentIndex === 0) {
+      if (data.extractedData && currentIndex === 1) {
         setTripData({
           city: data.extractedData.city,
           country: data.extractedData.country,
@@ -2269,7 +2366,7 @@ export default function DemoPage() {
       setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage, frameIndex: currentIndex }]);
       setThinking(false);
       await say(data.mascotMessage, data.tone);
-      if (data.extractedData && currentIndex === 0) setOverlayReady(true);
+      if (data.extractedData && currentIndex === 1) setOverlayReady(true);
     } catch {
       setThinking(false);
       await say("I'm having trouble connecting right now. Please try again.", "empathetic");
@@ -2283,7 +2380,7 @@ export default function DemoPage() {
 
     setIsProcessing(true);
     try {
-      if (currentIndex === 0) {
+      if (currentIndex === 1) {
         const data = tripData ?? DEMO_DEFAULTS;
         const res = await fetch("/api/trips", {
           method: "POST",
@@ -2355,8 +2452,9 @@ export default function DemoPage() {
 
   function renderFrameVisual() {
     switch (currentIndex) {
-      case 0: return <TripCard travelerName={travelerName} tripData={tripData} />;
-      case 1:
+      case 0: return <FoxLoadingFrame />;
+      case 1: return <TripCard travelerName={travelerName} tripData={tripData} />;
+      case 2:
         if (isFlightSearchLoading) {
           return (
             <FlightSearchState
@@ -2394,8 +2492,9 @@ export default function DemoPage() {
             value={selectedFlight}
           />
         );
-      case 2: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
-      case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
+      case 3: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
+      case 5: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
+      case 15: return <SpendSummary tripId={tripId} />;
       default: { const V = frame.Visual; return <V />; }
     }
   }
