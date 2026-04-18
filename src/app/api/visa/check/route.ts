@@ -1,3 +1,7 @@
+import { NextRequest, NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/mongodb/client";
+import VisaRequirement from "@/lib/mongodb/models/VisaRequirement";
+
 // ============================================================
 // API ROUTE: Visa Check
 // OWNER: Track C (Data & Integrations)
@@ -19,32 +23,31 @@
 //   "notes": "Schengen Area — no visa for US citizens up to 90 days",
 //   "applicationUrl": null
 // }
-//
-// RESPONSE (200, visa required example — Japan):
-// {
-//   "destinationCountry": "JP",
-//   "visaRequired": false,
-//   "stayLimitDays": 90,
-//   "notes": "US citizens can visit Japan without a visa for up to 90 days."
-// }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import VisaRequirement from "@/lib/mongodb/models/VisaRequirement"
+export async function POST(req: NextRequest) {
+  try {
+    await connectToDatabase();
+    const { destinationCountry, citizenship } = await req.json();
 
-// TODO: export async function POST(req: NextRequest) {
-//   // const { destinationCountry, citizenship } = await req.json()
-//   // const doc = await VisaRequirement.findOne({ destinationCountry, citizenship })
-//   // if (!doc) return 404
-//   // return NextResponse.json(doc)
-// }
+    const doc = await VisaRequirement.findOne({
+      destinationCountry,
+      citizenship,
+    });
 
-import { NextResponse } from "next/server";
+    if (!doc) {
+      return NextResponse.json(
+        { error: "Visa requirement record not found for this destination and citizenship." },
+        { status: 404 }
+      );
+    }
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
-}
-
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+    return NextResponse.json(doc);
+  } catch (error) {
+    console.error("Error checking visa requirements:", error);
+    return NextResponse.json(
+      { error: "Internal server error while checking visa requirements." },
+      { status: 500 }
+    );
+  }
 }
