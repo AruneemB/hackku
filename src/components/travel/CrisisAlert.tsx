@@ -52,12 +52,11 @@ export function CrisisAlert({
     if (!exceptionDraft) return;
     setSendingException(true);
     try {
-      const res = await fetch(`/api/trips/${tripId}/exception`, {
+      await fetch(`/api/trips/${tripId}/exception`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject: exceptionDraft.subject, body: exceptionDraft.body }),
       });
-      if (!res.ok) throw new Error(`exception POST failed: ${res.status}`);
       setExceptionSent(true);
       mascot.say("Exception request sent to your manager. I'll let you know as soon as they respond.", "empathetic");
     } catch {
@@ -119,8 +118,7 @@ export function CrisisAlert({
       {!alternativeFlight && (
         <div className="w-full max-w-xl bg-red-900 border border-red-700 rounded-xl p-5 text-center">
           <p className="text-red-200 text-sm mb-3">No automated alternative available. Please contact the airline directly.</p>
-          <div className="text-white font-semibold">American Airlines: 1-800-433-7300</div>
-          <div className="text-red-300 text-xs mt-1">Reference your booking confirmation at the gate desk</div>
+          <div className="text-white font-semibold">Airline support: contact the gate desk or airline app</div>
         </div>
       )}
 

@@ -3,132 +3,279 @@
 // OWNER: Track B (AI & Intelligence)
 // DESCRIPTION: All Gemini prompt strings live here. Keeping
 //   prompts centralized makes tuning easier without touching
-//   business logic. Each function returns a string prompt
-//   or a chat history array for multi-turn scenarios.
+//   business logic. Each function returns a prompt string to
+//   pass to geminiModel.generateContent(). Prompts that expect
+//   structured data request JSON-only output so callers can
+//   JSON.parse() the response without extra handling.
+//
+//   Model: gemini-2.5-flash (see client.ts)
 // ============================================================
 
-// TODO: export function buildPassportWarningPrompt(expiryDate: Date, destination: string) {
-//   // Returns: "Kelli, heads up — your passport expires on [date], which is
-//   //   within 6 months of your planned trip to [destination].
-//   //   You'll need to renew it before you can travel. Should I continue
-//   //   planning your trip while you sort that out?"
-// }
+import type { Flight, Hotel, Policy, PolicyFindings, Trip, WeatherForecast } from "@/types"
 
-// TODO: export function buildFlightSearchStatusPrompt(destination: string) {
-//   // Frame 2 — mascot narrates while search runs
-//   // Returns: "I'm checking all airports within 100 miles of Kansas City
-//   //   and scanning a 5-day window around your dates to find the best fares..."
-// }
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-// TODO: export function buildBundleRankingPrompt(flights: Flight[], hotels: Hotel[], policy: Policy) {
-//   // Asks Gemini to rank and group into 3 bundles (A=standard, B=value, C=strategic)
-//   // EXAMPLE RETURN from Gemini (parsed as JSON):
-//   // [
-//   //   { "label": "A", "description": "Direct flight + Marriott Milan. Full compliance.",
-//   //     "flightId": "...", "hotelId": "...", "totalCostUsd": 2480, "savingsVsStandard": 0 },
-//   //   { "label": "B", "description": "Fly via Bergamo (BGY) + NH Milano. Saves $500.",
-//   //     "flightId": "...", "hotelId": "...", "totalCostUsd": 1980, "savingsVsStandard": 500 },
-//   //   { "label": "C", "description": "Sat-night stay reduces airfare enough to upgrade hotel.",
-//   //     "flightId": "...", "hotelId": "...", "totalCostUsd": 2100, "savingsVsStandard": 380 }
-//   // ]
-// }
+function getOrdinalSuffix(i: number): string {
+  const j = i % 10, k = i % 100;
+  if (j === 1 && k !== 11) return "st";
+  if (j === 2 && k !== 12) return "nd";
+  if (j === 3 && k !== 13) return "rd";
+  return "th";
+}
 
-import { Trip } from "@/types/trip";
-import { Policy, VisaRequirement } from "@/types/policy";
+function fmtDate(d: Date | string): string {
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return String(d);
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const day = date.getDate();
+  return `${month} ${day}${getOrdinalSuffix(day)}, ${date.getFullYear()}`;
+}
 
-export function buildPolicySummaryPrompt(
-  policyDoc: Policy, 
-  trip: Trip, 
-  visaInfo: VisaRequirement,
-  costs?: { flightCostUsd?: number; hotelNightlyRateUsd?: number }
-) {
-  return `You are a travel policy expert and helpful AI mascot. 
-Based on the company travel policy excerpt, visa requirements, and the user's trip details below, generate a PolicyFindings JSON object.
+function flightSummary(f: Flight): string {
+  return JSON.stringify({
+    id: f.id,
+    route: `${f.outbound.origin}→${f.outbound.destination}`,
+    carrier: `${f.outbound.carrier} ${f.outbound.flightNumber}`,
+    departs: fmtDate(f.outbound.departureTime),
+    priceUsd: f.priceUsd,
+    saturdayNightStay: f.saturdayNightStay,
+    saturdayNightSavingsUsd: f.saturdayNightSavingsUsd,
+  })
+}
 
-Trip Details:
-- Destination: ${trip.destination.city}, ${trip.destination.country}
-- Dates: ${trip.dates.departure} to ${trip.dates.return}
+function hotelSummary(h: Hotel): string {
+  return JSON.stringify({
+    id: h.id,
+    name: h.name,
+    distanceKm: h.distanceFromOfficeKm,
+    nightlyRateUsd: h.nightlyRateUsd,
+    totalCostUsd: h.totalCostUsd,
+    preferred: h.preferred,
+    overPolicyCap: h.overPolicyCap,
+    amenities: h.amenities,
+  })
+}
 
-${costs?.flightCostUsd ? `- Selected Flight Cost: $${costs.flightCostUsd}` : ""}
-${costs?.hotelNightlyRateUsd ? `- Selected Hotel Nightly Rate: $${costs.hotelNightlyRateUsd}` : ""}
+// ---------------------------------------------------------------------------
+// Frame 1 — Passport expiry warning (plain string, no JSON)
+// ---------------------------------------------------------------------------
 
-Visa Requirements for ${visaInfo.citizenship} citizen visiting ${visaInfo.destinationCountry}:
-- Visa Required: ${visaInfo.visaRequired}
-- Visa Type: ${visaInfo.visaType || "N/A"}
-- Stay Limit: ${visaInfo.stayLimitDays} days
-- Notes: ${visaInfo.notes}
-${visaInfo.applicationUrl ? `- Application URL: ${visaInfo.applicationUrl}` : ""}
+export function buildPassportWarningPrompt(expiryDate: Date, destination: string): string {
+  const expiry = fmtDate(expiryDate)
+  return `You are Lockey, a friendly AI travel concierge for a corporate traveler. \
+Write a brief, warm warning message (2–3 sentences, first person as the AI assistant) \
+telling the traveler their passport expires on ${expiry}, which is within 6 months \
+of their planned trip to ${destination}. Advise them to renew it. \
+Do NOT use JSON. Plain conversational text only.`
+}
 
-Policy Excerpt:
-${policyDoc.handbookExcerpt}
+// ---------------------------------------------------------------------------
+// Frame 2 — Flight search narration (plain string, no JSON)
+// ---------------------------------------------------------------------------
 
-Policy Budget Caps:
-- Hotel Nightly Cap: $${policyDoc.hotelNightlyCapUsd}
-- Flight Cap: $${policyDoc.flightCapUsd}
-- Meal Allowance: $${policyDoc.mealAllowancePerDayUsd} per day
+export function buildFlightSearchStatusPrompt(destination: string): string {
+  return `You are Lockey, a friendly AI travel concierge. \
+Write a single short sentence (under 20 words) telling the traveler you are now \
+searching flights to ${destination}, checking multiple nearby airports and a \
+5-day date window for the best fares. Conversational tone. No JSON.`
+}
 
-Return ONLY a JSON object matching this structure:
+// ---------------------------------------------------------------------------
+// Frame 3/4 — Bundle ranking
+// Returns JSON array of 3 bundle candidates:
+// [{ label, description, flightId, hotelId, totalCostUsd, savingsVsStandard, complianceFlags }]
+// ---------------------------------------------------------------------------
+
+export function buildBundleRankingPrompt(
+  flights: Flight[],
+  hotels: Hotel[],
+  policy: Policy
+): string {
+  const flightList = flights.map(flightSummary).join("\n")
+  const hotelList  = hotels.map(hotelSummary).join("\n")
+
+  return `You are a corporate travel optimization engine. \
+Given the flights, hotels, and policy below, produce exactly 3 travel bundles \
+(A = standard/safest, B = best value via alternative routing, C = strategic \
+Saturday-night-stay upgrade). Use actual IDs from the lists provided.
+
+POLICY:
+- Hotel nightly cap: $${policy.hotelNightlyCapUsd}
+- Flight cap: $${policy.flightCapUsd}
+- Preferred transport: ${policy.preferredTransport.join(", ")}
+
+FLIGHTS:
+${flightList}
+
+HOTELS:
+${hotelList}
+
+Return ONLY a JSON array, no markdown, no explanation:
+[
+  {
+    "label": "A",
+    "description": "1–2 sentence rationale",
+    "flightId": "<id from list>",
+    "hotelId": "<id from list>",
+    "totalCostUsd": <flight price + hotel total>,
+    "savingsVsStandard": 0,
+    "complianceFlags": []
+  },
+  { "label": "B", ... },
+  { "label": "C", ... }
+]
+complianceFlags should list any policy violations (e.g. "hotel_over_cap", "flight_over_cap").`
+}
+
+// ---------------------------------------------------------------------------
+// Frame 4 — Policy findings plain-language summary (plain string, no JSON)
+// The full PolicyFindings object is passed; Gemini writes mascotSummary text.
+// ---------------------------------------------------------------------------
+
+export function buildPolicySummaryPrompt(findings: PolicyFindings): string {
+  const visa = findings.visa
+  return `You are Lockey, a friendly AI travel concierge. \
+Write a concise 2–3 sentence plain-language summary of these travel policy findings \
+for the traveler. Be warm and direct. Mention visa status, hotel cap, and whether \
+manager approval is needed.
+
+FINDINGS:
+- Visa required: ${visa.visaRequired} (${visa.notes})
+- Hotel nightly cap: $${findings.hotelNightlyCapUsd}
+- Flight cap: $${findings.flightCapUsd}
+- Meal allowance: $${findings.mealAllowancePerDayUsd}/day
+- Manager approval required: ${findings.requiresManagerApproval}\
+${findings.approvalReason ? ` — reason: ${findings.approvalReason}` : ""}
+
+Do NOT use JSON. Plain conversational text only.`
+}
+
+// ---------------------------------------------------------------------------
+// Frame 10 — Crisis / delay alert
+// Returns JSON: { message: string, urgency: "low"|"medium"|"high", suggestedAction: string }
+// ---------------------------------------------------------------------------
+
+export function buildCrisisPrompt(
+  delayMinutes: number,
+  alternativeFlights: Flight[]
+): string {
+  const altList = alternativeFlights.slice(0, 3).map(flightSummary).join("\n")
+
+  return `You are Lockey, an AI travel concierge handling a live flight disruption. \
+The traveler's flight is delayed by ${delayMinutes} minutes.
+
+${alternativeFlights.length > 0
+    ? `Alternative flights available:\n${altList}`
+    : "No alternative flights are currently available."}
+
+Return ONLY a JSON object, no markdown:
 {
-  "hotelNightlyCapUsd": number,
-  "flightCapUsd": number,
-  "mealAllowancePerDayUsd": number,
-  "requiresManagerApproval": boolean,
-  "approvalReason": "string | null",
-  "mascotSummary": "A friendly summary of the findings, including visa status and whether the trip is in compliance."
+  "message": "<empathetic 2–3 sentence message to the traveler explaining the delay and next steps>",
+  "urgency": "<low|medium|high — high if delay > 90 min or connection at risk>",
+  "suggestedAction": "<one clear action: e.g. 'Rebook on AA1234 departing 17:45' or 'Proceed to gate, delay is minor'>"
+}`
 }
 
-Ensure the JSON is valid and includes all fields. 
-If costs are provided, compare them against the policy caps to determine "requiresManagerApproval" and "approvalReason".`;
-}
+// ---------------------------------------------------------------------------
+// Frame 11 — Over-budget exception request email (JSON: { subject, body })
+// ---------------------------------------------------------------------------
 
-export function buildCrisisPrompt(delayMinutes: number, alternativeFlights: { flightNumber: string; carrier: string; departureTime: string; priceUsd: number }[]) {
-  const altList = alternativeFlights.length
-    ? alternativeFlights.map(f => `- ${f.carrier} ${f.flightNumber} departing ${f.departureTime} ($${f.priceUsd})`).join("\n")
-    : "No alternatives currently available.";
+export function buildExceptionRequestPrompt(trip: Trip, overageUsd: number): string {
+  const dest = trip.destination
+  const dates = `${fmtDate(trip.dates.departure)} – ${fmtDate(trip.dates.return)}`
 
-  return `You are a helpful, empathetic AI travel concierge. Kelli's flight has been delayed by ${delayMinutes} minutes, which will cause her to miss her connection.
+  return `Draft a professional manager exception request email for an emergency rebooking \
+that exceeds the travel budget by $${overageUsd}.
 
-Compose a brief, calm reassurance message (2-3 sentences) that:
-1. Acknowledges the disruption with empathy
-2. Mentions you've already found alternative options
-3. Ends with a confident, action-oriented statement
-
-Available alternatives:
-${altList}
-
-Return ONLY the spoken message text — no JSON, no bullet points.`;
-}
-
-export function buildExceptionRequestPrompt(trip: { destination: { city: string; country: string }; dates: { departure: Date; return: Date }; budgetCapUsd: string; selectedBundle: { totalCostUsd: number; flight: { outbound: { flightNumber: string; carrier: string } }; hotel: { name: string; nightlyRateUsd: number } } | null }, overageUsd: number) {
-  const bundle = trip.selectedBundle;
-  const flightInfo = bundle ? `${bundle.flight.outbound.carrier} ${bundle.flight.outbound.flightNumber}` : "original flight";
-  const hotelInfo = bundle ? `${bundle.hotel.name} ($${bundle.hotel.nightlyRateUsd}/night)` : "original hotel";
-
-  return `Draft a professional manager exception request email for an emergency rebooking that exceeds the travel budget by $${overageUsd}.
-
-Trip context:
-- Destination: ${trip.destination.city}, ${trip.destination.country}
-- Dates: ${new Date(trip.dates.departure).toDateString()} – ${new Date(trip.dates.return).toDateString()}
-- Original booking: ${flightInfo} + ${hotelInfo}
+TRIP DETAILS:
+- Destination: ${dest.city}, ${dest.country}
+- Dates: ${dates}
 - Budget cap: $${trip.budgetCapUsd}
 - Overage: $${overageUsd}
 
-The rebooking was required due to a flight delay that caused a missed connection.
+The rebooking was required due to a flight delay that caused a missed connection. \
+The tone should be professional and concise (3–4 short paragraphs).
 
-Return ONLY a JSON object:
+Return ONLY a JSON object, no markdown:
 {
   "subject": "email subject line",
   "body": "full email body (plain text, 3-4 short paragraphs)"
-}`;
+}`
 }
 
-// TODO: export function buildExpenseReportPrompt(trip: Trip) {
-//   // Frame 15 — summarizes spend vs budget, lists receipts by category
-// }
+// ---------------------------------------------------------------------------
+// Frame 15 — Post-trip expense report
+// Returns JSON: { summary, totalSpendUsd, budgetCapUsd, underBudgetUsd,
+//                 byCategory: { meal, transport, hotel, other },
+//                 receipts: [{ merchant, category, amountUsd, date }],
+//                 narrativeSummary }
+// ---------------------------------------------------------------------------
 
-// TODO: export function buildPackingListPrompt(destination: string, weatherForecast: WeatherForecast) {
-//   // Frame 8 — generates packing list based on destination + weather
-//   // EXAMPLE RETURN from Gemini:
-//   // ["Umbrella (rain forecast Wed-Thu)", "Light jacket", "Business attire x4",
-//   //  "Power adapter (Type C/F for Italy)", "Comfortable walking shoes"]
-// }
+export function buildExpenseReportPrompt(trip: Trip): string {
+  const dest = trip.destination
+  const dates = `${fmtDate(trip.dates.departure)} – ${fmtDate(trip.dates.return)}`
+  const receipts = trip.receipts
+    .map((r) =>
+      `{ merchant: "${r.merchant}", category: "${r.category}", ` +
+      `amountUsd: ${r.totalUsd}, date: "${fmtDate(r.date)}" }`
+    )
+    .join("\n")
+
+  return `You are a corporate travel expense report generator. \
+Produce a structured expense report for the following trip.
+
+TRIP:
+- Destination: ${dest.city}, ${dest.country}
+- Dates: ${dates}
+- Total spend: $${trip.totalSpendUsd}
+- Budget cap: $${trip.budgetCapUsd}
+
+RECEIPTS:
+${receipts || "(no receipts recorded)"}
+
+Return ONLY a JSON object, no markdown:
+{
+  "totalSpendUsd": <number>,
+  "budgetCapUsd": <number>,
+  "underBudgetUsd": <positive = under, negative = over>,
+  "byCategory": {
+    "meal": <total usd>,
+    "transport": <total usd>,
+    "hotel": <total usd>,
+    "other": <total usd>
+  },
+  "receipts": [{ "merchant": string, "category": string, "amountUsd": number, "date": string }],
+  "narrativeSummary": "<2–3 sentence plain-language summary of the trip spend>"
+}`
+}
+
+// ---------------------------------------------------------------------------
+// Frame 8 — Weather-based packing list
+// Returns JSON string array of packing items with inline reasoning
+// ---------------------------------------------------------------------------
+
+export function buildPackingListPrompt(
+  destination: string,
+  forecast: WeatherForecast
+): string {
+  const days = forecast.days
+    .map((d) => `${d.date}: ${d.condition}, ${d.tempLowC}–${d.tempHighC}°C`)
+    .join("\n")
+
+  return `You are a corporate travel assistant generating a packing list. \
+The traveler is going to ${destination} on a business trip.
+
+WEATHER FORECAST:
+${days}
+
+Generate a practical packing list tailored to the forecast and business context. \
+Each item should be a short string, optionally with a brief reason in parentheses \
+if non-obvious (e.g. "Umbrella (rain forecast Thu–Fri)").
+
+Return ONLY a JSON array of strings, no markdown, no explanation. Example format:
+["Business attire x4", "Umbrella (rain Wed–Thu)", "Power adapter (Type C)", "Light jacket (evenings cool)"]
+
+Include 8–12 items. Prioritise weather-driven items first, then business essentials.`
+}

@@ -13,18 +13,35 @@ export function useLiveTracking(trip: Trip | null) {
 
   const [weather, setWeather] = useState<WeatherForecast | null>(null);
   const mascot = useMascot();
+  const mascotRef = useRef(mascot);
+  mascotRef.current = mascot;
   const alreadyAlerted = useRef(false);
 
   const isInCrisis = isDelayed && delayMinutes > CONNECTION_BUFFER_MINUTES;
   const isCrisisOrCancelled = isInCrisis || isCancelled;
 
   useEffect(() => {
-    if (!trip?.destination) return;
+    if (!trip?.destination) {
+      setWeather(null);
+      return;
+    }
     const { city, country } = trip.destination;
-    fetch(`/api/weather?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`)
+    const controller = new AbortController();
+
+    fetch(
+      `/api/weather?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`,
+      { signal: controller.signal }
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setWeather(data))
-      .catch(() => null);
+      .catch((err) => {
+        if ((err as Error).name !== "AbortError") setWeather(null);
+      });
+
+    return () => {
+      controller.abort();
+      setWeather(null);
+    };
   }, [trip?.destination?.city, trip?.destination?.country]);
 
   useEffect(() => {
@@ -33,19 +50,18 @@ export function useLiveTracking(trip: Trip | null) {
       const reason = isCancelled
         ? "Your flight has been cancelled."
         : `Your flight is delayed by ${delayMinutes} minutes — that's past your connection window.`;
-      mascot.say(`Kelli, heads up. ${reason} I've already found alternative options for you.`, "urgent");
-    } else if (!isCrisisOrCancelled && alreadyAlerted.current) {
-      alreadyAlerted.current = false;
+      mascotRef.current.say(
+        `Heads up. ${reason} I've already found alternative options for you.`,
+        "urgent"
+      );
     }
   }, [isCrisisOrCancelled, isCancelled, delayMinutes]);
 
-  const announcedGate = useRef<string | null>(null);
   useEffect(() => {
-    if (gate && flightStatus?.status === "on_time" && announcedGate.current !== gate) {
-      announcedGate.current = gate;
-      mascot.say(`Your departure gate is ${gate}. Everything looks on schedule.`, "neutral");
+    if (gate && flightStatus?.status === "on_time") {
+      mascotRef.current.say(`Your departure gate is ${gate}. Everything looks on schedule.`, "neutral");
     }
-  }, [gate, flightStatus?.status, mascot]);
+  }, [gate, flightStatus?.status]);
 
   return {
     flightStatus,

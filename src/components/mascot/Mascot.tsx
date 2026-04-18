@@ -8,19 +8,19 @@ import { SpeechBubble } from "./SpeechBubble";
 const MASCOT_IMAGES: Record<ToneKey, { src: string; alt: string }> = {
   neutral: {
     src: "/mascot/greeting.png",
-    alt: "Kelli mascot greeting the traveler",
+    alt: "Lockey mascot greeting the traveler",
   },
   excited: {
     src: "/mascot/happy.png",
-    alt: "Kelli mascot looking happy",
+    alt: "Lockey mascot looking happy",
   },
   empathetic: {
     src: "/mascot/confused.png",
-    alt: "Kelli mascot looking concerned",
+    alt: "Lockey mascot looking concerned",
   },
   urgent: {
     src: "/mascot/confused.png",
-    alt: "Kelli mascot in an alert state",
+    alt: "Lockey mascot in an alert state",
   },
 };
 
@@ -31,6 +31,7 @@ interface MascotProps {
   className?: string;
   figureClassName?: string;
   bubbleClassName?: string;
+  bubbleAfterTextSlot?: React.ReactNode;
 }
 
 export function Mascot({
@@ -40,20 +41,43 @@ export function Mascot({
   className = "",
   figureClassName = "",
   bubbleClassName = "",
+  bubbleAfterTextSlot,
 }: MascotProps) {
-  const { speech, tone, isSpeaking } = useMascot();
-  const mascotImage = MASCOT_IMAGES[tone];
+  const { speech, visibleLength, tone, isSpeaking, isThinking } = useMascot();
+  const mascotImage = isThinking
+    ? { src: "/mascot/thinking.png", alt: "Lockey mascot thinking" }
+    : MASCOT_IMAGES[tone];
   const imageNode = (
     <div
       className={figureClassName}
+      data-speaking={String(isSpeaking)}
+      data-thinking={String(isThinking)}
       style={{
         position: "relative",
         display: "grid",
         placeItems: "center",
-        transform: isSpeaking ? "translateY(-2px)" : "translateY(0)",
-        transition: "transform 150ms ease",
+        isolation: "isolate",
+        transform: isSpeaking && !isThinking ? "translateY(-2px)" : undefined,
+        transition: isThinking ? undefined : "transform 150ms ease",
       }}
     >
+      {isThinking && (
+        <div aria-hidden className="mascot-thinking-ring">
+          <svg className="mascot-thinking-ring-svg" viewBox="0 0 100 100">
+            <circle
+              cx="50"
+              cy="50"
+              fill="none"
+              pathLength="100"
+              r="49"
+              stroke="var(--cc-accent, #f35b4f)"
+              strokeDasharray="22 78"
+              strokeLinecap="round"
+              strokeWidth="2"
+            />
+          </svg>
+        </div>
+      )}
       <Image
         alt={mascotImage.alt}
         height={280}
@@ -62,18 +86,23 @@ export function Mascot({
         style={{
           width: "min(280px, 60vw)",
           height: "auto",
+          position: "relative",
+          zIndex: 1,
         }}
         width={280}
       />
     </div>
   );
 
-  const bubbleNode = speech ? (
+  const bubbleNode = speech || isThinking ? (
     <SpeechBubble
+      afterTextSlot={bubbleAfterTextSlot}
       className={bubbleClassName}
-      key={speech}
+      isThinking={isThinking}
+      key={isThinking ? "__thinking__" : speech}
       size={bubbleSize}
-      text={speech}
+      text={speech ?? ""}
+      visibleLength={visibleLength}
       variant={bubbleVariant}
     />
   ) : null;

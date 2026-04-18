@@ -3,9 +3,7 @@
   display: grid;
   place-items: center;
   padding: 0 16px;
-  background:
-    radial-gradient(circle at 18% 14%, rgba(243, 91, 79, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(243, 91, 79, 0.03) 0%, #fffdfb 28%, var(--cc-bg) 100%);
+  background: var(--cc-bg);
 }
 
 .shell {
@@ -51,8 +49,8 @@
   position: absolute;
   top: 48px;
   left: 50%;
-  width: 214px;
-  height: 214px;
+  width: 193px;
+  height: 193px;
   border: 1px solid rgba(159, 171, 183, 0.38);
   border-radius: 999px;
   background: rgba(159, 171, 183, 0.14);
@@ -63,12 +61,14 @@
   position: relative;
   z-index: 1;
   width: min(226px, 58vw) !important;
-  transform: translateY(-8px);
 }
 
 .speech {
   max-width: 320px;
-  min-height: 86px;
+  height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
 }
 
@@ -150,8 +150,8 @@
   }
 
   .figure::before {
-    width: 194px;
-    height: 194px;
+    width: 175px;
+    height: 175px;
   }
 
   .primaryButton {

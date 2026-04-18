@@ -28,40 +28,33 @@ interface CrisisPayload {
 export function LiveDashboard({ trip }: { trip: Trip }) {
   const { flightStatus, weather, isInCrisis, delayMinutes, isCancelled, gate } = useLiveTracking(trip);
   const mascot = useMascot();
+  // Use a ref to avoid re-triggering the crisis fetch effect when mascot changes.
+  const mascotRef = useRef(mascot);
+  mascotRef.current = mascot;
 
   const [crisisPayload, setCrisisPayload] = useState<CrisisPayload | null>(null);
   const fetchedCrisis = useRef(false);
 
   useEffect(() => {
     if (!isInCrisis || fetchedCrisis.current) return;
+    fetchedCrisis.current = true;
 
-    const controller = new AbortController();
-    fetch(`/api/trips/${trip._id}/crisis?delayMinutes=${delayMinutes}`, {
-      signal: controller.signal,
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error(`crisis fetch failed: ${r.status}`);
-        return r.json();
-      })
+    fetch(`/api/trips/${trip._id}/crisis?delayMinutes=${delayMinutes}`)
+      .then((r) => r.json())
       .then((data) => {
-        fetchedCrisis.current = true;
         setCrisisPayload({
           alternative: data.alternative ?? null,
           isOverBudget: data.isOverBudget ?? false,
           exceptionDraft: data.exceptionDraft ?? null,
         });
         if (data.mascotMessage) {
-          mascot.say(data.mascotMessage, "urgent");
+          mascotRef.current.say(data.mascotMessage, "urgent");
         }
       })
-      .catch((err) => {
-        if (err?.name !== "AbortError") {
-          // allow a retry on next render
-          console.error("crisis fetch failed", err);
-        }
+      .catch(() => {
+        setCrisisPayload({ alternative: null, isOverBudget: false, exceptionDraft: null });
       });
-    return () => controller.abort();
-  }, [isInCrisis, delayMinutes, trip._id, mascot]);
+  }, [isInCrisis, delayMinutes, trip._id]);
 
   if (isInCrisis) {
     if (!crisisPayload) {

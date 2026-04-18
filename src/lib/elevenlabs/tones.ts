@@ -1,42 +1,32 @@
-// ============================================================
-// LIB: ElevenLabs Voice Tones
-// OWNER: Track B (AI & Intelligence)
-// DESCRIPTION: Maps tone names to ElevenLabs voice_settings.
-//   stability: 0=more variable/emotional, 1=consistent/flat
-//   similarity_boost: 0=looser, 1=closer to base voice
-//   style: expressiveness (0-1, model-dependent)
-//
-//   Used by lib/elevenlabs/client.ts → speak()
-//   Triggered by: useMascot hook's tone state
-// ============================================================
+// stability:        0=emotional/variable pitch (human), 1=flat/consistent (robotic)
+// similarity_boost: how closely to adhere to the base voice character
+// style:            0=neutral delivery, 1=maximum expressiveness/emotion
+// use_speaker_boost: cleans audio artifacts
 
 export const TONES = {
-  // Frame 1, 2, 3: standard assistant tone
   neutral: {
-    stability: 0.75,
-    similarity_boost: 0.75,
-    style: 0.0,
+    stability: 0.46,
+    similarity_boost: 0.78,
+    style: 0.24,
+    use_speaker_boost: true,
   },
-
-  // Frame 7 (approved), Frame 8: booking confirmed
   excited: {
-    stability: 0.35,
-    similarity_boost: 0.80,
-    style: 0.6,
+    stability: 0.34,
+    similarity_boost: 0.72,
+    style: 0.34,
+    use_speaker_boost: true,
   },
-
-  // Frame 7 (rejected), Frame 10: flight delay
   empathetic: {
-    stability: 0.65,
-    similarity_boost: 0.70,
-    style: 0.3,
+    stability: 0.56,
+    similarity_boost: 0.78,
+    style: 0.18,
+    use_speaker_boost: true,
   },
-
-  // Frame 14: escalation / emergency
   urgent: {
-    stability: 0.50,
-    similarity_boost: 0.85,
-    style: 0.5,
+    stability: 0.38,
+    similarity_boost: 0.76,
+    style: 0.28,
+    use_speaker_boost: true,
   },
 } as const;
 

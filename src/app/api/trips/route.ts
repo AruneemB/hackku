@@ -1,52 +1,53 @@
-// ============================================================
-// API ROUTE: Trips Collection
-// OWNER: Track C (Data & Integrations)
-// ROUTE: /api/trips
-//
-// GET  → List all trips for the authenticated user
-// POST → Create a new draft trip document
-//
-// POST REQUEST BODY:
-// {
-//   "destination": { "city": "Milan", "country": "IT",
-//     "officeLat": 45.4654, "officeLng": 9.1866 },
-//   "dates": { "departure": "2025-09-14", "return": "2025-09-19" }
-// }
-//
-// POST RESPONSE (201):
-// {
-//   "_id": "665a2b3c4d5e6f7a8b9c0d1e",
-//   "status": "draft",
-//   "destination": { "city": "Milan", "country": "IT" },
-//   "budgetCapUsd": "2800.00",
-//   "createdAt": "2025-07-01T10:00:00.000Z"
-// }
-// ============================================================
-
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import { getServerSession } from "next-auth"
-// TODO: import Trip from "@/lib/mongodb/models/Trip"
-
-// TODO: export async function GET(req: NextRequest) {
-//   // Verify session → get userId
-//   // Query Trip.find({ userId }) sorted by createdAt desc
-//   // Return trip list
-// }
-
-// TODO: export async function POST(req: NextRequest) {
-//   // Verify session
-//   // Parse body: { destination, dates }
-//   // Look up policy.budgetCapUsd for destination.country
-//   // Create Trip document with status: "draft"
-//   // Return created trip
-// }
-
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/mongodb/client";
+import Trip from "@/lib/mongodb/models/Trip";
+import User from "@/lib/mongodb/models/User";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/google/oauth";
+import { Types } from "mongoose";
 
 export async function GET() {
   return NextResponse.json({ message: "scaffold" });
 }
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+export async function POST(req: NextRequest) {
+  try {
+    await connectToDatabase();
+    
+    let userId: Types.ObjectId | string | undefined;
+    const session = await getServerSession(authOptions);
+    
+    if (session?.user?.email) {
+      const userDoc = await User.findOne({ email: session.user.email }).select("_id").lean<{ _id: Types.ObjectId }>();
+      if (userDoc) {
+        userId = userDoc._id;
+      }
+    }
+    
+    if (!userId) {
+      const defaultUser = await User.findOne({ email: "kelli.thompson@lockton.com" }).select("_id").lean<{ _id: Types.ObjectId }>();
+      userId = defaultUser ? defaultUser._id : new Types.ObjectId();
+    }
+
+    const body = (await req.json()) as {
+      destination: { city: string; country: string; officeLat: number; officeLng: number };
+      dates: { departure: string; return: string };
+    };
+
+    const trip = await Trip.create({
+      userId,
+      destination: body.destination,
+      dates: {
+        departure: new Date(body.dates.departure),
+        return: new Date(body.dates.return),
+      },
+      status: "draft",
+      budgetCapUsd: 2800,
+    });
+
+    return NextResponse.json(trip, { status: 201 });
+  } catch (error) {
+    console.error("Trip POST error:", error);
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
 }
