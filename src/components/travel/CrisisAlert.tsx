@@ -52,11 +52,12 @@ export function CrisisAlert({
     if (!exceptionDraft) return;
     setSendingException(true);
     try {
-      await fetch(`/api/trips/${tripId}/exception`, {
+      const res = await fetch(`/api/trips/${tripId}/exception`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject: exceptionDraft.subject, body: exceptionDraft.body }),
       });
+      if (!res.ok) throw new Error(`exception POST failed: ${res.status}`);
       setExceptionSent(true);
       mascot.say("Exception request sent to your manager. I'll let you know as soon as they respond.", "empathetic");
     } catch {
