@@ -1,0 +1,66 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--cc-bg);
+}
+
+.hero {
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+}
+
+.controls {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+.modeRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.micButton,
+.textModeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--cc-border);
+  background: var(--cc-surface);
+  color: var(--cc-text-primary);
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    color 150ms ease;
+}
+
+.micButton:hover,
+.textModeButton:hover {
+  transform: translateY(-1px);
+}
+
+.micButton {
+  width: 68px;
+  height: 68px;
+  border-radius: 999px;
+  box-shadow: 0 12px 24px rgba(45, 59, 69, 0.08);
+}
+
+.textModeButton {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+}
+
+.micButtonActive,
+.textModeButtonActive {
+  border-color: var(--cc-accent);
+  background: rgba(243, 91, 79, 0.08);
+  color: var(--cc-accent);
+}
