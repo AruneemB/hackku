@@ -18,25 +18,68 @@
 // }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import { getServerSession } from "next-auth"
-// TODO: import { sendApprovalRequest } from "@/lib/google/gmail"
-// TODO: import { getAccessToken } from "@/lib/google/oauth"
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/google/oauth"
+import { connectToDatabase } from "@/lib/mongodb/client"
+import Trip from "@/lib/mongodb/models/Trip"
+import { sendApprovalRequest } from "@/lib/google/gmail"
 
-// TODO: export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-//   // 1. Get session + access token
-//   // 2. Load trip + selected bundle from DB
-//   // 3. sendApprovalRequest(accessToken, trip, bundle) → gmailThreadId
-//   // 4. PATCH trip: { status: "pending_approval", approvalThread.gmailThreadId }
-//   // 5. Return success + threadId
-// }
+type ApproveRouteContext = { params: Promise<{ id: string }> }
 
-import { NextResponse } from "next/server";
+export async function POST(req: NextRequest, context: ApproveRouteContext) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 })
+    if (!session.accessToken) return NextResponse.json({ error: "No access token" }, { status: 403 })
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
-}
+    const { id } = await context.params
+    await connectToDatabase()
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+    const trip = await Trip.findById(id)
+    if (!trip) return NextResponse.json({ error: "Trip not found" }, { status: 404 })
+
+    // Don't re-send if already pending/approved
+    if (trip.approvalThread?.gmailThreadId) {
+      return NextResponse.json({
+        success: true,
+        gmailThreadId: trip.approvalThread.gmailThreadId,
+        alreadySent: true,
+      })
+    }
+
+    if (!trip.selectedBundle) {
+      return NextResponse.json({ error: "No bundle selected" }, { status: 400 })
+    }
+
+    const fromEmail = session.user?.email ?? "me"
+    const userName  = session.user?.name ?? "Kelli"
+
+    const threadId = await sendApprovalRequest(
+      session.accessToken,
+      fromEmail,
+      userName,
+      trip.toObject(),
+      trip.selectedBundle
+    )
+
+    await Trip.findByIdAndUpdate(id, {
+      status: "pending_approval",
+      "approvalThread.gmailThreadId": threadId,
+      "approvalThread.status": "pending",
+    })
+
+    const managerEmail = process.env.MANAGER_EMAIL ?? fromEmail
+    return NextResponse.json({
+      success: true,
+      gmailThreadId: threadId,
+      sentTo: managerEmail,
+    })
+  } catch (err) {
+    console.error("[approve]", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Approval request failed" },
+      { status: 500 }
+    )
+  }
 }

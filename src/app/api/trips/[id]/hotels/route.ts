@@ -20,24 +20,63 @@
 // }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import { findVendorsNearOffice, markPreferredVendors } from "@/lib/hotels/geoSearch"
-// TODO: import { searchHotels } from "@/lib/hotels/search"
+import { NextRequest, NextResponse } from "next/server"
+import { connectToDatabase } from "@/lib/mongodb/client"
+import Trip from "@/lib/mongodb/models/Trip"
+import { searchHotels } from "@/lib/hotels/search"
+import budgetCaps from "../../../../../../data/policy/budget-caps.json"
 
-// TODO: export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-//   // 1. Load trip + policy from DB
-//   // 2. searchHotels(destination, checkIn, checkOut)
-//   // 3. findVendorsNearOffice(officeLat, officeLng, radiusKm, country)
-//   // 4. markPreferredVendors(hotelResults, country)
-//   // 5. Save to trip.hotels, return results
-// }
+type HotelsRouteContext = { params: Promise<{ id: string }> }
 
-import { NextResponse } from "next/server";
+export async function POST(req: NextRequest, context: HotelsRouteContext) {
+  try {
+    const { id } = await context.params
+    await connectToDatabase()
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
-}
+    const trip = await Trip.findById(id)
+    if (!trip) {
+      return NextResponse.json({ error: "Trip not found" }, { status: 404 })
+    }
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+    const { city, country } = trip.destination
+    const policy = budgetCaps.cities.find(
+      (c) => c.country === country && c.city.toLowerCase() === city.toLowerCase()
+    )
+
+    if (!policy) {
+      return NextResponse.json(
+        { error: `No policy found for ${city} (${country})` },
+        { status: 404 }
+      )
+    }
+
+    const checkIn  = new Date(trip.dates.departure).toISOString().split("T")[0]
+    const checkOut = new Date(trip.dates.return).toISOString().split("T")[0]
+
+    const hotels = await searchHotels({
+      city,
+      country,
+      checkIn,
+      checkOut,
+      officeLat: policy.officeLat,
+      officeLng: policy.officeLng,
+      hotelNightlyCapUsd: policy.hotelNightlyCapUsd,
+    })
+
+    // Persist hotels onto the trip document
+    await Trip.findByIdAndUpdate(id, { hotels })
+
+    return NextResponse.json({
+      hotels,
+      policyCapUsd: policy.hotelNightlyCapUsd,
+      officeLat: policy.officeLat,
+      officeLng: policy.officeLng,
+    })
+  } catch (err) {
+    console.error("[trips/hotels]", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Hotel search failed" },
+      { status: 500 }
+    )
+  }
 }

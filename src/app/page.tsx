@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
 import styles from "./page.module.css";
@@ -75,11 +76,13 @@ function MessageCircleMoreIcon() {
 
 export default function HomePage() {
   const { say } = useMascot();
+  const { data: session } = useSession();
   const [mode, setMode] = useState<"talk" | "text">("talk");
 
   useEffect(() => {
-    void say("Hi Kelli! Where are we headed today?", "neutral");
-  }, [say]);
+    const firstName = session?.user?.name?.split(" ")[0] ?? "there"
+    void say(`Hi ${firstName}! Where are we headed today?`, "neutral");
+  }, [say, session?.user?.name]);
 
   function handleTalk() {
     setMode("talk");

@@ -41,8 +41,10 @@ export function Mascot({
   figureClassName = "",
   bubbleClassName = "",
 }: MascotProps) {
-  const { speech, visibleLength, tone, isSpeaking } = useMascot();
-  const mascotImage = MASCOT_IMAGES[tone];
+  const { speech, visibleLength, tone, isSpeaking, isThinking } = useMascot();
+  const mascotImage = isThinking
+    ? { src: "/mascot/thinking.png", alt: "Kelli mascot thinking" }
+    : MASCOT_IMAGES[tone];
   const imageNode = (
     <div
       className={figureClassName}

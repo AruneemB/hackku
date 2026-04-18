@@ -18,32 +18,44 @@
 // REQUEST BODY (from Atlas Trigger or polling logic):
 // {
 //   "tripId": "665a2b3c4d5e6f7a8b9c0d1e",
-//   "gmailThreadId": "1234abcd5678efgh",
-//   "managerReply": "Approved. Good trip planning!",
-//   "approved": true
+//   "approved": true,
+//   "managerReply": "Approved. Good trip planning!"
 // }
 //
 // RESPONSE (200):
 // { "success": true, "tripStatus": "approved" }
 // ============================================================
 
-// TODO: import { NextRequest, NextResponse } from "next/server"
-// TODO: import Trip from "@/lib/mongodb/models/Trip"
+import { NextRequest, NextResponse } from "next/server"
+import { connectToDatabase } from "@/lib/mongodb/client"
+import Trip from "@/lib/mongodb/models/Trip"
 
-// TODO: export async function POST(req: NextRequest) {
-//   // Parse body: { tripId, approved, managerReply }
-//   // Update trip: status = approved ? "approved" : "rejected"
-//   //              approvalThread.status = approved ? "approved" : "rejected"
-//   //              approvalThread.reason = managerReply (if rejected)
-//   // Return success
-// }
+export async function POST(req: NextRequest) {
+  try {
+    const { tripId, approved, managerReply } = await req.json()
+    if (!tripId) return NextResponse.json({ error: "tripId required" }, { status: 400 })
 
-import { NextResponse } from "next/server";
+    await connectToDatabase()
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
-}
+    const newStatus = approved ? "approved" : "rejected"
+    const trip = await Trip.findByIdAndUpdate(
+      tripId,
+      {
+        status: newStatus,
+        "approvalThread.status": newStatus,
+        "approvalThread.reason": managerReply ?? null,
+      },
+      { new: true }
+    )
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+    if (!trip) return NextResponse.json({ error: "Trip not found" }, { status: 404 })
+
+    return NextResponse.json({ success: true, tripStatus: newStatus })
+  } catch (err) {
+    console.error("[gmail-approval]", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Webhook failed" },
+      { status: 500 }
+    )
+  }
 }
