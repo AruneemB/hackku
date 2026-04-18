@@ -67,8 +67,21 @@ async function main() {
 
     console.log("✅ Vector Search index 'policy_vector_index' creation command sent.");
     console.log("ℹ️ Note: Index creation may take a few minutes to become active in Atlas.");
-  } catch (error: any) {
-    if (error.codeName === "IndexAlreadyExists" || error.message?.includes("already exists")) {
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "codeName" in error &&
+      error.codeName === "IndexAlreadyExists"
+    ) {
+      console.log("ℹ️ Index 'policy_vector_index' already exists — skipping");
+    } else if (
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string" &&
+      error.message.includes("already exists")
+    ) {
       console.log("ℹ️ Index 'policy_vector_index' already exists — skipping");
     } else {
       console.error("❌ Failed to create Vector Search index:", error);

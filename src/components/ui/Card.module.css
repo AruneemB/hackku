@@ -1,0 +1,68 @@
+.card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--cc-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: transparent;
+}
+
+.header {
+  padding: 16px 16px 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--cc-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 8px 0 0;
+  color: var(--cc-text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  color: var(--cc-body);
+  font-size: 12px;
+  line-height: 1.45;
+  letter-spacing: 0.2px;
+}
+
+.body {
+  padding: 16px;
+}
+
+.footer {
+  padding: 0 16px 16px;
+}
+
+.green::before {
+  background: #00c389;
+}
+
+.amber::before {
+  background: #d9bb74;
+}
+
+.red::before {
+  background: #fc5050;
+}
+
+.blue::before {
+  background: var(--cc-accent);
+}

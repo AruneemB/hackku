@@ -1,50 +1,124 @@
-// ============================================================
-// HOOK: useMascot
-// OWNER: Track A (Frontend & UX) + Track B (ElevenLabs)
-// DESCRIPTION: Central state manager for the mascot character.
-//   Controls what the mascot says, what tone it speaks in,
-//   and whether it is currently speaking (for animation).
-//
-//   Tone is set by business logic (e.g. approved → "excited",
-//   delayed → "empathetic") and consumed by:
-//   - SpeechBubble.tsx (displays text)
-//   - ToneIndicator.tsx (changes mascot color/expression)
-//   - ElevenLabs client (controls voice stability settings)
-//
-// USAGE:
-//   const { speech, tone, isSpeaking, say, setTone } = useMascot()
-//   say("Kelli, your trip is approved!", "excited")
-// ============================================================
+"use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
-// Mock speak function for now as ElevenLabs client is also likely a scaffold
-// import { speak } from "@/lib/elevenlabs/client";
+import { useEffect, useState } from "react";
 import type { ToneKey } from "@/lib/elevenlabs/tones";
 
+type MascotState = {
+  speech: string;
+  tone: ToneKey;
+  isSpeaking: boolean;
+};
+
+const listeners = new Set<() => void>();
+
+let mascotState: MascotState = {
+  speech: "",
+  tone: "neutral",
+  isSpeaking: false,
+};
+
+let fallbackTimer: number | null = null;
+
+function emitChange() {
+  listeners.forEach((listener) => listener());
+}
+
+function setMascotState(nextState: Partial<MascotState>) {
+  mascotState = { ...mascotState, ...nextState };
+  emitChange();
+}
+
+function clearSpeechWork() {
+  if (fallbackTimer) {
+    window.clearTimeout(fallbackTimer);
+    fallbackTimer = null;
+  }
+
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function getFallbackDuration(text: string) {
+  return Math.min(Math.max(text.length * 35, 1500), 5000);
+}
+
+async function say(text: string, newTone?: ToneKey) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  clearSpeechWork();
+
+  const tone = newTone ?? mascotState.tone;
+  setMascotState({
+    speech: text,
+    tone,
+    isSpeaking: true,
+  });
+
+  if (!("speechSynthesis" in window)) {
+    await new Promise<void>((resolve) => {
+      fallbackTimer = window.setTimeout(() => {
+        setMascotState({ isSpeaking: false });
+        fallbackTimer = null;
+        resolve();
+      }, getFallbackDuration(text));
+    });
+
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = tone === "urgent" ? 1.08 : tone === "excited" ? 1.02 : 0.98;
+    utterance.pitch = tone === "excited" ? 1.1 : tone === "empathetic" ? 0.95 : 1;
+    utterance.onend = () => {
+      setMascotState({ isSpeaking: false });
+      resolve();
+    };
+    utterance.onerror = () => {
+      setMascotState({ isSpeaking: false });
+      resolve();
+    };
+
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+function setTone(tone: ToneKey) {
+  setMascotState({ tone });
+}
+
+function stopSpeaking() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  clearSpeechWork();
+  setMascotState({ isSpeaking: false });
+}
+
 export function useMascot() {
-  const [speech, setSpeech] = useState<string>("");
-  const [tone, setTone] = useState<ToneKey>("neutral");
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [state, setState] = useState(mascotState);
 
   useEffect(() => {
+    function handleChange() {
+      setState({ ...mascotState });
+    }
+
+    listeners.add(handleChange);
+    handleChange();
+
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      listeners.delete(handleChange);
     };
   }, []);
 
-  const say = useCallback(async (text: string, newTone?: ToneKey) => {
-    if (newTone) setTone(newTone);
-    setSpeech(text);
-    setIsSpeaking(true);
-    console.log(`Mascot says: "${text}" with tone: ${newTone || tone}`);
-    // const audio = await speak(text, newTone ?? tone)
-    // play audio stream
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      setIsSpeaking(false);
-    }, 2000); // Simulate speaking
-  }, [tone]);
-
-  return { speech, tone, isSpeaking, say, setTone };
+  return {
+    ...state,
+    say,
+    setTone,
+    stopSpeaking,
+  };
 }
