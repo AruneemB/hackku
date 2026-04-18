@@ -17,21 +17,29 @@
 // EXAMPLE DOC → see src/types/hotel.ts
 // ============================================================
 
-// TODO: const PreferredVendorSchema = new Schema({
-//         type: { type: String, enum: ["hotel", "airline"] },
-//         name: String,
-//         location: {
-//           type: { type: String, enum: ["Point"], default: "Point" },
-//           coordinates: { type: [Number] }  // [lng, lat]
-//         },
-//         amenities: {
-//           freeBreakfast: Boolean, wifi: Boolean,
-//           gym: Boolean, parking: Boolean
-//         },
-//         nightlyRateUsd: Number,
-//         preferred: { type: Boolean, default: true },
-//         city: String,
-//         country: String
-//       })
-// TODO: PreferredVendorSchema.index({ location: "2dsphere" })
-// TODO: export default models.PreferredVendor || model("PreferredVendor", ...)
+import { Schema, model, models } from "mongoose"
+
+const PreferredVendorSchema = new Schema({
+  type: { type: String, enum: ["hotel", "airline"] },
+  name: String,
+  location: {
+    type: { type: String, enum: ["Point"], default: "Point" },
+    coordinates: { type: [Number] }, // [lng, lat]
+  },
+  address: String,
+  amenities: {
+    freeBreakfast: Boolean,
+    wifi: Boolean,
+    gym: Boolean,
+    parking: Boolean,
+  },
+  nightlyRateUsd: Number,
+  preferred: { type: Boolean, default: true },
+  city: String,
+  country: String,
+  contactPhone: String,
+})
+
+PreferredVendorSchema.index({ location: "2dsphere" })
+
+export default models.PreferredVendor || model("PreferredVendor", PreferredVendorSchema)

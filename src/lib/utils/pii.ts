@@ -10,17 +10,23 @@
 //   Called in /api/trips/[id]/receipts BEFORE writing to DB.
 // ============================================================
 
-// TODO: export function sanitizeReceiptData(raw: GeminiReceiptExtraction): GeminiReceiptExtraction {
-//   // Strip credit card numbers (regex: 4+ digit groups)
-//   // Strip CVV patterns
-//   // Strip SSN patterns
-//   // Return sanitized copy with hasPII: false
-// }
+import type { GeminiReceiptExtraction } from "@/types"
 
-// TODO: const CARD_NUMBER_REGEX = /\b(?:\d[ -]*?){13,16}\b/g;
-// TODO: const CVV_REGEX = /\b\d{3,4}\b/g;
-// TODO: const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g;
+const CARD_NUMBER_REGEX = /\b(?:\d[ -]*?){13,16}\b/g
+const CVV_REGEX = /\bcvv\s*:?\s*\d{3,4}\b/gi
+const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g
 
-// TODO: export function maskString(value: string): string {
-//   // Replaces detected PII with "***REDACTED***"
-// }
+export function maskString(value: string): string {
+  return value
+    .replace(CARD_NUMBER_REGEX, "***REDACTED***")
+    .replace(CVV_REGEX, "CVV: ***REDACTED***")
+    .replace(SSN_REGEX, "***REDACTED***")
+}
+
+export function sanitizeReceiptData(raw: GeminiReceiptExtraction): GeminiReceiptExtraction {
+  return {
+    ...raw,
+    merchant: maskString(raw.merchant),
+    hasPII: false,
+  }
+}

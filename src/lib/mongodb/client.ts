@@ -15,7 +15,17 @@
 // ENV REQUIRED: MONGODB_URI (Atlas connection string)
 // ============================================================
 
-// TODO: import MongoClient from "mongodb"
-// TODO: declare global { var _mongoClientPromise: Promise<MongoClient> }
-// TODO: if (!global._mongoClientPromise) create new MongoClient(uri)
-// TODO: export default global._mongoClientPromise
+import { MongoClient } from "mongodb"
+
+const uri = process.env.MONGODB_URI!
+
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined
+}
+
+if (!global._mongoClientPromise) {
+  const client = new MongoClient(uri)
+  global._mongoClientPromise = client.connect()
+}
+
+export default global._mongoClientPromise
