@@ -41,11 +41,12 @@ export function Mascot({
   figureClassName = "",
   bubbleClassName = "",
 }: MascotProps) {
-  const { speech, tone, isSpeaking } = useMascot();
+  const { speech, visibleLength, tone, isSpeaking } = useMascot();
   const mascotImage = MASCOT_IMAGES[tone];
   const imageNode = (
     <div
       className={figureClassName}
+      data-speaking={String(isSpeaking)}
       style={{
         position: "relative",
         display: "grid",
@@ -74,6 +75,7 @@ export function Mascot({
       key={speech}
       size={bubbleSize}
       text={speech}
+      visibleLength={visibleLength}
       variant={bubbleVariant}
     />
   ) : null;

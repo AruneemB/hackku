@@ -4,42 +4,286 @@ import { useEffect, useRef, useState } from "react";
 import { Ellipsis, Pencil } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
+import type { Flight } from "@/types/flight";
 import styles from "./page.module.css";
 
+// ── Types ──────────────────────────────────────────────────────
+
 type Tone = "neutral" | "excited" | "empathetic" | "urgent";
+
+type TripData = {
+  city: string;
+  country: string;
+  departure: string;
+  returnDate: string;
+  passportExpiry: string;
+  purpose: string;
+};
+
+type ConversationMessage = { role: "user" | "assistant"; content: string };
 
 type DemoFrame = {
   tone: Tone;
   message: string;
   sheetTitle: string;
   options: [string, string];
-  Visual: React.FC;
+  Visual: React.ComponentType;
   actionTitle: string;
-  ActionVisual: React.FC;
+  ActionVisual: React.ComponentType;
 };
 
-// ── Main Visual components ─────────────────────────────────────
+type DemoProgressSnapshot = {
+  version: 1;
+  currentIndex: number;
+  overlayReady: boolean;
+  overlayDismissed: boolean;
+  tripId: string | null;
+  tripData: TripData | null;
+  frameCompleted: Record<number, boolean>;
+  conversationMessages: ConversationMessage[];
+  knownFields: Record<string, string>;
+  selectedFlight: number;
+  selectedBundle: number | null;
+};
 
-function TripCard() {
+// ── Demo data (hardcoded for unimplemented integrations) ───────
+
+const DEMO_DEFAULTS: TripData = {
+  city: "Milan",
+  country: "IT",
+  departure: "2025-09-14",
+  returnDate: "2025-09-19",
+  passportExpiry: "2025-01-01",
+  purpose: "Client on-site meeting",
+};
+
+const DEMO_FLIGHTS = [
+  { id: "lh8904", flightNumber: "LH 8904", carrier: "Lufthansa", route: "ORD → MXP", priceUsd: 687, dep: "8:45 AM", arr: "11:20 AM+1", dur: "9h 35m", stops: "Nonstop" },
+  { id: "lx0117", flightNumber: "LX 0117", carrier: "Swiss", route: "ORD → ZRH → MXP", priceUsd: 543, dep: "6:15 AM", arr: "2:50 PM+1", dur: "10h 35m", stops: "1 stop" },
+  { id: "af0264", flightNumber: "AF 0264", carrier: "Air France", route: "ORD → BGY", priceUsd: 412, dep: "10:30 AM", arr: "12:15 PM+1", dur: "8h 45m", stops: "Nonstop" },
+];
+
+type DisplayFlight = { id: string; flightNumber: string; carrier: string; route: string; priceUsd: number; dep: string; arr: string; dur: string; stops: string; tag?: string };
+
+const CITY_TO_AIRPORT: Record<string, string> = {
+  milan: "MXP", rome: "FCO", paris: "CDG", london: "LHR", tokyo: "NRT",
+  "new york": "JFK", chicago: "ORD", dubai: "DXB", amsterdam: "AMS",
+  frankfurt: "FRA", madrid: "MAD", barcelona: "BCN", lisbon: "LIS",
+  singapore: "SIN", sydney: "SYD", toronto: "YYZ", zurich: "ZRH",
+};
+
+function fmtTime(d: Date | string) {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+function fmtDur(min: number) {
+  return `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+
+function toTitleCase(value: string) {
+  return value.replace(/\w\S*/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase());
+}
+
+const DEMO_HOTELS = [
+  { id: "marriott-scala", name: "Marriott Scala", address: "Via della Spiga 31, Milan", pricePerNightUsd: 247, distanceKm: 0.4, isPreferred: true, confirmationNum: "MR-20250914-7741" },
+  { id: "ac-hotel-milan", name: "AC Hotel Milan", address: "Via Larga 23, Milan", pricePerNightUsd: 189, distanceKm: 1.2, isPreferred: true, confirmationNum: "AC-20250914-9921" },
+  { id: "nh-collection", name: "NH Collection", address: "Piazza Cavour 2, Milan", pricePerNightUsd: 165, distanceKm: 2.1, isPreferred: false, confirmationNum: "NH-20250914-3312" },
+];
+
+const DEMO_POLICY = {
+  hotelNightlyCapUsd: 200,
+  flightCapUsd: 800,
+  mealAllowancePerDayUsd: 75,
+  requiresManagerApproval: true,
+  approvalReason: "Hotel at $247/night exceeds $200 Milan cap",
+  mascotSummary: "Checked your company policy — no visa needed for US citizens in Italy, but Marriott Scala is $47 over the $200 cap and needs manager sign-off.",
+};
+
+const DEMO_PROGRESS_STORAGE_KEY = "hackku.demo.progress.v1";
+
+const DEMO_BUNDLES = [
+  { label: "A", description: "MXP direct · Marriott Scala. Full compliance, hotel exception needed.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2340, savingsVsStandard: 0, complianceFlags: ["hotel_over_cap"] },
+  { label: "B", description: "BGY airport · AC Hotel 1.2 km. Saves $500. Fully compliant.", flightId: "af0264", hotelId: "ac-hotel-milan", totalCostUsd: 1840, savingsVsStandard: 500, complianceFlags: [] },
+  { label: "C", description: "Weekend stay strategy · Marriott Scala. Best overall value.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2010, savingsVsStandard: 330, complianceFlags: [] },
+];
+
+const REBOOKED_FLIGHT = { id: "lh9012", flightNumber: "LH 9012", carrier: "Lufthansa", route: "ORD → MXP", priceUsd: 1067, dep: "9:00 PM", arr: "12:30 PM+1", dur: "9h 30m", stops: "Nonstop" };
+
+const DEMO_RECEIPT = {
+  merchant: "Ristorante Al Porto",
+  category: "meal",
+  total: "87.50",
+  currency: "EUR",
+  date: "2025-09-16T20:42:00.000Z",
+  sanitized: true,
+};
+
+// ── MongoDB helpers ────────────────────────────────────────────
+
+async function patchTrip(tripId: string, data: Record<string, unknown>) {
+  const res = await fetch(`/api/trips/${tripId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Trip update failed");
+}
+
+async function executeFrameAction(
+  frameIdx: number,
+  tripId: string,
+  sel: { flight: number; bundle: number | null; liveFlights?: Flight[] | null }
+) {
+  const flight = sel.liveFlights?.[sel.flight] ?? DEMO_FLIGHTS[sel.flight] ?? DEMO_FLIGHTS[0];
+  const bundle = sel.bundle !== null ? DEMO_BUNDLES[sel.bundle] : DEMO_BUNDLES[2];
+
+  switch (frameIdx) {
+    case 1:
+      await patchTrip(tripId, { flights: [flight] });
+      break;
+    case 2:
+      await patchTrip(tripId, { hotels: [DEMO_HOTELS[0]] });
+      break;
+    case 3:
+      await patchTrip(tripId, { policyFindings: DEMO_POLICY });
+      break;
+    case 4:
+      await patchTrip(tripId, { selectedBundle: bundle });
+      break;
+    case 5:
+      await patchTrip(tripId, {
+        status: "pending_approval",
+        approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
+      });
+      break;
+    case 6:
+      await patchTrip(tripId, {
+        hotels: [DEMO_HOTELS[1]],
+        approvalThread: { gmailThreadId: "demo-thread-002", status: "pending", reason: null },
+      });
+      break;
+    case 7:
+      await patchTrip(tripId, { status: "approved" });
+      break;
+    case 8:
+      await patchTrip(tripId, { status: "active" });
+      break;
+    case 9:
+      await patchTrip(tripId, { flights: [REBOOKED_FLIGHT] });
+      break;
+    case 10:
+      await patchTrip(tripId, {
+        approvalThread: { gmailThreadId: "exception-thread-001", status: "pending", reason: "Emergency rebooking $380 over approved budget" },
+      });
+      break;
+    case 11:
+    case 13:
+      break;
+    case 12:
+      await patchTrip(tripId, { receipts: [DEMO_RECEIPT] });
+      break;
+    case 14:
+      await patchTrip(tripId, { status: "archived", totalSpendUsd: "2187.00" });
+      break;
+    default:
+      break;
+  }
+}
+
+async function revertFrameAction(frameIdx: number, tripId: string) {
+  switch (frameIdx) {
+    case 1:
+      await patchTrip(tripId, { flights: [] });
+      break;
+    case 2:
+      await patchTrip(tripId, { hotels: [] });
+      break;
+    case 3:
+      await patchTrip(tripId, { policyFindings: null });
+      break;
+    case 4:
+      await patchTrip(tripId, { selectedBundle: null });
+      break;
+    case 5:
+      await patchTrip(tripId, {
+        status: "draft",
+        approvalThread: { gmailThreadId: null, status: null, reason: null },
+      });
+      break;
+    case 6:
+      await patchTrip(tripId, {
+        hotels: [DEMO_HOTELS[0]],
+        approvalThread: { gmailThreadId: "demo-thread-001", status: "rejected", reason: "Hotel exceeds $200 nightly cap" },
+      });
+      break;
+    case 7:
+      await patchTrip(tripId, { status: "pending_approval" });
+      break;
+    case 8:
+      await patchTrip(tripId, { status: "approved" });
+      break;
+    case 9:
+      await patchTrip(tripId, { flights: [DEMO_FLIGHTS[0]] });
+      break;
+    case 10:
+      await patchTrip(tripId, {
+        approvalThread: { gmailThreadId: "demo-thread-001", status: "approved", reason: null },
+      });
+      break;
+    case 11:
+    case 13:
+      break;
+    case 12:
+      await patchTrip(tripId, { receipts: [] });
+      break;
+    case 14:
+      await patchTrip(tripId, { status: "active", totalSpendUsd: "0" });
+      break;
+    default:
+      break;
+  }
+}
+
+function isPassportExpiringSoon(passportExpiry: string, departure: string): boolean {
+  const expiry = new Date(passportExpiry);
+  const dep = new Date(departure);
+  dep.setMonth(dep.getMonth() - 6);
+  return expiry <= dep;
+}
+
+// ── Visual components ──────────────────────────────────────────
+
+function TripCard({ tripData }: { tripData?: TripData | null }) {
+  const data = tripData ?? DEMO_DEFAULTS;
+  const depDate = new Date(data.departure);
+  const retDate = new Date(data.returnDate);
+  const nights = Math.round((retDate.getTime() - depDate.getTime()) / 86400000);
+  const depStr = depDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const retStr = retDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const expiryStr = new Date(data.passportExpiry).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  const showWarning = isPassportExpiringSoon(data.passportExpiry, data.departure);
+  const purpose = data.purpose ? toTitleCase(data.purpose) : "Not specified";
+
   return (
     <div className={styles.tripCard}>
       <div className={styles.tripDestination}>
-        <div className={styles.tripCity}>Milan, Italy</div>
-        <div className={styles.tripDates}>Sep 14 to Sep 19, 2025 · 5 nights</div>
+        <div className={styles.tripCity}>{data.city}{data.country !== data.city ? `, ${data.country}` : ""}</div>
+        <div className={styles.tripDates}>{depStr} to {retStr} · {nights} nights</div>
       </div>
-      <div className={styles.alertBox}>
-        <span className={styles.alertIcon}>⚠️</span>
-        <div>
-          <div className={styles.alertTitle}>Passport expires Jan 2025</div>
-          <div className={styles.alertBody}>Within 6 months of travel - renewal recommended after this trip</div>
+      {showWarning && (
+        <div className={styles.alertBox}>
+          <span className={styles.alertIcon}>⚠️</span>
+          <div>
+            <div className={styles.alertTitle}>Passport expires {expiryStr}</div>
+            <div className={styles.alertBody}>Within 6 months of travel — renewal recommended</div>
+          </div>
         </div>
-      </div>
+      )}
       <div className={styles.infoGrid}>
         {[
           ["Traveler", "Kelli Monroe"],
           ["Department", "Risk Management"],
-          ["Purpose", "Client on-site meeting"],
-          ["Document", "Trip #TRP-20250914"],
+          ["Purpose", purpose],
         ].map(([k, v]) => (
           <div className={styles.infoRow} key={k}>
             <span className={styles.infoKey}>{k}</span>
@@ -51,28 +295,65 @@ function TripCard() {
   );
 }
 
-function FlightPicker() {
-  const [sel, setSel] = useState(0);
-  const flights = [
-    { code: "LH 8904", route: "ORD → MXP", dep: "8:45 AM", arr: "11:20 AM+1", dur: "9h 35m", stops: "Nonstop", price: "$687", tag: "Best pick" },
-    { code: "LX 0117", route: "ORD → ZRH → MXP", dep: "6:15 AM", arr: "2:50 PM+1", dur: "10h 35m", stops: "1 stop", price: "$543", tag: "" },
-    { code: "AF 0264", route: "ORD → BGY", dep: "10:30 AM", arr: "12:15 PM+1", dur: "8h 45m", stops: "Nonstop", price: "$412", tag: "Cheapest" },
-  ];
+function FlightPicker({ value, onChange, flights }: { value?: number; onChange?: (i: number) => void; flights?: DisplayFlight[] | null }) {
+  const [localSel, setLocalSel] = useState(0);
+  const sel = value ?? localSel;
+  const setSel = onChange ?? setLocalSel;
+  const list = flights ?? DEMO_FLIGHTS;
+
+  const tags: Record<number, string> = {};
+  if (list.length > 0) {
+    const firstTag = "tag" in list[0] && typeof list[0].tag === "string" ? list[0].tag : undefined;
+    tags[0] = firstTag ?? "Best pick";
+    const cheapest = list.reduce((ci, f, i) => f.priceUsd < list[ci].priceUsd ? i : ci, 0);
+    if (cheapest !== 0) {
+      const cheapestTag = "tag" in list[cheapest] && typeof list[cheapest].tag === "string"
+        ? list[cheapest].tag
+        : undefined;
+      tags[cheapest] = cheapestTag ?? "Cheapest";
+    }
+  }
+
   return (
     <div className={styles.cards}>
-      {flights.map((f, i) => (
-        <button className={[styles.card, sel === i ? styles.cardSelected : ""].join(" ")} key={f.code} onClick={() => setSel(i)} type="button">
+      {list.map((f, i) => (
+        <button
+          className={[styles.card, sel === i ? styles.cardSelected : ""].join(" ")}
+          key={f.id}
+          onClick={() => setSel(i)}
+          type="button"
+        >
           <div className={styles.cardRow}>
-            <span className={styles.cardLabel}>{f.code}</span>
-            {f.tag && <span className={styles.cardTag}>{f.tag}</span>}
+            <span className={styles.cardLabel}>{f.flightNumber}</span>
+            {tags[i] && <span className={styles.cardTag}>{tags[i]}</span>}
           </div>
           <div className={styles.cardRow}>
             <span className={styles.cardTime}>{f.dep} → {f.arr}</span>
-            <span className={styles.cardPrice}>{f.price}</span>
+            <span className={styles.cardPrice}>${f.priceUsd}</span>
           </div>
           <span className={styles.cardMeta}>{f.route} · {f.dur} · {f.stops}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+function FlightSearchState({
+  title,
+  body,
+  icon,
+}: {
+  title: string;
+  body: string;
+  icon: string;
+}) {
+  return (
+    <div className={styles.alertBox}>
+      <span className={styles.alertIcon}>{icon}</span>
+      <div>
+        <div className={styles.alertTitle}>{title}</div>
+        <div className={styles.alertBody}>{body}</div>
+      </div>
     </div>
   );
 }
@@ -195,7 +476,7 @@ function HotelComparison() {
         <div className={styles.compareName}>AC Hotel Milan</div>
         <div className={styles.comparePrice}>$189 / night</div>
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
-        <div className={styles.compareMeta}>0.4 km from office</div>
+        <div className={styles.compareMeta}>1.2 km from office</div>
         <div className={styles.compareReason}>Saves $290 total · fully compliant</div>
       </div>
     </div>
@@ -214,11 +495,7 @@ function PrepChecklist() {
   function toggle(i: number) {
     setDone((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) {
-        next.delete(i);
-      } else {
-        next.add(i);
-      }
+      if (next.has(i)) next.delete(i); else next.add(i);
       return next;
     });
   }
@@ -441,8 +718,10 @@ function PrivacySummary() {
   );
 }
 
-function BundlePicker() {
-  const [sel, setSel] = useState<number | null>(null);
+function BundlePicker({ value, onChange }: { value?: number | null; onChange?: (i: number) => void }) {
+  const [localSel, setLocalSel] = useState<number | null>(null);
+  const sel = value !== undefined ? value : localSel;
+  const setSel = onChange ?? setLocalSel;
   const bundles = [
     { name: "Path A", badge: "Policy-safe", price: "$2,340", detail: "MXP direct · Marriott Scala", note: "Requires hotel sign-off" },
     { name: "Path B", badge: "Save $500", price: "$1,840", detail: "BGY airport · AC Hotel 1.2 km", note: "Fully compliant, no exceptions" },
@@ -467,7 +746,7 @@ function BundlePicker() {
   );
 }
 
-// ── Action Visual components (shown after primary button tap) ───
+// ── Action visual components ────────────────────────────────────
 
 function TripConfirmed() {
   return (
@@ -485,29 +764,13 @@ function FlightConfirmed() {
   return (
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
-        <div className={styles.eticketAirport}>
-          <div className={styles.eticketCode}>ORD</div>
-          <div className={styles.eticketCity}>Chicago</div>
-        </div>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
         <div className={styles.eticketPlane}>✈</div>
-        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}>
-          <div className={styles.eticketCode}>MXP</div>
-          <div className={styles.eticketCity}>Milan</div>
-        </div>
+        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
-        {[
-          ["Flight", "LH 8904"],
-          ["Date", "Sep 14, 2025"],
-          ["Departs", "8:45 AM"],
-          ["Seat", "14A (Window)"],
-          ["PNR", "XKMR74"],
-          ["Class", "Economy"],
-        ].map(([k, v]) => (
-          <div className={styles.eticketItem} key={k}>
-            <div className={styles.eticketKey}>{k}</div>
-            <div className={styles.eticketVal}>{v}</div>
-          </div>
+        {[["Flight","LH 8904"],["Date","Sep 14, 2025"],["Departs","8:45 AM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Class","Economy"]].map(([k,v]) => (
+          <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
         ))}
       </div>
     </div>
@@ -547,11 +810,7 @@ function VisaGuide() {
       <div className={styles.guideSteps}>
         {steps.map((step, i) => (
           <div className={styles.stepItem} key={step.n}>
-            <button
-              className={styles.stepHeader}
-              onClick={() => setOpen(open === i ? null : i)}
-              type="button"
-            >
+            <button className={styles.stepHeader} onClick={() => setOpen(open === i ? null : i)} type="button">
               <span className={styles.stepNum}>{step.n}</span>
               <span className={styles.stepTitle}>{step.title}</span>
               <span className={styles.stepChevron}>{open === i ? "▲" : "▼"}</span>
@@ -595,7 +854,7 @@ function ApprovalWatching() {
       <div className={styles.confirmCard}>
         <span className={styles.confirmEmoji}>📬</span>
         <div className={styles.confirmTitle}>Watching for Reply</div>
-        <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds - usually within 2 hours.</div>
+        <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds.</div>
       </div>
       <div className={styles.watchStatus}>
         <div className={styles.watchDot} />
@@ -621,7 +880,7 @@ function ResubmitEmail() {
       <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Updated - Milan Approval, Hotel Revised</span></div>
       <div className={styles.emailBody}>
         <p>Hi Sarah,</p>
-        <p>Following your feedback, I&#39;ve switched to <strong>AC Hotel Milan at $189/night</strong> - fully within the $200 cap. Total drops to $1,840.</p>
+        <p>Following your feedback, I&#39;ve switched to <strong>AC Hotel Milan at $189/night</strong> — fully within the $200 cap. Total drops to $1,840.</p>
         <p>Everything else is the same. Please let me know if you&#39;re happy to approve.</p>
         <p>Thanks,<br />Kelli</p>
       </div>
@@ -666,29 +925,13 @@ function RebookingConfirmed() {
   return (
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
-        <div className={styles.eticketAirport}>
-          <div className={styles.eticketCode}>ORD</div>
-          <div className={styles.eticketCity}>Chicago</div>
-        </div>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
         <div className={styles.eticketPlane}>✈</div>
-        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}>
-          <div className={styles.eticketCode}>MXP</div>
-          <div className={styles.eticketCity}>Milan</div>
-        </div>
+        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
-        {[
-          ["Flight", "LH 9012"],
-          ["Date", "Sep 14, 2025"],
-          ["Departs", "9:00 PM"],
-          ["Seat", "14A (Window)"],
-          ["PNR", "XKMR74"],
-          ["Change fee", "None"],
-        ].map(([k, v]) => (
-          <div className={styles.eticketItem} key={k}>
-            <div className={styles.eticketKey}>{k}</div>
-            <div className={styles.eticketVal}>{v}</div>
-          </div>
+        {[["Flight","LH 9012"],["Date","Sep 14, 2025"],["Departs","9:00 PM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Change fee","None"]].map(([k,v]) => (
+          <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
         ))}
       </div>
       <div className={[styles.eticketBadge, styles.eticketBadgeGreen].join(" ")}>Hotel notified · No further action needed</div>
@@ -769,12 +1012,7 @@ function TripArchived() {
         <div className={styles.confirmBody}>Expense report drafted and sent to mgr.sarah@lockton.com for final sign-off.</div>
       </div>
       <div className={styles.archiveSummary}>
-        {[
-          ["Total spent", "$2,187"],
-          ["Under budget by", "$153"],
-          ["Receipts logged", "7"],
-          ["Days on trip", "5"],
-        ].map(([k, v]) => (
+        {[["Total spent","$2,187"],["Under budget by","$153"],["Receipts logged","7"],["Days on trip","5"]].map(([k,v]) => (
           <div className={styles.archiveRow} key={k}>
             <span className={styles.archiveKey}>{k}</span>
             <span className={styles.archiveVal}>{v}</span>
@@ -797,153 +1035,25 @@ function DataCleared() {
   );
 }
 
-// ── Frame data ─────────────────────────────────────────────────
+// ── Frame definitions ──────────────────────────────────────────
 
 const FRAMES: DemoFrame[] = [
-  {
-    tone: "neutral",
-    message: "Hi Kelli. Tell me where you are going and the dates, and I will start a draft trip.",
-    sheetTitle: "Your Trip",
-    options: ["Looks Right", "Adjust"],
-    Visual: TripCard,
-    actionTitle: "Trip Confirmed",
-    ActionVisual: TripConfirmed,
-  },
-  {
-    tone: "neutral",
-    message: "I am searching nearby airports, a five-day window, and Saturday-night savings.",
-    sheetTitle: "Choose a Flight",
-    options: ["Confirm Flight", "Adjust"],
-    Visual: FlightPicker,
-    actionTitle: "Your E-Ticket",
-    ActionVisual: FlightConfirmed,
-  },
-  {
-    tone: "neutral",
-    message: "I found nearby hotels and highlighted preferred vendors close to the client office.",
-    sheetTitle: "Hotels Near Client Office",
-    options: ["Looks Right", "Adjust"],
-    Visual: HotelMap,
-    actionTitle: "Hotel Booked",
-    ActionVisual: HotelConfirmed,
-  },
-  {
-    tone: "empathetic",
-    message: "I checked the rules. You need a Type-C visa and this hotel needs a quick sign-off.",
-    sheetTitle: "Compliance Check Complete",
-    options: ["Apply for Visa", "Adjust"],
-    Visual: ComplianceReport,
-    actionTitle: "Visa Application Guide",
-    ActionVisual: VisaGuide,
-  },
-  {
-    tone: "excited",
-    message: "Here are three bundle paths. I can optimize for policy, savings, or proximity.",
-    sheetTitle: "Choose Your Bundle",
-    options: ["Confirm Bundle", "Adjust"],
-    Visual: BundlePicker,
-    actionTitle: "Itinerary Confirmed",
-    ActionVisual: BundleConfirmed,
-  },
-  {
-    tone: "neutral",
-    message: "I drafted the approval email and started watching the manager thread.",
-    sheetTitle: "Approval Request Ready",
-    options: ["Send", "Edit Draft"],
-    Visual: ApprovalEmail,
-    actionTitle: "Approval Sent",
-    ActionVisual: ApprovalWatching,
-  },
-  {
-    tone: "empathetic",
-    message: "The manager rejected the hotel cost. Here is a compliant alternative ready to resubmit.",
-    sheetTitle: "Recovery Option Prepared",
-    options: ["Resubmit", "Adjust"],
-    Visual: HotelComparison,
-    actionTitle: "Resubmitting to Manager",
-    ActionVisual: ResubmitEmail,
-  },
-  {
-    tone: "excited",
-    message: "Your trip is approved. I generated the checklist, visa link, and packing reminders.",
-    sheetTitle: "Your Travel Checklist",
-    options: ["All Set", "Adjust"],
-    Visual: PrepChecklist,
-    actionTitle: "All Packed!",
-    ActionVisual: TripReady,
-  },
-  {
-    tone: "neutral",
-    message: "Live mode is active. Your gate, weather, hotel, and travel conditions are updating.",
-    sheetTitle: "Live Travel Mode",
-    options: ["Looks Right", "Adjust"],
-    Visual: LiveDashboard,
-    actionTitle: "You're Covered",
-    ActionVisual: LiveConfirmed,
-  },
-  {
-    tone: "urgent",
-    message: "I detected a delay. I already found a later flight and notified your hotel.",
-    sheetTitle: "Disruption Handled",
-    options: ["Accept Rebooking", "Adjust"],
-    Visual: FlightRebooking,
-    actionTitle: "New E-Ticket",
-    ActionVisual: RebookingConfirmed,
-  },
-  {
-    tone: "urgent",
-    message: "The only rebooking is over budget. I drafted an emergency exception for your manager.",
-    sheetTitle: "Emergency Exception",
-    options: ["Send", "Edit Draft"],
-    Visual: ExceptionEmail,
-    actionTitle: "Exception Requested",
-    ActionVisual: ExceptionPending,
-  },
-  {
-    tone: "neutral",
-    message: "You have arrived. Here is the fastest route to the hotel and your daily meal allowance.",
-    sheetTitle: "On-the-Ground Support",
-    options: ["Got It", "Adjust"],
-    Visual: ArrivalSupport,
-    actionTitle: "Transport Booked",
-    ActionVisual: TransportConfirmed,
-  },
-  {
-    tone: "neutral",
-    message: "Hold the receipt to the camera. I will extract the merchant, total, and date.",
-    sheetTitle: "Receipt Captured",
-    options: ["Looks Right", "Adjust"],
-    Visual: ReceiptCapture,
-    actionTitle: "Receipt Logged",
-    ActionVisual: ReceiptSubmitted,
-  },
-  {
-    tone: "urgent",
-    message: "This requires a human touch. Here is the travel desk and the nearest embassy.",
-    sheetTitle: "Human Support Contacts",
-    options: ["Got It", "Dismiss"],
-    Visual: ContactCards,
-    actionTitle: "Contacts Saved",
-    ActionVisual: ContactsSaved,
-  },
-  {
-    tone: "excited",
-    message: "I summarized your final spend and drafted the expense report. This trip is ready to archive.",
-    sheetTitle: "Trip Spend Summary",
-    options: ["Archive Trip", "Review"],
-    Visual: SpendSummary,
-    actionTitle: "Trip Archived",
-    ActionVisual: TripArchived,
-  },
-  {
-    tone: "neutral",
-    message: "Here is exactly how your travel data was used, limited, and protected.",
-    sheetTitle: "Privacy & Data Summary",
-    options: ["Done", "Adjust"],
-    Visual: PrivacySummary,
-    actionTitle: "Data Protected",
-    ActionVisual: DataCleared,
-  },
+  { tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
+  { tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
+  { tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: HotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
+  { tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
+  { tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
+  { tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
+  { tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
+  { tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
+  { tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
+  { tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
+  { tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel and your daily meal allowance to keep you covered.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupport, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
+  { tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
+  { tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCards, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
+  { tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
+  { tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
 ];
 
 // ── Icons ──────────────────────────────────────────────────────
@@ -958,12 +1068,12 @@ function MenuIcon() {
   );
 }
 
-function MicIcon() {
+function MicIcon({ active }: { active?: boolean }) {
   return (
     <svg aria-hidden="true" fill="none" height="36" viewBox="0 0 24 24" width="36">
-      <rect height="13" rx="3" stroke="currentColor" strokeWidth="2" width="6" x="9" y="2" />
-      <path d="M12 19v3" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      <rect height="13" rx="3" stroke={active ? "#f35b4f" : "currentColor"} strokeWidth="2" width="6" x="9" y="2" />
+      <path d="M12 19v3" stroke={active ? "#f35b4f" : "currentColor"} strokeLinecap="round" strokeWidth="2" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke={active ? "#f35b4f" : "currentColor"} strokeLinecap="round" strokeWidth="2" />
     </svg>
   );
 }
@@ -979,7 +1089,59 @@ function MessageCircleMoreIcon() {
   );
 }
 
-// ── Phone shell ────────────────────────────────────────────────
+// ── Audio visualizer ──────────────────────────────────────────
+
+function AudioBars({ analyserNode }: { analyserNode: AnalyserNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const data = new Uint8Array(analyserNode.frequencyBinCount);
+    let frameId: number;
+
+    function draw() {
+      analyserNode.getByteFrequencyData(data);
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+
+      const count = 5;
+      const bw = 4, gap = 3;
+      const totalW = count * bw + (count - 1) * gap;
+      const sx = (canvas!.width - totalW) / 2;
+      const maxH = canvas!.height - 8;
+
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor((i / count) * (data.length * 0.35));
+        const vol = data[idx] / 255;
+        const idle = Math.sin(Date.now() / 280 + i * 1.3) * 0.07 + 0.06;
+        const h = Math.max(4, (vol * 0.9 + idle) * maxH);
+        const x = sx + i * (bw + gap);
+        const y = (canvas!.height - h) / 2;
+
+        ctx!.fillStyle = "rgba(255,255,255,0.92)";
+        ctx!.beginPath();
+        if (typeof ctx!.roundRect === "function") {
+          ctx!.roundRect(x, y, bw, h, 2);
+        } else {
+          ctx!.rect(x, y, bw, h);
+        }
+        ctx!.fill();
+      }
+
+      frameId = requestAnimationFrame(draw);
+    }
+
+    draw();
+    return () => cancelAnimationFrame(frameId);
+  }, [analyserNode]);
+
+  return <canvas height={36} ref={canvasRef} style={{ display: "block" }} width={36} />;
+}
+
+// ── PhoneShell ────────────────────────────────────────────────
 
 function PhoneShell({
   sheetScrollContent,
@@ -988,6 +1150,10 @@ function PhoneShell({
   onSheetClose,
   showEllipsis,
   onEllipsisOpen,
+  isListening,
+  isProcessing,
+  onMicClick,
+  analyserNode,
 }: {
   sheetScrollContent: React.ReactNode;
   sheetFooter: React.ReactNode;
@@ -995,6 +1161,10 @@ function PhoneShell({
   onSheetClose: () => void;
   showEllipsis: boolean;
   onEllipsisOpen: () => void;
+  isListening: boolean;
+  isProcessing: boolean;
+  onMicClick: () => void;
+  analyserNode: AnalyserNode | null;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
@@ -1055,8 +1225,14 @@ function PhoneShell({
             <button aria-label="Trip planning unavailable" className={[styles.iconButton, styles.sideButton, styles.leftButton, styles.disabledButton].join(" ")} disabled type="button">
               <Pencil size={22} />
             </button>
-            <button aria-label="Speech mode" className={[styles.iconButton, styles.primaryButton, styles.buttonActive].join(" ")} type="button">
-              <MicIcon />
+            <button
+              aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+              className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
+              disabled={isProcessing}
+              onClick={onMicClick}
+              type="button"
+            >
+              {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
             </button>
             <button aria-label="Text mode" className={[styles.iconButton, styles.sideButton, styles.rightButton].join(" ")} type="button">
               <MessageCircleMoreIcon />
@@ -1084,7 +1260,34 @@ export default function DemoPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [overlayReady, setOverlayReady] = useState(false);
   const [overlayDismissed, setOverlayDismissed] = useState(false);
-  const [actionMode, setActionMode] = useState(false);
+
+  // MongoDB state
+  const [tripId, setTripId] = useState<string | null>(null);
+  const [tripData, setTripData] = useState<TripData | null>(null);
+  const [frameCompleted, setFrameCompleted] = useState<Record<number, boolean>>({});
+
+  // Conversation state
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [knownFields, setKnownFields] = useState<Record<string, string>>({});
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+
+  // MediaRecorder + silence-detection refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Selection state (lifted from sub-components)
+  const [selectedFlight, setSelectedFlight] = useState(0);
+  const [selectedBundle, setSelectedBundle] = useState<number | null>(null);
+  const [liveFlights, setLiveFlights] = useState<DisplayFlight[] | null>(null);
+  const [liveFlightResults, setLiveFlightResults] = useState<Flight[] | null>(null);
+  const [isFlightSearchLoading, setIsFlightSearchLoading] = useState(false);
+  const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
+  const [isProgressHydrated, setIsProgressHydrated] = useState(false);
+
   const { say, stopSpeaking } = useMascot();
   const frame = FRAMES[currentIndex];
   const sheetOpen = overlayReady && !overlayDismissed;
@@ -1092,53 +1295,477 @@ export default function DemoPage() {
 
   useEffect(() => {
     let cancelled = false;
-    let timeoutId: number | null = null;
-    async function runFrame() {
+
+    queueMicrotask(() => {
+      if (cancelled || typeof window === "undefined") return;
+
+      try {
+        const raw = window.localStorage.getItem(DEMO_PROGRESS_STORAGE_KEY);
+        if (!raw) return;
+
+        const snapshot = JSON.parse(raw) as Partial<DemoProgressSnapshot>;
+        if (snapshot.version !== 1) {
+          window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
+          return;
+        }
+
+        if (typeof snapshot.currentIndex === "number") {
+          setCurrentIndex(Math.max(0, Math.min(FRAMES.length - 1, snapshot.currentIndex)));
+        }
+        if (typeof snapshot.overlayReady === "boolean") setOverlayReady(snapshot.overlayReady);
+        if (typeof snapshot.overlayDismissed === "boolean") setOverlayDismissed(snapshot.overlayDismissed);
+        if (typeof snapshot.tripId === "string" || snapshot.tripId === null) setTripId(snapshot.tripId);
+        if (snapshot.tripData) setTripData(snapshot.tripData);
+        if (snapshot.frameCompleted) setFrameCompleted(snapshot.frameCompleted);
+        if (Array.isArray(snapshot.conversationMessages)) setConversationMessages(snapshot.conversationMessages);
+        if (snapshot.knownFields) setKnownFields(snapshot.knownFields);
+        if (typeof snapshot.selectedFlight === "number") setSelectedFlight(snapshot.selectedFlight);
+        if (typeof snapshot.selectedBundle === "number" || snapshot.selectedBundle === null) {
+          setSelectedBundle(snapshot.selectedBundle);
+        }
+      } catch {
+        window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
+      } finally {
+        if (!cancelled) setIsProgressHydrated(true);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!isProgressHydrated || typeof window === "undefined") return;
+
+    const snapshot: DemoProgressSnapshot = {
+      version: 1,
+      currentIndex,
+      overlayReady,
+      overlayDismissed,
+      tripId,
+      tripData,
+      frameCompleted,
+      conversationMessages,
+      knownFields,
+      selectedFlight,
+      selectedBundle,
+    };
+
+    window.localStorage.setItem(DEMO_PROGRESS_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [
+    conversationMessages,
+    currentIndex,
+    frameCompleted,
+    isProgressHydrated,
+    knownFields,
+    overlayDismissed,
+    overlayReady,
+    selectedBundle,
+    selectedFlight,
+    tripData,
+    tripId,
+  ]);
+
+  // Speak the frame greeting, then open the sheet once Kelli finishes talking.
+  // Frame 0 is special: sheet only opens after Gemini parses the user's speech.
+  useEffect(() => {
+    if (!isProgressHydrated) return;
+    let cancelled = false;
+
+    async function run() {
       await say(frame.message, frame.tone);
-      if (cancelled) return;
-      timeoutId = window.setTimeout(() => { if (!cancelled) setOverlayReady(true); }, 1000);
+      if (!cancelled && currentIndex !== 0) setOverlayReady(true);
     }
-    void runFrame();
-    return () => { cancelled = true; if (timeoutId) window.clearTimeout(timeoutId); };
-  }, [currentIndex, frame.message, frame.tone, say]);
 
-  function handlePrimary() { setActionMode(true); }
+    void run();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated]);
+
+  // Fetch real flights when entering frame 1 (flight picker)
+  useEffect(() => {
+    if (!isProgressHydrated) return;
+    if (currentIndex !== 1) return;
+    const trip = tripData ?? DEMO_DEFAULTS;
+    const homeAirport = "ORD";
+    const destAirport = CITY_TO_AIRPORT[trip.city.toLowerCase()] ?? "MXP";
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setIsFlightSearchLoading(true);
+      setFlightSearchMessage(null);
+      setLiveFlights(null);
+      setLiveFlightResults(null);
+    });
+
+    fetch("/api/flights/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        homeAirport,
+        destination: destAirport,
+        targetDeparture: trip.departure,
+        targetReturn: trip.returnDate,
+      }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error("Flight search failed");
+        return r.json();
+      })
+      .then((flights: unknown) => {
+        if (cancelled) return;
+        if (!Array.isArray(flights) || flights.length === 0) {
+          setFlightSearchMessage("Fair Grid returned no live flights for this search. The API request succeeded, but it came back empty.");
+          return;
+        }
+        setSelectedFlight(0);
+        setLiveFlightResults((flights as Flight[]).slice(0, 3));
+        const mapped: DisplayFlight[] = (flights as import("@/types/flight").Flight[]).slice(0, 3).map((f, i) => ({
+          id: f.id,
+          flightNumber: f.outbound.flightNumber,
+          carrier: f.outbound.carrier,
+          route: `${f.outbound.origin} → ${f.outbound.destination}`,
+          priceUsd: f.priceUsd,
+          dep: fmtTime(f.outbound.departureTime),
+          arr: fmtTime(f.outbound.arrivalTime),
+          dur: fmtDur(f.outbound.durationMinutes),
+          stops: f.distanceFromHomeAirportMiles > 0
+            ? `${Math.round(f.distanceFromHomeAirportMiles)} mi from ${homeAirport}`
+            : "Fair Grid match",
+          tag: f.saturdayNightSavingsUsd > 0 ? `Save $${f.saturdayNightSavingsUsd}` : i === 0 ? "Best pick" : undefined,
+        }));
+        setLiveFlights(mapped);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFlightSearchMessage("Live flight search failed, so no results are being shown. Check the Fair Grid provider response instead of relying on demo data.");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsFlightSearchLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated]);
+
+  // ── Voice input (Gemini STT) ─────────────────────────────────
+
+  function stopListening() {
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setIsListening(false);
+  }
+
+  function startListening() {
+    if (isListening || isProcessing) return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      streamRef.current = stream;
+
+      const audioCtx = new AudioContext();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      setAnalyserNode(analyser);
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        if (silenceTimerRef.current) {
+          clearInterval(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+        setAnalyserNode(null);
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size < 500) {
+          void say("I didn't quite catch that. Could you try again?", "empathetic");
+          return;
+        }
+        void transcribeAndProcess(blob, (recorder.mimeType || "audio/webm").split(";")[0]);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsListening(true);
+
+      // Auto-stop after 1.8 s of silence
+      const SILENCE_THRESHOLD = 10;
+      const SILENCE_MS = 1800;
+      let silenceStart: number | null = null;
+
+      silenceTimerRef.current = setInterval(() => {
+        if (mediaRecorderRef.current?.state !== "recording") {
+          clearInterval(silenceTimerRef.current!);
+          silenceTimerRef.current = null;
+          return;
+        }
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((s, v) => s + v, 0) / data.length;
+        if (avg < SILENCE_THRESHOLD) {
+          silenceStart = silenceStart ?? Date.now();
+          if (Date.now() - silenceStart >= SILENCE_MS) stopListening();
+        } else {
+          silenceStart = null;
+        }
+      }, 100);
+    }).catch(() => {
+      alert("Microphone access is required. Please allow mic permissions in your browser.");
+    });
+  }
+
+  async function transcribeAndProcess(blob: Blob, mimeType: string) {
+    setIsProcessing(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(",")[1] ?? "");
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const sttRes = await fetch("/api/stt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio: base64, mimeType }),
+      });
+
+      if (!sttRes.ok) throw new Error("STT failed");
+      const { text } = (await sttRes.json()) as { text: string };
+
+      if (text?.trim()) {
+        await handleUserSpeech(text.trim());
+      } else {
+        void say("I didn't quite catch that. Could you try again?", "empathetic");
+      }
+    } catch {
+      void say("I'm having trouble with voice right now. Please try again.", "empathetic");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  function handleMicClick() {
+    if (isListening) stopListening();
+    else startListening();
+  }
+
+  async function handleUserSpeech(userText: string) {
+    const msgs: ConversationMessage[] = [
+      ...conversationMessages,
+      { role: "user", content: userText },
+    ];
+    setConversationMessages(msgs);
+
+    try {
+      const res = await fetch("/api/demo/conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: msgs, frameIndex: currentIndex, knownFields }),
+      });
+      const data = (await res.json()) as {
+        mascotMessage: string;
+        tone: Tone;
+        extractedData: (Record<string, string> & { return: string }) | null;
+        isComplete: boolean;
+        knownFields?: Record<string, string>;
+      };
+
+      if (data.knownFields) setKnownFields(data.knownFields);
+
+      if (data.extractedData && currentIndex === 0) {
+        setTripData({
+          city: data.extractedData.city,
+          country: data.extractedData.country,
+          departure: data.extractedData.departure,
+          returnDate: data.extractedData.return,
+          passportExpiry: data.extractedData.passportExpiry,
+          purpose: data.extractedData.purpose ?? "",
+        });
+      }
+
+      setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage }]);
+      await say(data.mascotMessage, data.tone);
+      if (data.extractedData && currentIndex === 0) setOverlayReady(true);
+    } catch {
+      await say("I'm having trouble connecting right now. Please try again.", "empathetic");
+    }
+  }
+
+  // ── Frame actions ────────────────────────────────────────────
+
+  async function handlePrimary() {
+    if (isProcessing || frameCompleted[currentIndex]) return;
+
+    setIsProcessing(true);
+    try {
+      if (currentIndex === 0) {
+        const data = tripData ?? DEMO_DEFAULTS;
+        const res = await fetch("/api/trips", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            destination: { city: data.city, country: data.country, officeLat: 45.4654, officeLng: 9.1866 },
+            dates: { departure: data.departure, return: data.returnDate },
+          }),
+        });
+        if (res.ok) {
+          const trip = (await res.json()) as { _id: string };
+          setTripId(trip._id);
+        }
+      } else if (tripId) {
+        await executeFrameAction(currentIndex, tripId, {
+          flight: selectedFlight,
+          bundle: selectedBundle,
+          liveFlights: liveFlightResults,
+        });
+      }
+
+      setFrameCompleted((prev) => ({ ...prev, [currentIndex]: true }));
+      setOverlayDismissed(true); // close sheet on success
+    } catch (err) {
+      console.error("Frame action error:", err);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   function handleSecondary() { setOverlayDismissed(true); }
-  function handleActionDone() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setActionMode(false); setCurrentIndex(v => Math.min(FRAMES.length - 1, v + 1)); }
-  function handleActionBack() { setActionMode(false); }
-  function handleEllipsisOpen() { setOverlayDismissed(false); setActionMode(false); }
-  function handleSheetClose() { setOverlayDismissed(true); setActionMode(false); }
-  function handleBack() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setActionMode(false); setCurrentIndex(v => Math.max(0, v - 1)); }
-  function handleNext() { stopSpeaking(); setOverlayReady(false); setOverlayDismissed(false); setActionMode(false); setCurrentIndex(v => Math.min(FRAMES.length - 1, v + 1)); }
+  function handleEllipsisOpen() { setOverlayDismissed(false); }
+  function handleSheetClose() { setOverlayDismissed(true); }
 
-  const scrollContent = actionMode ? (
-    <div className={styles.sheetContent}>
-      <h2 className={styles.sheetTitle}>{frame.actionTitle}</h2>
-      <frame.ActionVisual />
-    </div>
-  ) : (
+  async function handleBack() {
+    if (isProcessing || currentIndex === 0) return;
+
+    if (frameCompleted[currentIndex] && tripId) {
+      setIsProcessing(true);
+      try {
+        await revertFrameAction(currentIndex, tripId);
+        setFrameCompleted((prev) => {
+          const next = { ...prev };
+          delete next[currentIndex];
+          return next;
+        });
+      } catch (err) {
+        console.error("Revert error:", err);
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+
+    stopSpeaking();
+    setOverlayReady(false);
+    setOverlayDismissed(false);
+    setCurrentIndex((v) => Math.max(0, v - 1));
+  }
+
+  function handleNext() {
+    if (!frameCompleted[currentIndex] || isProcessing) return;
+    stopSpeaking();
+    setOverlayReady(false);
+    setOverlayDismissed(false);
+    setCurrentIndex((v) => Math.min(FRAMES.length - 1, v + 1));
+  }
+
+  if (!isProgressHydrated) {
+    return (
+      <main className={styles.page}>
+        <div className={styles.phone}>
+          <section className={styles.shell} />
+        </div>
+      </main>
+    );
+  }
+
+  // ── Render helpers ───────────────────────────────────────────
+
+  function renderFrameVisual() {
+    switch (currentIndex) {
+      case 0: return <TripCard tripData={tripData} />;
+      case 1:
+        if (false && isFlightSearchLoading) {
+          return (
+            <FlightSearchState
+              body="Running Fair Grid across live dates and nearby airports."
+              icon="⏳"
+              title="Searching Live Flights"
+            />
+          );
+        }
+        if (false && flightSearchMessage) {
+          return (
+            <FlightSearchState
+              body={flightSearchMessage}
+              icon="⚠️"
+              title="Live Flight Search Required"
+            />
+          );
+        }
+        if (false && !liveFlights?.length) {
+          return (
+            <FlightSearchState
+              body="No live flight options are loaded yet."
+              icon="🛫"
+              title="Waiting for Fair Grid"
+            />
+          );
+        }
+        return <FlightPicker flights={liveFlights} onChange={setSelectedFlight} value={selectedFlight} />;
+      case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
+      default: { const V = frame.Visual; return <V />; }
+    }
+  }
+
+  const canConfirmCurrentFrame = true;
+
+  const scrollContent = (
     <div className={styles.sheetContent}>
       <h2 className={styles.sheetTitle}>{frame.sheetTitle}</h2>
-      <frame.Visual />
+      {renderFrameVisual()}
     </div>
   );
 
-  const footerContent = actionMode ? (
+  const footerContent = (
     <div className={styles.sheetActions}>
-      <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={handleActionDone} type="button">Done</button>
-      <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={handleActionBack} type="button">Back</button>
-    </div>
-  ) : (
-    <div className={styles.sheetActions}>
-      <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={handlePrimary} type="button">{frame.options[0]}</button>
-      <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={handleSecondary} type="button">{frame.options[1]}</button>
+      <button
+        className={[styles.actionButton, styles.primaryAction, isProcessing ? styles.buttonLoading : ""].join(" ")}
+        disabled={isProcessing || frameCompleted[currentIndex] || !canConfirmCurrentFrame}
+        onClick={() => void handlePrimary()}
+        type="button"
+      >
+        {isProcessing ? "Saving…" : frameCompleted[currentIndex] ? "Done" : frame.options[0]}
+      </button>
+      <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={handleSecondary} type="button">
+        {frame.options[1]}
+      </button>
     </div>
   );
 
   return (
     <main className={styles.page}>
       <PhoneShell
+        analyserNode={analyserNode}
+        isListening={isListening}
+        isProcessing={isProcessing}
         onEllipsisOpen={handleEllipsisOpen}
+        onMicClick={handleMicClick}
         onSheetClose={handleSheetClose}
         sheetFooter={footerContent}
         sheetScrollContent={scrollContent}
@@ -1147,10 +1774,27 @@ export default function DemoPage() {
       />
       <div className={styles.nav}>
         <div className={styles.navRow}>
-          <button className={[styles.navButton, styles.navButtonSecondary].join(" ")} disabled={currentIndex === 0} onClick={handleBack} type="button">Back</button>
-          <button className={[styles.navButton, styles.navButtonPrimary].join(" ")} disabled={currentIndex === FRAMES.length - 1} onClick={handleNext} type="button">Next</button>
+          <button
+            className={[styles.navButton, styles.navButtonSecondary].join(" ")}
+            disabled={currentIndex === 0 || isProcessing}
+            onClick={() => void handleBack()}
+            type="button"
+          >
+            Back
+          </button>
+          <button
+            className={[styles.navButton, styles.navButtonPrimary].join(" ")}
+            disabled={currentIndex === FRAMES.length - 1 || !frameCompleted[currentIndex] || isProcessing}
+            onClick={handleNext}
+            type="button"
+          >
+            Next
+          </button>
         </div>
-        <span className={styles.counter}>{currentIndex + 1} <span className={styles.counterOf}>of</span> {FRAMES.length}</span>
+        <span className={styles.counter}>
+          {currentIndex + 1} <span className={styles.counterOf}>of</span> {FRAMES.length}
+          {tripId && <span className={styles.counterOf}> · Trip saved</span>}
+        </span>
       </div>
     </main>
   );
