@@ -108,6 +108,42 @@ async function main() {
   })
   console.log("✅ Seeded demo trip for Kelli → Milan")
 
+  // Step 7: Seed demo alternative flights for crisis rebooking (Frame 10-11)
+  await db.collection("demo_alternatives").deleteMany({})
+  await db.collection("demo_alternatives").insertMany([
+    {
+      destinationCountry: "IT",
+      flightNumber: "LH1234",
+      carrier: "Lufthansa",
+      origin: "MCI",
+      destination: "MXP",
+      departureTime: "2025-09-14T14:30:00.000Z",
+      arrivalTime: "2025-09-15T08:15:00.000Z",
+      priceUsd: 1480,
+    },
+    {
+      destinationCountry: "GB",
+      flightNumber: "BA4567",
+      carrier: "British Airways",
+      origin: "MCI",
+      destination: "LHR",
+      departureTime: "2025-09-14T16:00:00.000Z",
+      arrivalTime: "2025-09-15T07:30:00.000Z",
+      priceUsd: 1320,
+    },
+    {
+      destinationCountry: "FR",
+      flightNumber: "AF8901",
+      carrier: "Air France",
+      origin: "MCI",
+      destination: "CDG",
+      departureTime: "2025-09-14T15:45:00.000Z",
+      arrivalTime: "2025-09-15T09:00:00.000Z",
+      priceUsd: 1260,
+    },
+  ])
+  console.log("✅ Seeded demo alternative flights for crisis rebooking")
+
   await client.close()
   console.log("🎉 Seeding complete!")
 }
