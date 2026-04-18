@@ -34,6 +34,8 @@ export function useLiveTracking(trip: Trip | null) {
         ? "Your flight has been cancelled."
         : `Your flight is delayed by ${delayMinutes} minutes — that's past your connection window.`;
       mascot.say(`Kelli, heads up. ${reason} I've already found alternative options for you.`, "urgent");
+    } else if (!isCrisisOrCancelled && alreadyAlerted.current) {
+      alreadyAlerted.current = false;
     }
   }, [isCrisisOrCancelled, isCancelled, delayMinutes]);
 
