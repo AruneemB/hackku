@@ -31,6 +31,7 @@ interface MascotProps {
   className?: string;
   figureClassName?: string;
   bubbleClassName?: string;
+  bubbleAfterTextSlot?: React.ReactNode;
 }
 
 export function Mascot({
@@ -40,6 +41,7 @@ export function Mascot({
   className = "",
   figureClassName = "",
   bubbleClassName = "",
+  bubbleAfterTextSlot,
 }: MascotProps) {
   const { speech, visibleLength, tone, isSpeaking, isThinking } = useMascot();
   const mascotImage = isThinking
@@ -94,6 +96,7 @@ export function Mascot({
 
   const bubbleNode = speech || isThinking ? (
     <SpeechBubble
+      afterTextSlot={bubbleAfterTextSlot}
       className={bubbleClassName}
       isThinking={isThinking}
       key={isThinking ? "__thinking__" : speech}

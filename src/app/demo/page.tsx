@@ -2,10 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { Ellipsis, Pencil } from "lucide-react";
+import { ArrowBigLeft, Ellipsis, Pencil, Send as SendIcon } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
-import type { Flight } from "@/types/flight";
+import type { Flight, FlightGroup } from "@/types/flight";
 import type { Hotel } from "@/types/hotel";
 import styles from "./page.module.css";
 import dynamic from "next/dynamic";
@@ -19,13 +19,14 @@ type Tone = "neutral" | "excited" | "empathetic" | "urgent";
 type TripData = {
   city: string;
   country: string;
+  originCity: string;
   departure: string;
   returnDate: string;
   passportExpiry: string;
   purpose: string;
 };
 
-type ConversationMessage = { role: "user" | "assistant"; content: string };
+type ConversationMessage = { role: "user" | "assistant"; content: string; frameIndex?: number };
 
 type DemoFrame = {
   tone: Tone;
@@ -49,6 +50,7 @@ type DemoProgressSnapshot = {
   knownFields: Record<string, string>;
   selectedFlight: number;
   selectedHotel: number;
+  selectedReturn: number;
   selectedBundle: number | null;
 };
 
@@ -57,30 +59,90 @@ type DemoProgressSnapshot = {
 const DEMO_DEFAULTS: TripData = {
   city: "Milan",
   country: "IT",
-  departure: "2025-09-14",
-  returnDate: "2025-09-19",
-  passportExpiry: "2025-01-01",
+  originCity: "Chicago",
+  departure: "2026-06-14",
+  returnDate: "2026-06-21",
+  passportExpiry: "2028-12-01",
   purpose: "Client on-site meeting",
 };
 
-const DEMO_FLIGHTS = [
-  { id: "lh8904", flightNumber: "LH 8904", carrier: "Lufthansa", route: "ORD → MXP", priceUsd: 687, dep: "8:45 AM", arr: "11:20 AM+1", dur: "9h 35m", stops: "Nonstop" },
-  { id: "lx0117", flightNumber: "LX 0117", carrier: "Swiss", route: "ORD → ZRH → MXP", priceUsd: 543, dep: "6:15 AM", arr: "2:50 PM+1", dur: "10h 35m", stops: "1 stop" },
-  { id: "af0264", flightNumber: "AF 0264", carrier: "Air France", route: "ORD → BGY", priceUsd: 412, dep: "10:30 AM", arr: "12:15 PM+1", dur: "8h 45m", stops: "Nonstop" },
+type DisplayReturn = {
+  id: string; flightNumber: string; returnDate: string;
+  dep: string; arr: string; dur: string;
+  priceUsd: number; totalPriceUsd: number; returnVia?: string;
+};
+
+type DisplayFlightGroup = {
+  id: string; flightNumber: string; carrier: string; route: string;
+  depDate: string; dep: string; arr: string; dur: string;
+  tag?: string; returns: DisplayReturn[];
+};
+
+const DEMO_FLIGHT_GROUPS: DisplayFlightGroup[] = [
+  {
+    id: "lh8904", flightNumber: "LH 8904", carrier: "Lufthansa", route: "ORD → MXP",
+    depDate: "Sep 14", dep: "8:45 AM", arr: "11:20 AM+1", dur: "9h 35m",
+    returns: [
+      { id: "lh8904-r1", flightNumber: "LH 8905", returnDate: "Sep 19", dep: "1:20 PM", arr: "4:55 PM", dur: "9h 35m", priceUsd: 380, totalPriceUsd: 1067 },
+      { id: "lh8904-r2", flightNumber: "LX 0220", returnDate: "Sep 19", dep: "9:40 AM", arr: "1:15 PM+1", dur: "11h 35m", priceUsd: 310, totalPriceUsd: 997, returnVia: "via ZRH" },
+      { id: "lh8904-r3", flightNumber: "AF 1121", returnDate: "Sep 20", dep: "4:15 PM", arr: "7:50 PM", dur: "9h 35m", priceUsd: 420, totalPriceUsd: 1107 },
+    ],
+  },
+  {
+    id: "lx0117", flightNumber: "LX 0117", carrier: "Swiss", route: "ORD → ZRH → MXP",
+    depDate: "Sep 14", dep: "6:15 AM", arr: "2:50 PM+1", dur: "10h 35m",
+    returns: [
+      { id: "lx0117-r1", flightNumber: "LX 0118", returnDate: "Sep 19", dep: "11:50 AM", arr: "4:10 PM+1", dur: "10h 20m", priceUsd: 250, totalPriceUsd: 793, returnVia: "via ZRH" },
+      { id: "lx0117-r2", flightNumber: "LH 8905", returnDate: "Sep 19", dep: "1:20 PM", arr: "4:55 PM", dur: "9h 35m", priceUsd: 380, totalPriceUsd: 923 },
+    ],
+  },
+  {
+    id: "af0264", flightNumber: "AF 0264", carrier: "Air France", route: "ORD → BGY",
+    depDate: "Sep 14", dep: "10:30 AM", arr: "12:15 PM+1", dur: "8h 45m",
+    returns: [
+      { id: "af0264-r1", flightNumber: "ITA 502", returnDate: "Sep 19", dep: "6:30 AM", arr: "9:15 AM", dur: "9h 45m", priceUsd: 195, totalPriceUsd: 607 },
+      { id: "af0264-r2", flightNumber: "AF 0265", returnDate: "Sep 19", dep: "2:15 PM", arr: "5:00 PM", dur: "9h 45m", priceUsd: 280, totalPriceUsd: 692 },
+      { id: "af0264-r3", flightNumber: "AF 0267", returnDate: "Sep 20", dep: "11:00 AM", arr: "1:45 PM+1", dur: "10h 45m", priceUsd: 320, totalPriceUsd: 732, returnVia: "via CDG" },
+    ],
+  },
 ];
 
-type DisplayFlight = { id: string; flightNumber: string; carrier: string; route: string; priceUsd: number; dep: string; arr: string; dur: string; stops: string; tag?: string };
-
 const CITY_TO_AIRPORT: Record<string, string> = {
-  milan: "MXP", rome: "FCO", paris: "CDG", london: "LHR", tokyo: "NRT",
-  "new york": "JFK", chicago: "ORD", dubai: "DXB", amsterdam: "AMS",
-  frankfurt: "FRA", madrid: "MAD", barcelona: "BCN", lisbon: "LIS",
-  singapore: "SIN", sydney: "SYD", toronto: "YYZ", zurich: "ZRH",
+  // North America — origin cities
+  "kansas city": "MCI", "st. louis": "STL", "saint louis": "STL",
+  chicago: "ORD", milwaukee: "MKE",
+  "new york": "JFK", "new york city": "JFK", nyc: "JFK",
+  boston: "BOS",
+  washington: "DCA", "washington dc": "IAD", "washington d.c.": "IAD",
+  atlanta: "ATL",
+  miami: "MIA",
+  dallas: "DFW", "fort worth": "DFW",
+  houston: "IAH",
+  denver: "DEN",
+  phoenix: "PHX",
+  "los angeles": "LAX",
+  "san francisco": "SFO",
+  seattle: "SEA",
+  minneapolis: "MSP",
+  detroit: "DTW",
+  philadelphia: "PHL",
+  charlotte: "CLT",
+  toronto: "YYZ",
+  // Europe — destination cities
+  milan: "MXP", rome: "FCO", paris: "CDG", london: "LHR",
+  amsterdam: "AMS", frankfurt: "FRA", madrid: "MAD",
+  barcelona: "BCN", lisbon: "LIS", zurich: "ZRH",
+  // Asia / Pacific / Middle East — destination cities
+  tokyo: "NRT", dubai: "DXB", singapore: "SIN", sydney: "SYD",
 };
 
 function fmtTime(d: Date | string) {
   const dt = typeof d === "string" ? new Date(d) : d;
   return dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+function fmtDate(d: Date | string) {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 function fmtDur(min: number) {
   return `${Math.floor(min / 60)}h ${min % 60}m`;
@@ -138,9 +200,10 @@ async function patchTrip(tripId: string, data: Record<string, unknown>) {
 async function executeFrameAction(
   frameIdx: number,
   tripId: string,
-  sel: { flight: number; hotel: number; bundle: number | null; liveFlights?: Flight[] | null; liveHotels?: Hotel[] | null }
+  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveHotels?: Hotel[] | null }
 ) {
-  const flight = sel.liveFlights?.[sel.flight] ?? DEMO_FLIGHTS[sel.flight] ?? DEMO_FLIGHTS[0];
+  const liveGroup = sel.liveFlightGroups?.[sel.flight];
+  const flight = liveGroup?.outbound ?? DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
   const bundle = sel.bundle !== null ? DEMO_BUNDLES[sel.bundle] : DEMO_BUNDLES[2];
 
   switch (frameIdx) {
@@ -233,7 +296,7 @@ async function revertFrameAction(frameIdx: number, tripId: string, liveHotels?: 
       await patchTrip(tripId, { status: "approved" });
       break;
     case 9:
-      await patchTrip(tripId, { flights: [DEMO_FLIGHTS[0]] });
+      await patchTrip(tripId, { flights: [REBOOKED_FLIGHT] });
       break;
     case 10:
       await patchTrip(tripId, {
@@ -304,45 +367,84 @@ function TripCard({ tripData, travelerName }: { tripData?: TripData | null; trav
   );
 }
 
-function FlightPicker({ value, onChange, flights }: { value?: number; onChange?: (i: number) => void; flights?: DisplayFlight[] | null }) {
+function FlightPicker({
+  value, onOutboundChange, returnValue, onReturnChange, groups,
+}: {
+  value?: number;
+  onOutboundChange?: (i: number) => void;
+  returnValue?: number;
+  onReturnChange?: (i: number) => void;
+  groups?: DisplayFlightGroup[] | null;
+}) {
   const [localSel, setLocalSel] = useState(0);
+  const [localRetSel, setLocalRetSel] = useState(0);
   const sel = value ?? localSel;
-  const setSel = onChange ?? setLocalSel;
-  const list = flights ?? DEMO_FLIGHTS;
+  const retSel = returnValue ?? localRetSel;
+  const list = groups?.length ? groups : DEMO_FLIGHT_GROUPS;
+
+  function selectOutbound(i: number) {
+    (onOutboundChange ?? setLocalSel)(i);
+    (onReturnChange ?? setLocalRetSel)(0);
+  }
+  function selectReturn(i: number) {
+    (onReturnChange ?? setLocalRetSel)(i);
+  }
 
   const tags: Record<number, string> = {};
   if (list.length > 0) {
-    const firstTag = "tag" in list[0] && typeof list[0].tag === "string" ? list[0].tag : undefined;
-    tags[0] = firstTag ?? "Best pick";
-    const cheapest = list.reduce((ci, f, i) => f.priceUsd < list[ci].priceUsd ? i : ci, 0);
-    if (cheapest !== 0) {
-      const cheapestTag = "tag" in list[cheapest] && typeof list[cheapest].tag === "string"
-        ? list[cheapest].tag
-        : undefined;
-      tags[cheapest] = cheapestTag ?? "Cheapest";
-    }
+    tags[0] = list[0].tag ?? "Best pick";
+    const cheapestIdx = list.reduce((ci, g, i) => {
+      const gPrice = g.returns[0]?.totalPriceUsd ?? Infinity;
+      const cPrice = list[ci].returns[0]?.totalPriceUsd ?? Infinity;
+      return gPrice < cPrice ? i : ci;
+    }, 0);
+    if (cheapestIdx !== 0) tags[cheapestIdx] = list[cheapestIdx].tag ?? "Cheapest";
   }
 
   return (
     <div className={styles.cards}>
-      {list.map((f, i) => (
-        <button
-          className={[styles.card, sel === i ? styles.cardSelected : ""].join(" ")}
-          key={f.id}
-          onClick={() => setSel(i)}
-          type="button"
-        >
-          <div className={styles.cardRow}>
-            <span className={styles.cardLabel}>{f.flightNumber}</span>
-            {tags[i] && <span className={styles.cardTag}>{tags[i]}</span>}
+      {list.map((g, i) => {
+        const cheapestTotal = g.returns[0]?.totalPriceUsd;
+        const isSelected = sel === i;
+        return (
+          <div className={styles.flightGroupWrap} key={g.id}>
+            <button
+              className={[styles.card, isSelected ? styles.cardSelected : ""].join(" ")}
+              onClick={() => selectOutbound(i)}
+              type="button"
+            >
+              <div className={styles.cardRow}>
+                <span className={styles.cardLabel}>{g.flightNumber}</span>
+                {tags[i] && <span className={styles.cardTag}>{tags[i]}</span>}
+              </div>
+              <div className={styles.cardRow}>
+                <span className={styles.cardMain}>{g.route}</span>
+                {cheapestTotal !== undefined && <span className={styles.cardPrice}>from ${cheapestTotal}</span>}
+              </div>
+              <span className={styles.cardMeta}>{g.depDate} · {g.dep} → {g.arr} · {g.dur}</span>
+            </button>
+            {isSelected && g.returns.length > 0 && (
+              <div className={styles.returnOptions}>
+                <span className={styles.returnOptionsLabel}>Return flights</span>
+                {g.returns.map((r, ri) => (
+                  <button
+                    className={[styles.returnCard, retSel === ri ? styles.returnCardSelected : ""].join(" ")}
+                    key={r.id}
+                    onClick={() => selectReturn(ri)}
+                    type="button"
+                  >
+                    <div className={styles.cardRow}>
+                      <span className={styles.cardLabel}>{r.flightNumber}{r.returnVia ? ` · ${r.returnVia}` : ""}</span>
+                      <span className={[styles.cardPrice, styles.returnCardPrice].join(" ")}>${r.totalPriceUsd}</span>
+                    </div>
+                    <span className={styles.cardMeta}>{r.returnDate} · {r.dep} → {r.arr} · {r.dur}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div className={styles.cardRow}>
-            <span className={styles.cardTime}>{f.dep} → {f.arr}</span>
-            <span className={styles.cardPrice}>${f.priceUsd}</span>
-          </div>
-          <span className={styles.cardMeta}>{f.route} · {f.dur} · {f.stops}</span>
-        </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1016,6 +1118,90 @@ const FRAMES: DemoFrame[] = [
   { tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
 ];
 
+// ── Roadmap data ───────────────────────────────────────────────
+
+const ROADMAP_PHASES = [
+  {
+    label: "Planning",
+    steps: [
+      { index: 0, label: "Share Trip Details", icon: "✈️" },
+      { index: 1, label: "Choose a Flight", icon: "🛫" },
+      { index: 2, label: "Find a Hotel", icon: "🏨" },
+      { index: 3, label: "Compliance Check", icon: "📋" },
+      { index: 4, label: "Choose Bundle", icon: "📦" },
+    ],
+  },
+  {
+    label: "Approval",
+    steps: [
+      { index: 5, label: "Submit for Approval", icon: "📬" },
+      { index: 6, label: "Handle Rejection", icon: "🔄" },
+    ],
+  },
+  {
+    label: "Pre-Trip",
+    steps: [
+      { index: 7, label: "Travel Checklist", icon: "🗒️" },
+    ],
+  },
+  {
+    label: "Live Travel",
+    steps: [
+      { index: 8, label: "Live Mode Active", icon: "📡" },
+      { index: 9, label: "Handle Disruption", icon: "⚡" },
+      { index: 10, label: "Emergency Exception", icon: "🚨" },
+      { index: 11, label: "Arrival & Transport", icon: "🚕" },
+      { index: 12, label: "Capture Receipts", icon: "📸" },
+      { index: 13, label: "Human Support", icon: "📞" },
+    ],
+  },
+  {
+    label: "Post-Trip",
+    steps: [
+      { index: 14, label: "Expense Summary", icon: "💰" },
+      { index: 15, label: "Data & Privacy", icon: "🔒" },
+    ],
+  },
+];
+
+function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number; frameCompleted: Record<number, boolean> }) {
+  const allSteps = ROADMAP_PHASES.flatMap((p) => p.steps);
+  const total = allSteps.length;
+
+  return (
+    <div className={styles.roadmapWrap}>
+      <h2 className={styles.sheetTitle}>Your Journey</h2>
+      {ROADMAP_PHASES.map((phase) => (
+        <div key={phase.label}>
+          <div className={styles.roadmapPhaseLabel}>{phase.label}</div>
+          {phase.steps.map((step) => {
+            const isDone = !!frameCompleted[step.index];
+            const isCurrent = currentIndex === step.index;
+            const globalIdx = allSteps.findIndex((s) => s.index === step.index);
+            const isLast = globalIdx === total - 1;
+            return (
+              <div key={step.index} className={styles.roadmapStepWrap}>
+                <div className={[
+                  styles.roadmapStep,
+                  isDone ? styles.roadmapStepDone : isCurrent ? styles.roadmapStepCurrent : styles.roadmapStepUpcoming,
+                ].join(" ")}>
+                  <div className={styles.roadmapStepDot}>
+                    {isDone ? "✓" : step.icon}
+                  </div>
+                  <div className={styles.roadmapStepInfo}>
+                    <span className={styles.roadmapStepLabel}>{step.label}</span>
+                  </div>
+                </div>
+                {!isLast && <div className={styles.roadmapConnector} />}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Icons ──────────────────────────────────────────────────────
 
 function MenuIcon() {
@@ -1117,6 +1303,18 @@ function PhoneShell({
   menuOpen,
   onMenuToggle,
   onResetDemo,
+  chatMode,
+  onChatToggle,
+  chatMessages,
+  chatInput,
+  onChatInputChange,
+  onChatSend,
+  onOpenSheet,
+  roadmapOpen,
+  onRoadmapOpen,
+  onRoadmapClose,
+  currentFrameIndex,
+  frameCompleted,
 }: {
   sheetScrollContent: React.ReactNode;
   sheetFooter: React.ReactNode;
@@ -1131,10 +1329,32 @@ function PhoneShell({
   menuOpen: boolean;
   onMenuToggle: () => void;
   onResetDemo: () => void;
+  chatMode: boolean;
+  onChatToggle: () => void;
+  chatMessages: ConversationMessage[];
+  chatInput: string;
+  onChatInputChange: (v: string) => void;
+  onChatSend: () => void;
+  onOpenSheet: () => void;
+  roadmapOpen: boolean;
+  onRoadmapOpen: () => void;
+  onRoadmapClose: () => void;
+  currentFrameIndex: number;
+  frameCompleted: Record<number, boolean>;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
   const dragging = useRef(false);
+  const roadmapSheetRef = useRef<HTMLDivElement>(null);
+  const rdragStartY = useRef(0);
+  const rdragging = useRef(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   function handlePointerDown(e: React.PointerEvent) {
     dragging.current = true;
@@ -1170,55 +1390,205 @@ function PhoneShell({
     }
   }
 
+  function handleRPointerDown(e: React.PointerEvent) {
+    rdragging.current = true;
+    rdragStartY.current = e.clientY;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleRPointerMove(e: React.PointerEvent) {
+    if (!rdragging.current) return;
+    const dy = Math.max(0, e.clientY - rdragStartY.current);
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "none";
+      roadmapSheetRef.current.style.transform = `translateY(${dy}px)`;
+    }
+  }
+
+  function handleRPointerUp(e: React.PointerEvent) {
+    if (!rdragging.current) return;
+    rdragging.current = false;
+    const dy = Math.max(0, e.clientY - rdragStartY.current);
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "";
+      roadmapSheetRef.current.style.transform = "";
+    }
+    if (dy > 100) onRoadmapClose();
+  }
+
+  function handleRPointerCancel() {
+    rdragging.current = false;
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "";
+      roadmapSheetRef.current.style.transform = "";
+    }
+  }
+
+  // Last assistant message index for showing card
+  const lastAssistantIdx = chatMessages.reduce<number>((acc, m, i) => m.role === "assistant" ? i : acc, -1);
+
   return (
     <div className={styles.phone}>
       <section className={styles.shell}>
         <div className={styles.content}>
-          <div className={styles.menuWrap}>
-            <button aria-label="Open menu" className={styles.menuButton} onClick={onMenuToggle} type="button">
-              <MenuIcon />
-            </button>
-            {menuOpen && (
-              <>
-                <div className={styles.menuBackdrop} onClick={onMenuToggle} />
-                <div className={styles.menuPanel}>
-                  <button className={[styles.menuItem, styles.menuItemDanger].join(" ")} onClick={onResetDemo} type="button">
-                    Reset Demo
-                  </button>
-                  <button className={styles.menuItem} onClick={() => void signOut({ callbackUrl: "/demo" })} type="button">
-                    Sign Out
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-          <div className={styles.stage}>
-            <Mascot bubbleClassName={styles.speech} bubblePosition="below" bubbleSize="lg" bubbleVariant="plain" className={styles.mascot} figureClassName={styles.figure} />
-            <div className={styles.ellipsisSlot}>
-              {showEllipsis && (
-                <button aria-label="View details" className={styles.ellipsisButton} onClick={onEllipsisOpen} type="button">
-                  <Ellipsis size={18} />
-                </button>
+          <div className={styles.topBar}>
+            <div className={styles.menuWrap}>
+              <button aria-label="Open menu" className={styles.menuButton} onClick={onMenuToggle} type="button">
+                <MenuIcon />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className={styles.menuBackdrop} onClick={onMenuToggle} />
+                  <div className={styles.menuPanel}>
+                    <button className={[styles.menuItem, styles.menuItemDanger].join(" ")} onClick={onResetDemo} type="button">
+                      Reset Demo
+                    </button>
+                    <button className={styles.menuItem} onClick={() => void signOut({ callbackUrl: "/demo" })} type="button">
+                      Sign Out
+                    </button>
+                  </div>
+                </>
               )}
             </div>
+            {chatMode && (
+              <button aria-label="Back to voice mode" className={styles.backToVoiceButton} onClick={onChatToggle} type="button">
+                <ArrowBigLeft size={26} />
+              </button>
+            )}
           </div>
-          <div className={styles.controls}>
-            <button aria-label="Trip planning unavailable" className={[styles.iconButton, styles.sideButton, styles.leftButton, styles.disabledButton].join(" ")} disabled type="button">
-              <Pencil size={22} />
-            </button>
-            <button
-              aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
-              className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
-              disabled={isProcessing}
-              onClick={onMicClick}
-              type="button"
-            >
-              {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
-            </button>
-            <button aria-label="Text mode" className={[styles.iconButton, styles.sideButton, styles.rightButton].join(" ")} type="button">
-              <MessageCircleMoreIcon />
-            </button>
-          </div>
+
+          {chatMode ? (
+            <div className={styles.chatView}>
+              <div className={styles.chatMessages} ref={chatScrollRef}>
+                {chatMessages.length === 0 ? (
+                  <div className={styles.chatEmpty}>
+                    <span>Start a conversation with Kelli</span>
+                  </div>
+                ) : (
+                  chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={[styles.chatMsg, msg.role === "user" ? styles.chatMsgUser : styles.chatMsgAssistant].join(" ")}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className={styles.chatAvatarWrap}>
+                          <div className={styles.chatAvatar}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                          </div>
+                        </div>
+                      )}
+                      <div className={styles.chatBubbleWrap}>
+                        <div className={styles.chatBubble}>{msg.content}</div>
+                        {msg.role === "assistant" && i === lastAssistantIdx && msg.frameIndex !== undefined && (
+                          <button className={styles.chatCard} onClick={onOpenSheet} type="button">
+                            <span className={styles.chatCardIcon}>📋</span>
+                            <span className={styles.chatCardText}>{FRAMES[msg.frameIndex]?.sheetTitle}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isProcessing && (
+                  <div className={[styles.chatMsg, styles.chatMsgAssistant].join(" ")}>
+                    <div className={styles.chatAvatarWrap}>
+                      <div className={styles.chatAvatar}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                      </div>
+                    </div>
+                    <div className={styles.chatBubble}>
+                      <div className={styles.chatTyping}>
+                        <span /><span /><span />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className={styles.chatControls}>
+                <div className={styles.chatInputWrap}>
+                  <input
+                    className={styles.chatInput}
+                    disabled={isProcessing}
+                    onChange={(e) => onChatInputChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        onChatSend();
+                      }
+                    }}
+                    placeholder="Message Kelli…"
+                    type="text"
+                    value={chatInput}
+                  />
+                  <button
+                    aria-label="Send message"
+                    className={[styles.chatIconButton, styles.chatSendButton].join(" ")}
+                    disabled={isProcessing || !chatInput.trim()}
+                    onClick={onChatSend}
+                    type="button"
+                  >
+                    <SendIcon size={17} />
+                  </button>
+                </div>
+                <button
+                  aria-label="Open roadmap"
+                  className={styles.chatPencilButton}
+                  onClick={onRoadmapOpen}
+                  type="button"
+                >
+                  <Pencil size={18} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.stage}>
+              <Mascot
+                bubbleAfterTextSlot={showEllipsis ? (
+                  <button aria-label="View details" className={styles.ellipsisButton} onClick={onEllipsisOpen} type="button">
+                    <Ellipsis size={18} />
+                  </button>
+                ) : null}
+                bubbleClassName={styles.speech}
+                bubblePosition="below"
+                bubbleSize="lg"
+                bubbleVariant="plain"
+                className={styles.mascot}
+                figureClassName={styles.figure}
+              />
+            </div>
+          )}
+
+          {!chatMode && (
+            <div className={styles.controls}>
+              <button
+                aria-label="View trip roadmap"
+                className={[styles.iconButton, styles.sideButton, styles.leftButton].join(" ")}
+                onClick={onRoadmapOpen}
+                type="button"
+              >
+                <Pencil size={22} />
+              </button>
+              <button
+                aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
+                disabled={isProcessing}
+                onClick={onMicClick}
+                type="button"
+              >
+                {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
+              </button>
+              <button
+                aria-label="Switch to chat mode"
+                className={[styles.iconButton, styles.sideButton, styles.rightButton].join(" ")}
+                onClick={onChatToggle}
+                type="button"
+              >
+                <MessageCircleMoreIcon />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className={[styles.sheetBackdrop, sheetOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onSheetClose} />
@@ -1229,6 +1599,24 @@ function PhoneShell({
           </div>
           <div className={styles.sheetScroll}>{sheetScrollContent}</div>
           <div className={styles.sheetFooter}>{sheetFooter}</div>
+        </div>
+
+        {/* Roadmap overlay */}
+        <div className={[styles.sheetBackdrop, styles.roadmapBackdrop, roadmapOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onRoadmapClose} />
+        <div ref={roadmapSheetRef} className={[styles.sheet, styles.roadmapSheet, roadmapOpen ? styles.sheetOpen : ""].join(" ")}>
+          <div className={styles.sheetDragArea} onPointerCancel={handleRPointerCancel} onPointerDown={handleRPointerDown} onPointerMove={handleRPointerMove} onPointerUp={handleRPointerUp}>
+            <div className={styles.sheetHandle} />
+          </div>
+          <div className={styles.sheetScroll}>
+            <RoadmapContent currentIndex={currentFrameIndex} frameCompleted={frameCompleted} />
+          </div>
+          <div className={styles.sheetFooter}>
+            <div className={styles.sheetActions}>
+              <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={onRoadmapClose} type="button">
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -1300,7 +1688,6 @@ export default function DemoPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
 
-  // MediaRecorder + silence-detection refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -1309,9 +1696,10 @@ export default function DemoPage() {
   // Selection state (lifted from sub-components)
   const [selectedFlight, setSelectedFlight] = useState(0);
   const [selectedHotel, setSelectedHotel] = useState(0);
+  const [selectedReturn, setSelectedReturn] = useState(0);
   const [selectedBundle, setSelectedBundle] = useState<number | null>(null);
-  const [liveFlights, setLiveFlights] = useState<DisplayFlight[] | null>(null);
-  const [liveFlightResults, setLiveFlightResults] = useState<Flight[] | null>(null);
+  const [liveFlights, setLiveFlights] = useState<DisplayFlightGroup[] | null>(null);
+  const [liveFlightResults, setLiveFlightResults] = useState<FlightGroup[] | null>(null);
   const [isFlightSearchLoading, setIsFlightSearchLoading] = useState(false);
   const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
   const [liveHotels, setLiveHotels] = useState<Hotel[] | null>(null);
@@ -1330,10 +1718,16 @@ export default function DemoPage() {
 
   const travelerName = userProfile?.name ?? session?.user?.name ?? undefined;
 
-  const { say, setThinking, stopSpeaking } = useMascot();
+  // Roadmap + chat state
+  const [roadmapOpen, setRoadmapOpen] = useState(false);
+  const [chatMode, setChatMode] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const greetedFrames = useRef<Set<number>>(new Set());
+
+  const { say, setThinking, stopSpeaking, speech, visibleLength } = useMascot();
   const frame = FRAMES[currentIndex];
   const sheetOpen = overlayReady && !overlayDismissed;
-  const showEllipsis = overlayReady && overlayDismissed;
+  const showEllipsis = overlayReady && overlayDismissed && speech.length > 0 && visibleLength >= speech.length;
 
   useEffect(() => {
     let cancelled = false;
@@ -1363,6 +1757,7 @@ export default function DemoPage() {
         if (snapshot.knownFields) setKnownFields(snapshot.knownFields);
         if (typeof snapshot.selectedFlight === "number") setSelectedFlight(snapshot.selectedFlight);
         if (typeof snapshot.selectedHotel === "number") setSelectedHotel(snapshot.selectedHotel);
+        if (typeof snapshot.selectedReturn === "number") setSelectedReturn(snapshot.selectedReturn);
         if (typeof snapshot.selectedBundle === "number" || snapshot.selectedBundle === null) {
           setSelectedBundle(snapshot.selectedBundle);
         }
@@ -1391,6 +1786,7 @@ export default function DemoPage() {
       knownFields,
       selectedFlight,
       selectedHotel,
+      selectedReturn,
       selectedBundle,
     };
 
@@ -1406,6 +1802,7 @@ export default function DemoPage() {
     selectedBundle,
     selectedFlight,
     selectedHotel,
+    selectedReturn,
     tripData,
     tripId,
   ]);
@@ -1421,6 +1818,17 @@ export default function DemoPage() {
       const message = currentIndex === 0 && firstName
         ? `Hey, ${firstName}! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.`
         : frame.message;
+      // Store greeting in chat history (deduplicated)
+      if (!greetedFrames.current.has(currentIndex)) {
+        greetedFrames.current.add(currentIndex);
+        setConversationMessages((prev) => {
+          const alreadyHas = prev.some(
+            (m) => m.role === "assistant" && m.frameIndex === currentIndex && m.content === message
+          );
+          if (alreadyHas) return prev;
+          return [...prev, { role: "assistant", content: message, frameIndex: currentIndex }];
+        });
+      }
       await say(message, frame.tone);
       if (!cancelled && currentIndex !== 0) setOverlayReady(true);
     }
@@ -1435,7 +1843,7 @@ export default function DemoPage() {
     if (!isProgressHydrated) return;
     if (currentIndex !== 1) return;
     const trip = tripData ?? DEMO_DEFAULTS;
-    const homeAirport = "ORD";
+    const homeAirport = CITY_TO_AIRPORT[trip.originCity?.toLowerCase() ?? ""] ?? "ORD";
     const destAirport = CITY_TO_AIRPORT[trip.city.toLowerCase()] ?? "MXP";
     let cancelled = false;
     queueMicrotask(() => {
@@ -1467,20 +1875,30 @@ export default function DemoPage() {
           return;
         }
         setSelectedFlight(0);
-        setLiveFlightResults((flights as Flight[]).slice(0, 3));
-        const mapped: DisplayFlight[] = (flights as import("@/types/flight").Flight[]).slice(0, 3).map((f, i) => ({
-          id: f.id,
-          flightNumber: f.outbound.flightNumber,
-          carrier: f.outbound.carrier,
-          route: `${f.outbound.origin} → ${f.outbound.destination}`,
-          priceUsd: f.priceUsd,
-          dep: fmtTime(f.outbound.departureTime),
-          arr: fmtTime(f.outbound.arrivalTime),
-          dur: fmtDur(f.outbound.durationMinutes),
-          stops: f.distanceFromHomeAirportMiles > 0
-            ? `${Math.round(f.distanceFromHomeAirportMiles)} mi from ${homeAirport}`
-            : "Fair Grid match",
-          tag: f.saturdayNightSavingsUsd > 0 ? `Save $${f.saturdayNightSavingsUsd}` : i === 0 ? "Best pick" : undefined,
+        setSelectedReturn(0);
+        const groups = (flights as FlightGroup[]).slice(0, 3);
+        setLiveFlightResults(groups);
+        const mapped: DisplayFlightGroup[] = groups.map((g, i) => ({
+          id: g.outbound.id,
+          flightNumber: g.outbound.outbound.flightNumber,
+          carrier: g.outbound.outbound.carrier,
+          route: [g.outbound.outbound.origin, ...(g.outbound.outbound.layoverAirports ?? []), g.outbound.outbound.destination].join(' → '),
+          depDate: fmtDate(g.outbound.outbound.departureTime),
+          dep: fmtTime(g.outbound.outbound.departureTime),
+          arr: fmtTime(g.outbound.outbound.arrivalTime),
+          dur: fmtDur(g.outbound.outbound.durationMinutes),
+          tag: g.outbound.saturdayNightSavingsUsd > 0 ? `Save $${g.outbound.saturdayNightSavingsUsd}` : i === 0 ? "Best pick" : undefined,
+          returns: g.returns.slice(0, 4).map(r => ({
+            id: r.id,
+            flightNumber: r.outbound.flightNumber,
+            returnDate: fmtDate(r.outbound.departureTime),
+            dep: fmtTime(r.outbound.departureTime),
+            arr: fmtTime(r.outbound.arrivalTime),
+            dur: fmtDur(r.outbound.durationMinutes),
+            priceUsd: r.priceUsd,
+            totalPriceUsd: g.outbound.priceUsd + r.priceUsd,
+            returnVia: (r.outbound.layoverAirports ?? []).length > 0 ? `via ${(r.outbound.layoverAirports ?? []).join(', ')}` : undefined,
+          })),
         }));
         setLiveFlights(mapped);
       })
@@ -1659,6 +2077,22 @@ export default function DemoPage() {
     else startListening();
   }
 
+  function handleRoadmapOpen() { setRoadmapOpen(true); }
+  function handleRoadmapClose() { setRoadmapOpen(false); }
+  function handleChatToggle() { setChatMode((v) => !v); }
+
+  async function handleChatSend() {
+    if (!chatInput.trim() || isProcessing) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    await handleUserSpeech(text);
+  }
+
+  function handleOpenSheet() {
+    setOverlayReady(true);
+    setOverlayDismissed(false);
+  }
+
   async function handleUserSpeech(userText: string) {
     const msgs: ConversationMessage[] = [
       ...conversationMessages,
@@ -1689,6 +2123,7 @@ export default function DemoPage() {
         setTripData({
           city: data.extractedData.city,
           country: data.extractedData.country,
+          originCity: data.extractedData.originCity ?? "Chicago",
           departure: data.extractedData.departure,
           returnDate: data.extractedData.return,
           passportExpiry: data.extractedData.passportExpiry,
@@ -1696,7 +2131,7 @@ export default function DemoPage() {
         });
       }
 
-      setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage }]);
+      setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage, frameIndex: currentIndex }]);
       setThinking(false);
       await say(data.mascotMessage, data.tone);
       if (data.extractedData && currentIndex === 0) setOverlayReady(true);
@@ -1731,8 +2166,9 @@ export default function DemoPage() {
         await executeFrameAction(currentIndex, tripId, {
           flight: selectedFlight,
           hotel: selectedHotel,
+          selectedReturn,
           bundle: selectedBundle,
-          liveFlights: liveFlightResults,
+          liveFlightGroups: liveFlightResults,
           liveHotels,
         });
       }
@@ -1811,7 +2247,7 @@ export default function DemoPage() {
     switch (currentIndex) {
       case 0: return <TripCard travelerName={travelerName} tripData={tripData} />;
       case 1:
-        if (false && isFlightSearchLoading) {
+        if (isFlightSearchLoading) {
           return (
             <FlightSearchState
               body="Running Fair Grid across live dates and nearby airports."
@@ -1820,7 +2256,7 @@ export default function DemoPage() {
             />
           );
         }
-        if (false && flightSearchMessage) {
+        if (flightSearchMessage) {
           return (
             <FlightSearchState
               body={flightSearchMessage}
@@ -1829,7 +2265,7 @@ export default function DemoPage() {
             />
           );
         }
-        if (false && !liveFlights?.length) {
+        if (!liveFlights?.length) {
           return (
             <FlightSearchState
               body="No live flight options are loaded yet."
@@ -1838,7 +2274,7 @@ export default function DemoPage() {
             />
           );
         }
-        return <FlightPicker flights={liveFlights} onChange={setSelectedFlight} value={selectedFlight} />;
+        return <FlightPicker groups={liveFlights} onOutboundChange={setSelectedFlight} onReturnChange={setSelectedReturn} returnValue={selectedReturn} value={selectedFlight} />;
       case 2: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
       case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
       default: { const V = frame.Visual; return <V />; }
@@ -1874,14 +2310,26 @@ export default function DemoPage() {
     <main className={styles.page}>
       <PhoneShell
         analyserNode={analyserNode}
+        chatInput={chatInput}
+        chatMessages={conversationMessages}
+        chatMode={chatMode}
+        currentFrameIndex={currentIndex}
+        frameCompleted={frameCompleted}
         isListening={isListening}
         isProcessing={isProcessing}
         menuOpen={menuOpen}
+        onChatInputChange={setChatInput}
+        onChatSend={() => void handleChatSend()}
+        onChatToggle={handleChatToggle}
         onEllipsisOpen={handleEllipsisOpen}
         onMenuToggle={() => setMenuOpen((v) => !v)}
         onMicClick={handleMicClick}
+        onOpenSheet={handleOpenSheet}
         onResetDemo={handleResetDemo}
+        onRoadmapClose={handleRoadmapClose}
+        onRoadmapOpen={handleRoadmapOpen}
         onSheetClose={handleSheetClose}
+        roadmapOpen={roadmapOpen}
         sheetFooter={footerContent}
         sheetScrollContent={scrollContent}
         sheetOpen={sheetOpen}

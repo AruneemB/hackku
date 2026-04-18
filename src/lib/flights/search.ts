@@ -20,7 +20,7 @@ import { getJson } from "serpapi";
 import type { Flight, FlightLeg, FlightSearchParams } from "@/types/flight";
 import { withFlightCache } from "./cache";
 
-type SerpFlightsQuery = Record<string, string | number | undefined>;
+type SerpFlightsQuery = Record<string, string | number | undefined>; // type: 1=round-trip, 2=one-way
 
 interface SerpAirportRef {
   id: string;
@@ -64,6 +64,9 @@ async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight
 
     if (params.returnDate) {
       query.return_date = params.returnDate;
+      query.type = 1; // round-trip
+    } else {
+      query.type = 2; // one-way — SerpAPI defaults to round-trip and returns 0 results without a return_date
     }
 
     if (params.adults) {
@@ -90,17 +93,38 @@ async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight
         durationMinutes: f.duration
       });
 
-      const outbound = mapToLeg(flights[0]);
-      
-      // Inbound mapping logic:
-      // If it's a round trip, we expect at least two segments (outbound + inbound).
-      // We take the last segment as the representative inbound leg for now.
-      // If there's only one segment but a returnDate was requested, we fallback to the same leg or a dummy.
+      // Find the final outbound segment: the one that arrives at params.destination.
+      // For connecting flights SerpAPI may return [ORD→FRA, FRA→MXP, ...]; we want
+      // the outbound leg to show ORD→MXP, not ORD→FRA.
+      const destIdx = flights.findIndex((s) => s.arrival_airport.id === params.destination);
+      const lastOutboundSeg = destIdx >= 0 ? flights[destIdx] : flights[0];
+
+      const outboundSegs = destIdx >= 0 ? flights.slice(0, destIdx + 1) : [flights[0]];
+      const outbound: FlightLeg = {
+        ...mapToLeg(flights[0]),
+        destination: lastOutboundSeg.arrival_airport.id,
+        arrivalTime: new Date(lastOutboundSeg.arrival_airport.time),
+        durationMinutes: outboundSegs.reduce((sum, s) => sum + s.duration, 0),
+        layoverAirports: outboundSegs.slice(0, -1).map(s => s.arrival_airport.id),
+      };
+
       // Round-trip requires at least 2 segments; skip if return is missing
       if (params.returnDate && flights.length < 2) return null;
 
-      const inbound = params.returnDate
-        ? mapToLeg(flights[flights.length - 1])
+      // Inbound: all segments after the outbound turnaround point
+      const inboundStart = destIdx >= 0 ? destIdx + 1 : 1;
+      const inboundSegs = flights.slice(inboundStart);
+      const inbound: FlightLeg = inboundSegs.length > 0
+        ? {
+            origin: inboundSegs[0].departure_airport.id,
+            destination: inboundSegs[inboundSegs.length - 1].arrival_airport.id,
+            departureTime: new Date(inboundSegs[0].departure_airport.time),
+            arrivalTime: new Date(inboundSegs[inboundSegs.length - 1].arrival_airport.time),
+            carrier: inboundSegs[0].airline,
+            flightNumber: inboundSegs[0].flight_number,
+            durationMinutes: inboundSegs.reduce((sum, s) => sum + s.duration, 0),
+            layoverAirports: inboundSegs.slice(0, -1).map(s => s.arrival_airport.id),
+          }
         : outbound;
 
       // Generate a consistent ID: serp_flightNumber_origin_destination_MMDD
