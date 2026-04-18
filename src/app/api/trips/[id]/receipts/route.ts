@@ -44,13 +44,22 @@ export async function POST(req: NextRequest, context: ReceiptsRouteContext) {
     const trip = await Trip.findById(id)
     if (!trip) return NextResponse.json({ error: "Trip not found" }, { status: 404 })
 
-    const raw = await extractReceiptData(imageBase64, mimeType ?? "image/jpeg")
+    // Strip data URL prefix if the client sends a full data URL
+    const base64Data = imageBase64.replace(/^data:[^;]+;base64,/, "")
+
+    const raw = await extractReceiptData(base64Data, mimeType ?? "image/jpeg")
     const clean = sanitizeReceiptData(raw)
 
     const amountNum = parseFloat(clean.amount)
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      return NextResponse.json({ error: "Invalid amount extracted from receipt" }, { status: 422 })
+    }
     const totalUsd = await convertCurrency(amountNum, clean.currency, "USD")
     const totalDecimal = toDecimal128(totalUsd)
     const originalDecimal = toDecimal128(amountNum)
+
+    const extractedDate = clean.date ? new Date(clean.date) : new Date()
+    const receiptDate = isNaN(extractedDate.getTime()) ? new Date() : extractedDate
 
     const receipt = {
       _id: new Types.ObjectId(),
@@ -59,19 +68,16 @@ export async function POST(req: NextRequest, context: ReceiptsRouteContext) {
       total: totalDecimal,
       currency: clean.currency,
       originalAmount: originalDecimal,
-      date: new Date(),
+      date: receiptDate,
       sanitized: true,
       extractedByAI: true,
       imageUrl: null,
     }
 
-    // Append receipt and update totalSpendUsd
-    const currentTotal = parseFloat(trip.totalSpendUsd?.toString() ?? "0")
-    const newTotal = toDecimal128(currentTotal + totalUsd)
-
+    // Atomic push + increment — no read-modify-write
     await Trip.findByIdAndUpdate(id, {
       $push: { receipts: receipt },
-      $set: { totalSpendUsd: newTotal },
+      $inc: { totalSpendUsd: totalUsd },
     })
 
     return NextResponse.json({

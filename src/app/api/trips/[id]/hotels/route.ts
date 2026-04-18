@@ -21,6 +21,8 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/google/oauth"
 import { connectToDatabase } from "@/lib/mongodb/client"
 import Trip from "@/lib/mongodb/models/Trip"
 import { searchHotels } from "@/lib/hotels/search"
@@ -30,6 +32,9 @@ type HotelsRouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(req: NextRequest, context: HotelsRouteContext) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 })
+
     const { id } = await context.params
     await connectToDatabase()
 

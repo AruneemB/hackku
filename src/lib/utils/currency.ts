@@ -20,18 +20,53 @@ export function fromDecimal128(value: Decimal128 | undefined): string {
   return value?.toString() ?? "0.00"
 }
 
+// ---------------------------------------------------------------------------
+// In-memory exchange rate cache — rates are fetched once per currency per day
+// ---------------------------------------------------------------------------
+
+interface CacheEntry {
+  rates: Record<string, number>
+  expiresAt: number
+}
+
+const rateCache = new Map<string, CacheEntry>()
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const FETCH_TIMEOUT_MS = 3000
+
 export async function convertCurrency(
   amount: number,
   fromCurrency: string,
   toCurrency = "USD"
 ): Promise<number> {
-  if (fromCurrency.toUpperCase() === toCurrency.toUpperCase()) return amount
-  const res = await fetch(
-    `https://open.er-api.com/v6/latest/${fromCurrency.toUpperCase()}`
-  )
-  if (!res.ok) throw new Error(`Exchange rate fetch failed: ${res.status}`)
-  const data = await res.json()
-  const rate = data.rates?.[toCurrency.toUpperCase()]
-  if (!rate) throw new Error(`No rate for ${fromCurrency} → ${toCurrency}`)
-  return Math.round(amount * rate * 100) / 100
+  const from = fromCurrency.toUpperCase()
+  const to   = toCurrency.toUpperCase()
+  if (from === to) return amount
+
+  const cached = rateCache.get(from)
+  if (cached && Date.now() < cached.expiresAt) {
+    const rate = cached.rates[to]
+    if (rate) return Math.round(amount * rate * 100) / 100
+  }
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+    const res = await fetch(
+      `https://open.er-api.com/v6/latest/${from}`,
+      { signal: controller.signal }
+    ).finally(() => clearTimeout(timer))
+
+    if (!res.ok) throw new Error(`Exchange rate fetch failed: ${res.status}`)
+
+    const data = await res.json()
+    rateCache.set(from, { rates: data.rates ?? {}, expiresAt: Date.now() + CACHE_TTL_MS })
+
+    const rate = data.rates?.[to]
+    if (rate) return Math.round(amount * rate * 100) / 100
+  } catch {
+    // Network error or timeout — return original amount unchanged
+  }
+
+  return amount
 }

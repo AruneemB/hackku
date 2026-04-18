@@ -39,29 +39,21 @@ export async function GET() {
   }
 
   try {
-    // Fetch last 5 inbox messages
+    // Verify scope by fetching inbox message count only (no content)
     const list = await gmailFetch(
-      "/messages?maxResults=5&labelIds=INBOX",
+      "/messages?maxResults=1&labelIds=INBOX",
       session.accessToken
     )
 
-    const messageIds: string[] = (list.messages ?? []).map((m: { id: string }) => m.id)
+    const count: number = list.resultSizeEstimate ?? 0
+    const hasMessages: boolean = Array.isArray(list.messages) && list.messages.length > 0
 
-    // Fetch subject + from + date for each
-    const messages = await Promise.all(
-      messageIds.map(async (id) => {
-        const msg = await gmailFetch(
-          `/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
-          session.accessToken
-        )
-        const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
-        const get = (name: string) =>
-          headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? ""
-        return { id, subject: get("Subject"), from: get("From"), date: get("Date") }
-      })
-    )
-
-    return NextResponse.json({ email: session.user?.email, messages })
+    return NextResponse.json({
+      email: session.user?.email,
+      gmailScopeActive: true,
+      inboxCount: count,
+      hasMessages,
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json({ error: message }, { status: 500 })

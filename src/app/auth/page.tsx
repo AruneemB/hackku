@@ -19,16 +19,11 @@ import { useSession, signIn, signOut } from "next-auth/react"
 import { useState } from "react"
 import type { Session } from "next-auth"
 
-interface GmailMessage {
-  id: string
-  subject: string
-  from: string
-  date: string
-}
-
 interface GmailTestResult {
   email?: string
-  messages?: GmailMessage[]
+  gmailScopeActive?: boolean
+  inboxCount?: number
+  hasMessages?: boolean
   error?: string
 }
 
@@ -211,8 +206,7 @@ function UserCard({ session }: { session: Session }) {
 function TokenCard({ session }: { session: Session }) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-2 font-mono text-xs">
-      <Row label="accessToken"  value={session.accessToken  ? `…${session.accessToken.slice(-8)}`  : "missing"} ok={!!session.accessToken} />
-      <Row label="refreshToken" value={session.refreshToken ? `…${session.refreshToken.slice(-8)}` : "missing"} ok={!!session.refreshToken} />
+      <Row label="accessToken" value={session.accessToken ? "present" : "missing"} ok={!!session.accessToken} />
     </div>
   )
 }
@@ -235,18 +229,15 @@ function GmailResult({ result }: { result: GmailTestResult }) {
     )
   }
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col gap-3">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col gap-2 text-sm">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Last 5 inbox messages</span>
-        <span className="text-xs text-green-400">Gmail scope ✓</span>
+        <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Gmail scope check</span>
+        <span className="text-xs text-green-400">Active ✓</span>
       </div>
-      {(result.messages ?? []).map((msg) => (
-        <div key={msg.id} className="border-t border-gray-800 pt-3">
-          <p className="text-sm font-medium truncate">{msg.subject || "(no subject)"}</p>
-          <p className="text-xs text-gray-500 truncate mt-0.5">{msg.from}</p>
-          <p className="text-xs text-gray-600 mt-0.5">{msg.date}</p>
-        </div>
-      ))}
+      <p className="text-gray-400">
+        Inbox count: <span className="text-white font-medium">{result.inboxCount ?? 0}</span>
+        {" · "}Has messages: <span className="text-white font-medium">{result.hasMessages ? "yes" : "no"}</span>
+      </p>
     </div>
   )
 }

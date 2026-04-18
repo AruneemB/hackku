@@ -19,11 +19,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/google/oauth"
 
+function sanitizeHeader(value: string): string {
+  return value.replace(/[\r\n\0]/g, "")
+}
+
 function buildRfc2822(to: string, from: string, subject: string, body: string): string {
   const message = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `From: ${sanitizeHeader(from)}`,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${sanitizeHeader(subject)}`,
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset=utf-8`,
     ``,

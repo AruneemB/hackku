@@ -18,6 +18,7 @@ import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { ApprovalStatus } from "@/components/approval/ApprovalStatus"
+import { RejectionRecovery } from "@/components/approval/RejectionRecovery"
 import { useTrip } from "@/hooks/useTrip"
 import { useMascot } from "@/hooks/useMascot"
 import { Mascot } from "@/components/mascot/Mascot"
@@ -33,6 +34,7 @@ export default function ApprovalPage() {
   const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "error">("idle")
   const [sendError, setSendError] = useState<string | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null)
 
   const sendApprovalEmail = useCallback(async () => {
     setSendState("sending")
@@ -146,44 +148,56 @@ export default function ApprovalPage() {
           )}
 
           {/* Approval polling status */}
-          {(sendState === "sent") && (
+          {(sendState === "sent") && !rejectionReason && (
             <ApprovalStatus
               tripId={tripId}
               onApproved={() => router.push(`/trip/${tripId}/checklist`)}
-              onRejected={() => {}}
+              onRejected={(reason) => setRejectionReason(reason ?? "Manager rejected the request.")}
             />
           )}
 
-          {/* Manual approval for demo (simulate manager approve/reject) */}
-          <div className="border border-dashed border-gray-300 rounded-xl p-4 text-sm">
-            <p className="text-gray-500 font-medium mb-3">Demo controls — simulate manager reply</p>
-            <div className="flex gap-2">
-              <button
-                onClick={async () => {
-                  await fetch("/api/webhooks/gmail-approval", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ tripId, approved: true, managerReply: "Approved. Safe travels!" }),
-                  })
-                }}
-                className="flex-1 bg-green-600 hover:bg-green-500 text-white font-semibold py-2 rounded-lg text-xs"
-              >
-                ✓ Approve
-              </button>
-              <button
-                onClick={async () => {
-                  await fetch("/api/webhooks/gmail-approval", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ tripId, approved: false, managerReply: "Please find a cheaper hotel option." }),
-                  })
-                }}
-                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-semibold py-2 rounded-lg text-xs"
-              >
-                ✗ Reject
-              </button>
+          {/* Rejection recovery */}
+          {rejectionReason && (
+            <RejectionRecovery
+              tripId={tripId}
+              rejectionReason={rejectionReason}
+              policyCapUsd={trip.budgetCapUsd ?? 200}
+              onResubmitted={() => setRejectionReason(null)}
+            />
+          )}
+
+          {/* Demo controls — only visible when NEXT_PUBLIC_ENABLE_DEMO_CONTROLS=true */}
+          {process.env.NEXT_PUBLIC_ENABLE_DEMO_CONTROLS === "true" && (
+            <div className="border border-dashed border-gray-300 rounded-xl p-4 text-sm">
+              <p className="text-gray-500 font-medium mb-3">Demo controls — simulate manager reply</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    await fetch("/api/webhooks/gmail-approval", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ tripId, approved: true, managerReply: "Approved. Safe travels!" }),
+                    })
+                  }}
+                  className="flex-1 bg-green-600 hover:bg-green-500 text-white font-semibold py-2 rounded-lg text-xs"
+                >
+                  ✓ Approve
+                </button>
+                <button
+                  onClick={async () => {
+                    await fetch("/api/webhooks/gmail-approval", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ tripId, approved: false, managerReply: "Please find a cheaper hotel option." }),
+                    })
+                  }}
+                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-semibold py-2 rounded-lg text-xs"
+                >
+                  ✗ Reject
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Mascot */}

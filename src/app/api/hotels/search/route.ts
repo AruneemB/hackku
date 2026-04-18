@@ -22,11 +22,28 @@ export async function POST(req: NextRequest) {
   try {
     const { city, country, checkIn, checkOut } = await req.json()
 
-    if (!city || !country || !checkIn || !checkOut) {
+    if (
+      typeof city !== "string" || !city.trim() ||
+      typeof country !== "string" || !country.trim() ||
+      typeof checkIn !== "string" || !checkIn.trim() ||
+      typeof checkOut !== "string" || !checkOut.trim()
+    ) {
       return NextResponse.json(
-        { error: "city, country, checkIn, and checkOut are required" },
+        { error: "city, country, checkIn, and checkOut are required strings" },
         { status: 400 }
       )
+    }
+
+    const checkInMs  = new Date(checkIn).getTime()
+    const checkOutMs = new Date(checkOut).getTime()
+    if (isNaN(checkInMs) || isNaN(checkOutMs)) {
+      return NextResponse.json({ error: "checkIn and checkOut must be valid dates" }, { status: 400 })
+    }
+    if (checkOutMs <= checkInMs) {
+      return NextResponse.json({ error: "checkOut must be after checkIn" }, { status: 400 })
+    }
+    if (checkOutMs - checkInMs > 90 * 86_400_000) {
+      return NextResponse.json({ error: "Date range must not exceed 90 days" }, { status: 400 })
     }
 
     const policy = budgetCaps.cities.find(

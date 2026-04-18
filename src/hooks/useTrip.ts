@@ -92,7 +92,7 @@ export function useTrip(tripId: string) {
     }
   };
 
-  const updateHotels = async (hotels: Hotel[]) => {
+  const updateHotels = async (hotels: Hotel[]): Promise<boolean> => {
     try {
       const response = await fetch(`/api/trips/${tripId}`, {
         method: "PATCH",
@@ -102,8 +102,10 @@ export function useTrip(tripId: string) {
       if (!response.ok) throw new Error("Failed to update hotels")
       const updatedTrip = await response.json()
       setTrip(updatedTrip)
+      return true
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred")
+      return false
     }
   }
 

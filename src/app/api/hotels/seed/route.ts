@@ -14,6 +14,9 @@ import clientPromise from "@/lib/mongodb/client"
 import vendorsData from "../../../../../data/vendors/preferred-vendors.json"
 
 export async function POST() {
+  if (process.env.NODE_ENV !== "development") {
+    return NextResponse.json({ error: "Only available in development" }, { status: 403 })
+  }
   try {
     const client = await clientPromise
     const db = client.db("hackku")

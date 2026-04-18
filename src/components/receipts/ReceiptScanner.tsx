@@ -21,7 +21,7 @@
 
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useMascot } from "@/hooks/useMascot"
 import type { Receipt } from "@/types"
 
@@ -46,6 +46,7 @@ interface ScannedReceipt {
 export function ReceiptScanner({ tripId, onReceiptAdded }: ReceiptScannerProps) {
   const { say, setThinking } = useMascot()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const previewUrlRef = useRef<string | null>(null)
   const [scanState, setScanState] = useState<ScanState>("idle")
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [imageBase64, setImageBase64] = useState<string | null>(null)
@@ -53,12 +54,24 @@ export function ReceiptScanner({ tripId, onReceiptAdded }: ReceiptScannerProps) 
   const [scanned, setScanned] = useState<ScannedReceipt | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Revoke any blob URL when component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+        previewUrlRef.current = null
+      }
+    }
+  }, [])
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
     setMimeType(file.type || "image/jpeg")
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     const url = URL.createObjectURL(file)
+    previewUrlRef.current = url
     setPreviewUrl(url)
 
     const reader = new FileReader()
@@ -121,6 +134,10 @@ export function ReceiptScanner({ tripId, onReceiptAdded }: ReceiptScannerProps) 
   }
 
   function handleReset() {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
     setScanState("idle")
     setPreviewUrl(null)
     setImageBase64(null)

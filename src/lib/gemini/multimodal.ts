@@ -37,7 +37,27 @@ export async function extractReceiptData(
     const result = await geminiModel.generateContent([RECEIPT_PROMPT, imagePart])
     const text = result.response.text().trim()
     const jsonText = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")
-    return JSON.parse(jsonText) as GeminiReceiptExtraction
+    const parsed = JSON.parse(jsonText) as Record<string, unknown>
+
+    const ALLOWED_CATEGORIES = new Set(["meal", "transport", "hotel", "other"])
+    const merchant = typeof parsed.merchant === "string" && parsed.merchant.trim() ? parsed.merchant.trim() : "Unknown"
+    const amount = String(parsed.amount ?? "0")
+    const amountNum = parseFloat(amount)
+    const currency = typeof parsed.currency === "string" && /^[A-Z]{3}$/.test(parsed.currency) ? parsed.currency : "USD"
+    const category = typeof parsed.category === "string" && ALLOWED_CATEGORIES.has(parsed.category) ? parsed.category : "other"
+    const hasPII = typeof parsed.hasPII === "boolean" ? parsed.hasPII : false
+    const rawConf = typeof parsed.confidence === "number" ? parsed.confidence : 0
+    const confidence = Math.max(0, Math.min(1, rawConf))
+
+    return {
+      merchant,
+      amount: Number.isFinite(amountNum) && amountNum >= 0 ? String(amountNum) : "0",
+      currency,
+      date: typeof parsed.date === "string" ? parsed.date : new Date().toISOString().split("T")[0],
+      category,
+      hasPII,
+      confidence,
+    } as GeminiReceiptExtraction
   } catch (err: unknown) {
     const apiErr = err as { status?: number; errorDetails?: { "@type": string; retryDelay?: string }[] }
     if (apiErr?.status === 429 && attempt < 2) {
