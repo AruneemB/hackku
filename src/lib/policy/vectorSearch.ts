@@ -22,35 +22,51 @@ import { buildPolicySummaryPrompt } from "@/lib/gemini/prompts";
 import { Trip } from "@/types/trip";
 import { PolicyFindings } from "@/types/policy";
 
-// TODO: export async function queryPolicyForTrip(trip: Trip): Promise<PolicyFindings> {
-//   // Step 1: Generate query embedding
-//   // const query = `travel policy budget rules for ${trip.destination.city} ${trip.destination.country}`
-//   // const embedding = await generateEmbedding(query)
-//
-//   // Step 2: Atlas Vector Search
-//   // const db = (await clientPromise).db("hackku")
-//   // const results = await db.collection("policies").aggregate([
-//   //   { $vectorSearch: {
-//   //     index: "policy_vector_index",
-//   //     path: "embedding",
-//   //     queryVector: embedding,
-//   //     numCandidates: 10,
-//   //     limit: 1
-//   //   }},
-//   //   { $project: { embedding: 0 } }  // don't return the large embedding array
-//   // ]).toArray()
-//
-//   // Step 3: Gemini synthesizes findings
-//   // const policyDoc = results[0]
-//   // const prompt = buildPolicySummaryPrompt(policyDoc, trip)
-//   // const summary = await geminiModel.generateContent(prompt)
-//
-//   // EXAMPLE RETURN:
-//   // {
-//   //   "visa": { "destinationCountry": "IT", "visaRequired": false, "stayLimitDays": 90 },
-//   //   "hotelNightlyCapUsd": 200, "flightCapUsd": 1500,
-//   //   "requiresManagerApproval": true,
-//   //   "approvalReason": "Hotel exceeds $200 Milan cap",
-//   //   "mascotSummary": "No visa needed! But the hotel is $15 over cap — I'll need sign-off."
-//   // }
-// }
+export async function queryPolicyForTrip(trip: Trip): Promise<PolicyFindings> {
+  // Step 1: Generate query embedding
+  const query = `travel policy budget rules for ${trip.destination.city} ${trip.destination.country}`
+  const embedding = await generateEmbedding(query)
+
+  // Step 2: Atlas Vector Search
+  const client = await clientPromise;
+  const db = client.db("hackku")
+  const results = await db.collection("policies").aggregate([
+    {
+      $vectorSearch: {
+        index: "policy_vector_index",
+        path: "embedding",
+        queryVector: embedding,
+        numCandidates: 10,
+        limit: 1
+      }
+    },
+    {
+      $project: { embedding: 0 }
+    }
+  ]).toArray()
+
+  if (results.length === 0) {
+    throw new Error(`No policy found for ${trip.destination.city}, ${trip.destination.country}`);
+  }
+
+  const policyDoc = results[0];
+
+  // Step 3: Gemini synthesizes findings
+  const prompt = buildPolicySummaryPrompt(policyDoc, trip)
+  const result = await geminiModel.generateContent(prompt)
+  const responseText = result.response.text()
+
+  // Clean up JSON response if wrapped in markdown
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("Failed to parse PolicyFindings from Gemini response");
+  }
+
+  try {
+    const findings = JSON.parse(jsonMatch[0]) as PolicyFindings;
+    return findings;
+  } catch (error) {
+    console.error("Error parsing PolicyFindings JSON:", error);
+    throw new Error("Invalid PolicyFindings JSON returned from Gemini");
+  }
+}

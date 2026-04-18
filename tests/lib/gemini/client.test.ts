@@ -91,14 +91,17 @@ describe("generateEmbedding", () => {
     mockEmbedContent.mockClear()
   })
 
-  it("calls embedContent with the provided text", async () => {
+  it("calls embedContent with the provided text and 384 dimensions", async () => {
     await generateEmbedding("Milan travel policy")
     expect(mockEmbedContent).toHaveBeenCalledOnce()
-    expect(mockEmbedContent).toHaveBeenCalledWith("Milan travel policy")
+    expect(mockEmbedContent).toHaveBeenCalledWith({
+      content: { parts: [{ text: "Milan travel policy" }], role: "user" },
+      outputDimensionality: 384,
+    })
   })
 
   it("returns the values array from the embedding response", async () => {
-    const values = [0.1, -0.2, 0.3, 0.0]
+    const values = new Array(384).fill(0.1)
     mockEmbedContent.mockResolvedValueOnce({ embedding: { values } })
     const result = await generateEmbedding("any text")
     expect(result).toEqual(values)
@@ -117,10 +120,10 @@ describe("generateEmbedding", () => {
     await expect(generateEmbedding("text")).rejects.toThrow("API quota exceeded")
   })
 
-  it("handles embeddings with 768 values (expected dimension)", async () => {
-    const vec = new Array(768).fill(0).map((_, i) => i / 768)
+  it("handles embeddings with 384 values (requested dimension)", async () => {
+    const vec = new Array(384).fill(0).map((_, i) => i / 384)
     mockEmbedContent.mockResolvedValueOnce({ embedding: { values: vec } })
     const result = await generateEmbedding("policy text")
-    expect(result).toHaveLength(768)
+    expect(result).toHaveLength(384)
   })
 })

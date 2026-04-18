@@ -33,9 +33,43 @@
 //   // ]
 // }
 
-// TODO: export function buildPolicySummaryPrompt(policyFindings: PolicyFindings) {
-//   // Frame 4 — mascot explains visa + budget findings in plain language
-// }
+export function buildPolicySummaryPrompt(policyDoc: any, trip: any) {
+  return `You are a travel policy expert and helpful AI mascot. 
+Based on the company travel policy excerpt and the user's trip details below, generate a PolicyFindings JSON object.
+
+Trip Details:
+- Destination: ${trip.destination.city}, ${trip.destination.country}
+- Dates: ${trip.dates.departure} to ${trip.dates.return}
+
+Policy Excerpt:
+${policyDoc.handbookExcerpt}
+
+Policy Budget Caps:
+- Hotel Nightly Cap: $${policyDoc.hotelNightlyCapUsd}
+- Flight Cap: $${policyDoc.flightCapUsd}
+- Meal Allowance: $${policyDoc.mealAllowancePerDayUsd} per day
+
+Return ONLY a JSON object matching this structure:
+{
+  "visa": {
+    "destinationCountry": "string (ISO 2-letter code)",
+    "citizenship": "string (e.g. US)",
+    "visaRequired": boolean,
+    "visaType": "string | null",
+    "stayLimitDays": number,
+    "notes": "string",
+    "applicationUrl": "string | null"
+  },
+  "hotelNightlyCapUsd": number,
+  "flightCapUsd": number,
+  "mealAllowancePerDayUsd": number,
+  "requiresManagerApproval": boolean,
+  "approvalReason": "string | null",
+  "mascotSummary": "A friendly summary of the findings, including visa status and whether the trip is in compliance."
+}
+
+Ensure the JSON is valid and includes all fields.`;
+}
 
 // TODO: export function buildCrisisPrompt(delayMinutes: number, alternativeFlights: Flight[]) {
 //   // Frame 10 — empathetic tone, explains disruption + next steps
