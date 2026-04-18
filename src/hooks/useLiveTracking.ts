@@ -1,30 +1,55 @@
-// ============================================================
-// HOOK: useLiveTracking
-// OWNER: Track A (Frontend & UX)
-// DESCRIPTION: Combines flight status, weather, and hotel
-//   check-in data into a single live dashboard state for
-//   Frame 9. Orchestrates the mascot's proactive audio
-//   updates (gate announcements, traffic warnings).
-//
-// USAGE:
-//   const { flightStatus, weather, hotelStatus, mascotAlerts }
-//     = useLiveTracking(trip)
-// ============================================================
+"use client";
 
-// TODO: import { useFlightStatus } from "./useFlightStatus"
-// TODO: import { useMascot } from "./useMascot"
-// TODO: import type { Trip, WeatherForecast } from "@/types"
+import { useState, useEffect, useRef } from "react";
+import { useFlightStatus } from "./useFlightStatus";
+import { useMascot } from "./useMascot";
+import type { Trip, WeatherForecast } from "@/types";
 
-// TODO: export function useLiveTracking(trip: Trip | null) {
-//   // Compose useFlightStatus for the active leg
-//   // Fetch weather for destination
-//   // Watch for delays → trigger mascot empathetic alert
-//   // Watch for gate changes → trigger mascot neutral update
-//
-//   // return {
-//   //   flightStatus,   ← from useFlightStatus
-//   //   weather,        ← from /api/weather fetch
-//   //   mascotAlerts,   ← array of recent mascot messages
-//   //   isInCrisis,     ← true if delay > connection buffer
-//   // }
-// }
+const CONNECTION_BUFFER_MINUTES = 45;
+
+export function useLiveTracking(trip: Trip | null) {
+  const flightNumber = trip?.selectedBundle?.flight?.outbound?.flightNumber ?? "";
+  const { status: flightStatus, isDelayed, isCancelled, delayMinutes, gate } = useFlightStatus(flightNumber);
+
+  const [weather, setWeather] = useState<WeatherForecast | null>(null);
+  const mascot = useMascot();
+  const alreadyAlerted = useRef(false);
+
+  const isInCrisis = isDelayed && delayMinutes > CONNECTION_BUFFER_MINUTES;
+  const isCrisisOrCancelled = isInCrisis || isCancelled;
+
+  useEffect(() => {
+    if (!trip?.destination) return;
+    const { city, country } = trip.destination;
+    fetch(`/api/weather?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setWeather(data))
+      .catch(() => null);
+  }, [trip?.destination?.city, trip?.destination?.country]);
+
+  useEffect(() => {
+    if (isCrisisOrCancelled && !alreadyAlerted.current) {
+      alreadyAlerted.current = true;
+      const reason = isCancelled
+        ? "Your flight has been cancelled."
+        : `Your flight is delayed by ${delayMinutes} minutes — that's past your connection window.`;
+      mascot.say(`Kelli, heads up. ${reason} I've already found alternative options for you.`, "urgent");
+    }
+  }, [isCrisisOrCancelled, isCancelled, delayMinutes]);
+
+  useEffect(() => {
+    if (gate && flightStatus?.status === "on_time") {
+      mascot.say(`Your departure gate is ${gate}. Everything looks on schedule.`, "neutral");
+    }
+  }, [gate]);
+
+  return {
+    flightStatus,
+    weather,
+    isInCrisis: isCrisisOrCancelled,
+    isDelayed,
+    isCancelled,
+    delayMinutes,
+    gate,
+  };
+}
