@@ -28,8 +28,9 @@ export function useTrip(tripId: string) {
       }
       const data = await response.json();
       setTrip(data);
-    } catch (err: any) {
-      setError(err.message || "An error occurred");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -51,8 +52,9 @@ export function useTrip(tripId: string) {
       if (!response.ok) throw new Error("Failed to select bundle");
       const updatedTrip = await response.json();
       setTrip(updatedTrip);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      setError(errorMessage);
     }
   };
 
@@ -66,8 +68,9 @@ export function useTrip(tripId: string) {
       if (!response.ok) throw new Error("Failed to update status");
       const updatedTrip = await response.json();
       setTrip(updatedTrip);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      setError(errorMessage);
     }
   };
 
@@ -81,8 +84,9 @@ export function useTrip(tripId: string) {
       if (!response.ok) throw new Error("Failed to update flights");
       const updatedTrip = await response.json();
       setTrip(updatedTrip);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      setError(errorMessage);
     }
   };
 

@@ -18,7 +18,6 @@
 
 "use client";
 
-import Image from "next/image";
 import { useMascot } from "@/hooks/useMascot";
 
 /**
@@ -34,7 +33,7 @@ export function Mascot() {
       {speech && (
         <div className="mb-4 p-4 bg-white rounded-2xl shadow-lg border-2 border-blue-100 relative max-w-xs">
           <p className="text-gray-800 text-sm font-medium leading-relaxed italic">
-            "{speech}"
+            &ldquo;{speech}&rdquo;
           </p>
           <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-b-2 border-r-2 border-blue-100 rotate-45"></div>
         </div>
@@ -57,7 +56,7 @@ export function Mascot() {
       
       <div className="mt-4 text-center">
         <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-          Kelli's Assistant
+          Kelli&apos;s Assistant
         </span>
       </div>
     </div>

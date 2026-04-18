@@ -9,7 +9,10 @@ const uri = process.env.MONGODB_URI;
 
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
-  var mongoose: any;
+  var mongoose: {
+    conn: typeof import("mongoose") | null;
+    promise: Promise<typeof import("mongoose")> | null;
+  };
 }
 
 let clientPromise: Promise<MongoClient>;
