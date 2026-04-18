@@ -17,25 +17,57 @@
 // EXAMPLE DOC → see src/types/flight.ts → FlightStatusUpdate
 // ============================================================
 
-// TimeSeries collections are created via db.createCollection(), not mongoose.model()
-// This file exports helper functions for reading/writing to the collection.
+import clientPromise from "@/lib/mongodb/client";
+import type { FlightStatusUpdate } from "@/types";
 
-// TODO: import clientPromise from "@/lib/mongodb/client"
-//
-// TODO: export async function writeFlightStatus(update: FlightStatusUpdate) {
-//   // Insert a new status event into the TimeSeries collection
-//   // const db = (await clientPromise).db("hackku")
-//   // await db.collection("flight_status").insertOne({ timestamp: new Date(), ...update })
-// }
-//
-// TODO: export async function getLatestFlightStatus(flightNumber: string) {
-//   // Returns the most recent status doc for a flight
-//   // EXAMPLE RETURN:
-//   // {
-//   //   "timestamp": "2025-09-14T15:30:00.000Z",
-//   //   "metadata": { "flightNumber": "AA2345", "tripId": "665a2b3c..." },
-//   //   "status": "delayed",
-//   //   "gate": "B22",
-//   //   "delayMinutes": 47
-//   // }
-// }
+/**
+ * Inserts a new flight status update into the flight_status TimeSeries collection.
+ * Maps flightNumber and tripId into the metadata field for TimeSeries optimization.
+ */
+export async function writeFlightStatus(update: Partial<FlightStatusUpdate>) {
+  const client = await clientPromise;
+  const db = client.db("hackku");
+
+  const { flightNumber, tripId, timestamp, ...rest } = update;
+
+  // TimeSeries collections require a timestamp field
+  const statusDoc = {
+    timestamp: timestamp ? new Date(timestamp) : new Date(),
+    metadata: {
+      flightNumber: flightNumber || "UNKNOWN",
+      tripId: tripId || null,
+    },
+    ...rest,
+  };
+
+  await db.collection("flight_status").insertOne(statusDoc);
+}
+
+/**
+ * Returns the most recent flight status document for a given flight number.
+ * Queries by metadata.flightNumber and sorts by timestamp descending.
+ */
+export async function getLatestFlightStatus(flightNumber: string): Promise<FlightStatusUpdate | null> {
+  const client = await clientPromise;
+  const db = client.db("hackku");
+
+  const doc = await db.collection("flight_status")
+    .find({ "metadata.flightNumber": flightNumber })
+    .sort({ timestamp: -1 })
+    .limit(1)
+    .toArray();
+
+  if (!doc || doc.length === 0) {
+    return null;
+  }
+
+  const { metadata, timestamp, _id, ...rest } = doc[0];
+
+  // Map back to the flat FlightStatusUpdate type for the frontend
+  return {
+    timestamp: new Date(timestamp),
+    flightNumber: metadata?.flightNumber,
+    tripId: metadata?.tripId,
+    ...rest,
+  } as FlightStatusUpdate;
+}
