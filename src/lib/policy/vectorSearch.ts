@@ -76,17 +76,14 @@ export async function queryPolicyForTrip(
 
   // Step 4: Gemini synthesizes findings
   const prompt = buildPolicySummaryPrompt(policyDoc, trip, visaInfo.toObject(), costs)
-  const result = await geminiModel.generateContent(prompt)
+  const result = await geminiModel.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json" }
+  })
   const responseText = result.response.text()
 
-  // Clean up JSON response if wrapped in markdown
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Failed to parse PolicyFindings from Gemini response");
-  }
-
   try {
-    const findings = JSON.parse(jsonMatch[0]) as PolicyFindings;
+    const findings = JSON.parse(responseText) as PolicyFindings;
     // Ensure the visa field is the full record from our DB
     findings.visa = visaInfo.toObject() as unknown as VisaRequirementType;
     return findings;
