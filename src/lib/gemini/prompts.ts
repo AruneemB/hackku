@@ -34,15 +34,30 @@
 // }
 
 import { Trip } from "@/types/trip";
-import { Policy } from "@/types/policy";
+import { Policy, VisaRequirement } from "@/types/policy";
 
-export function buildPolicySummaryPrompt(policyDoc: Policy, trip: Trip) {
+export function buildPolicySummaryPrompt(
+  policyDoc: Policy, 
+  trip: Trip, 
+  visaInfo: VisaRequirement,
+  costs?: { flightCostUsd?: number; hotelNightlyRateUsd?: number }
+) {
   return `You are a travel policy expert and helpful AI mascot. 
-Based on the company travel policy excerpt and the user's trip details below, generate a PolicyFindings JSON object.
+Based on the company travel policy excerpt, visa requirements, and the user's trip details below, generate a PolicyFindings JSON object.
 
 Trip Details:
 - Destination: ${trip.destination.city}, ${trip.destination.country}
 - Dates: ${trip.dates.departure} to ${trip.dates.return}
+
+${costs?.flightCostUsd ? `- Selected Flight Cost: $${costs.flightCostUsd}` : ""}
+${costs?.hotelNightlyRateUsd ? `- Selected Hotel Nightly Rate: $${costs.hotelNightlyRateUsd}` : ""}
+
+Visa Requirements for ${visaInfo.citizenship} citizen visiting ${visaInfo.destinationCountry}:
+- Visa Required: ${visaInfo.visaRequired}
+- Visa Type: ${visaInfo.visaType || "N/A"}
+- Stay Limit: ${visaInfo.stayLimitDays} days
+- Notes: ${visaInfo.notes}
+${visaInfo.applicationUrl ? `- Application URL: ${visaInfo.applicationUrl}` : ""}
 
 Policy Excerpt:
 ${policyDoc.handbookExcerpt}
@@ -71,7 +86,8 @@ Return ONLY a JSON object matching this structure:
   "mascotSummary": "A friendly summary of the findings, including visa status and whether the trip is in compliance."
 }
 
-Ensure the JSON is valid and includes all fields.`;
+Ensure the JSON is valid and includes all fields. The "visa" field should exactly match the Visa Requirements provided above. 
+If costs are provided, compare them against the policy caps to determine "requiresManagerApproval" and "approvalReason".`;
 }
 
 // TODO: export function buildCrisisPrompt(delayMinutes: number, alternativeFlights: Flight[]) {
