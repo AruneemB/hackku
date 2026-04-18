@@ -1,0 +1,113 @@
+{
+  "_comment": "Company preferred vendor list. Seeded into 'preferred_vendors' collection. location uses GeoJSON Point format [lng, lat] for MongoDB 2dsphere $geoNear queries.",
+  "vendors": [
+    {
+      "type": "hotel",
+      "name": "Marriott Milan",
+      "city": "Milan",
+      "country": "IT",
+      "location": { "type": "Point", "coordinates": [9.1900, 45.4668] },
+      "address": "Via Washington 66, 20146 Milano, Italy",
+      "amenities": { "freeBreakfast": true, "wifi": true, "gym": true, "parking": false },
+      "nightlyRateUsd": 185,
+      "preferred": true,
+      "contactPhone": "+39 02 4851 8925"
+    },
+    {
+      "type": "hotel",
+      "name": "Hilton Garden Inn Milan",
+      "city": "Milan",
+      "country": "IT",
+      "location": { "type": "Point", "coordinates": [9.1650, 45.4720] },
+      "address": "Corso Buenos Aires 1, 20124 Milano, Italy",
+      "amenities": { "freeBreakfast": false, "wifi": true, "gym": true, "parking": true },
+      "nightlyRateUsd": 172,
+      "preferred": true,
+      "contactPhone": "+39 02 2900 1234"
+    },
+    {
+      "type": "hotel",
+      "name": "NH Collection Milano Porta Romana",
+      "city": "Milan",
+      "country": "IT",
+      "location": { "type": "Point", "coordinates": [9.1990, 45.4560] },
+      "address": "Corso di Porta Romana 64, 20122 Milano, Italy",
+      "amenities": { "freeBreakfast": true, "wifi": true, "gym": false, "parking": false },
+      "nightlyRateUsd": 159,
+      "preferred": true,
+      "contactPhone": "+39 02 5832 1234"
+    },
+    {
+      "type": "hotel",
+      "name": "The Savoy London",
+      "city": "London",
+      "country": "GB",
+      "location": { "type": "Point", "coordinates": [-0.1205, 51.5103] },
+      "address": "Strand, London WC2R 0EZ, UK",
+      "amenities": { "freeBreakfast": true, "wifi": true, "gym": true, "parking": false },
+      "nightlyRateUsd": 245,
+      "preferred": true,
+      "contactPhone": "+44 20 7836 4343"
+    },
+    {
+      "type": "hotel",
+      "name": "Hilton London Canary Wharf",
+      "city": "London",
+      "country": "GB",
+      "location": { "type": "Point", "coordinates": [-0.0123, 51.5031] },
+      "address": "South Quay, Marsh Wall, London E14 9SH, UK",
+      "amenities": { "freeBreakfast": false, "wifi": true, "gym": true, "parking": true },
+      "nightlyRateUsd": 210,
+      "preferred": true,
+      "contactPhone": "+44 20 7510 1999"
+    },
+    {
+      "type": "hotel",
+      "name": "Pullman Paris Montparnasse",
+      "city": "Paris",
+      "country": "FR",
+      "location": { "type": "Point", "coordinates": [2.3200, 48.8420] },
+      "address": "19 Rue du Commandant René Mouchotte, 75014 Paris, France",
+      "amenities": { "freeBreakfast": true, "wifi": true, "gym": true, "parking": true },
+      "nightlyRateUsd": 195,
+      "preferred": true,
+      "contactPhone": "+33 1 4438 2400"
+    },
+    {
+      "type": "hotel",
+      "name": "Keio Plaza Hotel Tokyo",
+      "city": "Tokyo",
+      "country": "JP",
+      "location": { "type": "Point", "coordinates": [139.6931, 35.6896] },
+      "address": "2-2-1 Nishishinjuku, Shinjuku, Tokyo 160-8330, Japan",
+      "amenities": { "freeBreakfast": false, "wifi": true, "gym": true, "parking": false },
+      "nightlyRateUsd": 175,
+      "preferred": true,
+      "contactPhone": "+81 3 3344 0111"
+    },
+    {
+      "type": "hotel",
+      "name": "Marriott Toronto Airport",
+      "city": "Toronto",
+      "country": "CA",
+      "location": { "type": "Point", "coordinates": [-79.6248, 43.6777] },
+      "address": "901 Dixon Road, Toronto, ON M9W 1J5, Canada",
+      "amenities": { "freeBreakfast": true, "wifi": true, "gym": true, "parking": true },
+      "nightlyRateUsd": 165,
+      "preferred": true,
+      "contactPhone": "+1 416 675 9444"
+    },
+    {
+      "type": "hotel",
+      "name": "Hilton Mexico City Reforma",
+      "city": "Mexico City",
+      "country": "MX",
+      "location": { "type": "Point", "coordinates": [-99.1590, 19.4258] },
+      "address": "Av. Juárez 70, Cuauhtémoc, 06600 Ciudad de México, Mexico",
+      "amenities": { "freeBreakfast": true, "wifi": true, "gym": true, "parking": true },
+      "nightlyRateUsd": 135,
+      "preferred": true,
+      "contactPhone": "+52 55 5130 5300"
+    }
+  ]
+}

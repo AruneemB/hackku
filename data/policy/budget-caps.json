@@ -1,0 +1,89 @@
+{
+  "_comment": "Per-city policy caps. Seeded into the 'policies' MongoDB collection by scripts/seed-mongodb.ts. handbookExcerpt is the text embedded by Gemini for Atlas Vector Search.",
+  "cities": [
+    {
+      "cityCode": "MIL",
+      "city": "Milan",
+      "country": "IT",
+      "hotelNightlyCapUsd": 200,
+      "flightCapUsd": 1500,
+      "mealAllowancePerDayUsd": 75,
+      "requiresApprovalAboveUsd": 200,
+      "preferredTransport": ["company_car", "rideshare", "metro"],
+      "officeLat": 45.4654,
+      "officeLng": 9.1866,
+      "localOfficePhone": "+39 02 1234 5678",
+      "handbookExcerpt": "Milan travel policy: hotel cap $200/night, flight cap $1,500, meal allowance $75/day. Preferred transport: company car or rideshare. Any hotel over $200/night requires manager approval."
+    },
+    {
+      "cityCode": "LON",
+      "city": "London",
+      "country": "GB",
+      "hotelNightlyCapUsd": 250,
+      "flightCapUsd": 1200,
+      "mealAllowancePerDayUsd": 85,
+      "requiresApprovalAboveUsd": 250,
+      "preferredTransport": ["black_cab", "rideshare", "heathrow_express"],
+      "officeLat": 51.5074,
+      "officeLng": -0.1278,
+      "localOfficePhone": "+44 20 7123 4567",
+      "handbookExcerpt": "London travel policy: hotel cap $250/night, flight cap $1,200, meal allowance $85/day. Preferred transport: black cab or Heathrow Express. Approval required above $250/night."
+    },
+    {
+      "cityCode": "PAR",
+      "city": "Paris",
+      "country": "FR",
+      "hotelNightlyCapUsd": 220,
+      "flightCapUsd": 1200,
+      "mealAllowancePerDayUsd": 80,
+      "requiresApprovalAboveUsd": 220,
+      "preferredTransport": ["rideshare", "rer_b", "metro"],
+      "officeLat": 48.8566,
+      "officeLng": 2.3522,
+      "localOfficePhone": "+33 1 2345 6789",
+      "handbookExcerpt": "Paris travel policy: hotel cap $220/night, flight cap $1,200, meal allowance $80/day. RER B from CDG recommended. Approval required above $220/night."
+    },
+    {
+      "cityCode": "TYO",
+      "city": "Tokyo",
+      "country": "JP",
+      "hotelNightlyCapUsd": 180,
+      "flightCapUsd": 2200,
+      "mealAllowancePerDayUsd": 70,
+      "requiresApprovalAboveUsd": 180,
+      "preferredTransport": ["narita_express", "limousine_bus"],
+      "officeLat": 35.6762,
+      "officeLng": 139.6503,
+      "localOfficePhone": "+81 3 1234 5678",
+      "handbookExcerpt": "Tokyo travel policy: hotel cap $180/night, flight cap $2,200, meal allowance $70/day. Narita Express is preferred transport. Approval required above $180/night."
+    },
+    {
+      "cityCode": "YTO",
+      "city": "Toronto",
+      "country": "CA",
+      "hotelNightlyCapUsd": 175,
+      "flightCapUsd": 800,
+      "mealAllowancePerDayUsd": 65,
+      "requiresApprovalAboveUsd": 175,
+      "preferredTransport": ["union_pearson_express", "rideshare"],
+      "officeLat": 43.6532,
+      "officeLng": -79.3832,
+      "localOfficePhone": "+1 416 123 4567",
+      "handbookExcerpt": "Toronto travel policy: hotel cap $175/night, flight cap $800, meal allowance $65/day. Union Pearson Express recommended from YYZ. Approval required above $175/night."
+    },
+    {
+      "cityCode": "MEX",
+      "city": "Mexico City",
+      "country": "MX",
+      "hotelNightlyCapUsd": 140,
+      "flightCapUsd": 600,
+      "mealAllowancePerDayUsd": 50,
+      "requiresApprovalAboveUsd": 140,
+      "preferredTransport": ["company_car", "approved_rideshare"],
+      "officeLat": 19.4326,
+      "officeLng": -99.1332,
+      "localOfficePhone": "+52 55 1234 5678",
+      "handbookExcerpt": "Mexico City travel policy: hotel cap $140/night, flight cap $600, meal allowance $50/day. Company car strongly preferred for safety. Approval required above $140/night."
+    }
+  ]
+}
