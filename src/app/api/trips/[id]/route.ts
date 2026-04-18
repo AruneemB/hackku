@@ -29,12 +29,46 @@
 // TODO: export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {}
 // TODO: export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {}
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/mongodb/client";
+import Trip from "@/lib/mongodb/models/Trip";
 
-export async function GET() {
-  return NextResponse.json({ message: "scaffold" });
+type TripRouteContext = { params: Promise<{ id: string }> };
+
+/**
+ * GET /api/trips/[id]
+ */
+export async function GET(req: NextRequest, context: TripRouteContext) {
+  try {
+    const { id } = await context.params;
+    await connectToDatabase();
+    const trip = await Trip.findById(id);
+    if (!trip) {
+      return NextResponse.json({ message: "Trip not found" }, { status: 404 });
+    }
+    return NextResponse.json(trip);
+  } catch (error) {
+    console.error("Trip GET error:", error);
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
 }
 
-export async function POST() {
-  return NextResponse.json({ message: "scaffold" });
+/**
+ * PATCH /api/trips/[id]
+ */
+export async function PATCH(req: NextRequest, context: TripRouteContext) {
+  try {
+    const { id } = await context.params;
+    await connectToDatabase();
+    const body = await req.json();
+    
+    const trip = await Trip.findByIdAndUpdate(id, body, { new: true });
+    if (!trip) {
+      return NextResponse.json({ message: "Trip not found" }, { status: 404 });
+    }
+    return NextResponse.json(trip);
+  } catch (error) {
+    console.error("Trip PATCH error:", error);
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
 }
