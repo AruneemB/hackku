@@ -10,18 +10,81 @@
 //   const { trip, isLoading, updateStatus, addReceipt } = useTrip(tripId)
 // ============================================================
 
-// TODO: import { useState, useEffect } from "react"
-// TODO: import type { Trip, TripBundle } from "@/types"
+import { useState, useEffect, useCallback } from "react";
+import type { Trip, TripBundle, TripStatus } from "@/types/trip";
+import type { Flight } from "@/types/flight";
 
-// TODO: export function useTrip(tripId: string) {
-//   // const [trip, setTrip] = useState<Trip | null>(null)
-//   // const [isLoading, setIsLoading] = useState(true)
-//
-//   // useEffect(() => { fetch(`/api/trips/${tripId}`).then(r => r.json()).then(setTrip) }, [tripId])
-//
-//   // const selectBundle = async (bundle: TripBundle) → PATCH /api/trips/[id] { selectedBundle }
-//   // const updateStatus = async (status: TripStatus) → PATCH /api/trips/[id] { status }
-//   // const addReceipt = async (receipt) → POST /api/trips/[id]/receipts
-//
-//   // return { trip, isLoading, selectBundle, updateStatus, addReceipt }
-// }
+export function useTrip(tripId: string) {
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchTrip = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/trips/${tripId}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch trip");
+      }
+      const data = await response.json();
+      setTrip(data);
+    } catch (err: any) {
+      setError(err.message || "An error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tripId]);
+
+  useEffect(() => {
+    if (tripId) {
+      fetchTrip();
+    }
+  }, [tripId, fetchTrip]);
+
+  const selectBundle = async (bundle: TripBundle) => {
+    try {
+      const response = await fetch(`/api/trips/${tripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedBundle: bundle }),
+      });
+      if (!response.ok) throw new Error("Failed to select bundle");
+      const updatedTrip = await response.json();
+      setTrip(updatedTrip);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const updateStatus = async (status: TripStatus) => {
+    try {
+      const response = await fetch(`/api/trips/${tripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Failed to update status");
+      const updatedTrip = await response.json();
+      setTrip(updatedTrip);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const updateFlights = async (flights: Flight[]) => {
+    try {
+      const response = await fetch(`/api/trips/${tripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flights }),
+      });
+      if (!response.ok) throw new Error("Failed to update flights");
+      const updatedTrip = await response.json();
+      setTrip(updatedTrip);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  return { trip, isLoading, error, selectBundle, updateStatus, updateFlights, refresh: fetchTrip };
+}
