@@ -1700,7 +1700,7 @@ export default function DemoPage() {
     switch (currentIndex) {
       case 0: return <TripCard tripData={tripData} />;
       case 1:
-        if (false && isFlightSearchLoading) {
+        if (isFlightSearchLoading) {
           return (
             <FlightSearchState
               body="Running Fair Grid across live dates and nearby airports."
@@ -1709,7 +1709,7 @@ export default function DemoPage() {
             />
           );
         }
-        if (false && flightSearchMessage) {
+        if (flightSearchMessage) {
           return (
             <FlightSearchState
               body={flightSearchMessage}
@@ -1718,7 +1718,7 @@ export default function DemoPage() {
             />
           );
         }
-        if (false && !liveFlights?.length) {
+        if (!liveFlights?.length) {
           return (
             <FlightSearchState
               body="No live flight options are loaded yet."

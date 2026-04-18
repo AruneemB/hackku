@@ -51,7 +51,7 @@ describe("fairGrid", () => {
       ]);
 
       // Mock searchFlights to return 1 flight per call
-      (searchFlights as any).mockImplementation(({ origin, date }) => {
+      (searchFlights as any).mockImplementation(({ origin, date }: { origin: string; date: string }) => {
         const price = origin === "MCI" ? 1000 : 1100;
         return Promise.resolve([{
           id: `flight_${origin}_${date}`,
@@ -101,7 +101,7 @@ describe("fairGrid", () => {
       //   2025-09-14 (Sun) -> 2025-09-19 (Friday). Dep Sun, Ret Fri -> No Sat Night.
       //   2025-09-15 (Mon) -> 2025-09-20 (Saturday). Dep Mon, Ret Sat -> No Sat Night.
 
-      (searchFlights as any).mockImplementation(({ date, returnDate }) => {
+      (searchFlights as any).mockImplementation(({ date, returnDate }: { date: string; returnDate: string }) => {
         // Return 2025-09-18 (Thursday) is cheaper (Saturday night stay)
         const price = returnDate === "2025-09-18" ? 800 : 1000;
         return Promise.resolve([{
@@ -139,7 +139,7 @@ describe("fairGrid", () => {
       ]);
 
       // Mock searchFlights to return the same flight ID with different prices
-      (searchFlights as any).mockImplementation(({ date }) => {
+      (searchFlights as any).mockImplementation(({ date }: { date: string }) => {
         const price = date === "2025-09-13" ? 1200 : 1000;
         return Promise.resolve([{
           id: "duplicate_flight_id",
