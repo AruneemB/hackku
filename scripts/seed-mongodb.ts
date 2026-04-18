@@ -102,8 +102,8 @@ async function main() {
     receipts: [],
     policyFindings: null,
     approvalThread: { gmailThreadId: null, status: null, reason: null },
-    totalSpend: Decimal128.fromString("0"),
-    budgetCap: Decimal128.fromString("2800"),
+    totalSpendUsd: Decimal128.fromString("0"),
+    budgetCapUsd: Decimal128.fromString("2800"),
     createdAt: new Date(),
     updatedAt: new Date(),
   })

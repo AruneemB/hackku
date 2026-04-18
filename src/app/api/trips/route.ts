@@ -18,7 +18,7 @@
 //   "_id": "665a2b3c4d5e6f7a8b9c0d1e",
 //   "status": "draft",
 //   "destination": { "city": "Milan", "country": "IT" },
-//   "budgetCap": "2800.00",
+//   "budgetCapUsd": "2800.00",
 //   "createdAt": "2025-07-01T10:00:00.000Z"
 // }
 // ============================================================
@@ -36,7 +36,17 @@
 // TODO: export async function POST(req: NextRequest) {
 //   // Verify session
 //   // Parse body: { destination, dates }
-//   // Look up policy.budgetCap for destination.country
+//   // Look up policy.budgetCapUsd for destination.country
 //   // Create Trip document with status: "draft"
 //   // Return created trip
 // }
+
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "scaffold" });
+}
+
+export async function POST() {
+  return NextResponse.json({ message: "scaffold" });
+}

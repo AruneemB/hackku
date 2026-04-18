@@ -23,3 +23,12 @@
 //   //   </main>
 //   // )
 // }
+
+export default function LoginPage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <p className="text-xl text-gray-500">Login — scaffold in progress</p>
+    </main>
+  );
+}
+

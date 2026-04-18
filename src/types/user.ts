@@ -22,6 +22,7 @@ export interface User {
   managerId: string;      // ObjectId ref → another User
   homeAirports: string[]; // IATA codes, e.g. ["MCI"]
   createdAt: Date;
+  updatedAt: Date;
 }
 
 // -------------------------------------------------------
