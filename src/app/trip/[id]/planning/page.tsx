@@ -31,7 +31,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { FlightGrid } from "@/components/flights/FlightGrid";
 import { useFlightSearch } from "@/hooks/useFlightSearch";
@@ -55,39 +55,43 @@ export default function PlanningPage() {
 
   const [hasSearched, setHasSearched] = useState(false);
 
-  // Trigger search on mount when trip data is available
+  const triggerSearch = useCallback(() => {
+    if (!trip || hasSearched) return;
+    
+    setHasSearched(true);
+    
+    const cityToIata: Record<string, string> = {
+      "Milan": "MXP",
+      "London": "LHR",
+      "Paris": "CDG",
+      "Tokyo": "NRT",
+      "Toronto": "YYZ",
+      "Mexico City": "MEX"
+    };
+
+    const destinationIata = cityToIata[trip.destination.city] || "MXP";
+
+    search({
+      homeAirport: "MCI",
+      destination: destinationIata,
+      targetDeparture: new Date(trip.dates.departure).toISOString().split("T")[0],
+      targetReturn: new Date(trip.dates.return).toISOString().split("T")[0],
+      windowDays: 2,
+      radiusMiles: 100
+    });
+  }, [trip, hasSearched, search]);
+
+  // Trigger search when trip data is available
   useEffect(() => {
     if (trip && !hasSearched) {
-      setHasSearched(true);
-      
-      // Map trip destination city to a likely IATA code for the demo
-      // In a real app, Frame 1 (TripInitForm) would store IATA codes
-      const cityToIata: Record<string, string> = {
-        "Milan": "MXP",
-        "London": "LHR",
-        "Paris": "CDG",
-        "Tokyo": "NRT",
-        "Toronto": "YYZ",
-        "Mexico City": "MEX"
-      };
-
-      const destinationIata = cityToIata[trip.destination.city] || "MXP";
-
-      search({
-        homeAirport: "MCI", // Hardcoded for Kelli for the demo
-        destination: destinationIata,
-        targetDeparture: new Date(trip.dates.departure).toISOString().split("T")[0],
-        targetReturn: new Date(trip.dates.return).toISOString().split("T")[0],
-        windowDays: 2,
-        radiusMiles: 100
-      });
+      triggerSearch();
     }
-  }, [trip, hasSearched, search]);
+  }, [trip, hasSearched, triggerSearch]);
 
   // Mascot reaction when results load
   useEffect(() => {
     if (hasSearched && !isSearchLoading && flights.length > 0) {
-      say("I've found some great flight options for your trip to " + trip?.destination.city + "!", "excited");
+      say(`I've found some great flight options for your trip to ${trip?.destination.city}!`, "excited");
     }
   }, [hasSearched, isSearchLoading, flights, say, trip?.destination.city]);
 
