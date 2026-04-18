@@ -9,6 +9,27 @@
 //   policies collection with Gemini embeddings.
 //
 // ENV REQUIRED: MONGODB_URI (must have Atlas admin privileges)
+//
+// ⚠️  MANUAL FALLBACK (ATLAS UI):
+// If this script fails (e.g., driver version issues or free-tier cluster limits):
+// 1. Log in to MongoDB Atlas UI
+// 2. Go to "Database" -> "Browse Collections" -> "hackku" -> "policies"
+// 3. Select the "Atlas Search" or "Vector Search" tab
+// 4. Click "Create Search Index" -> "JSON Editor"
+// 5. Select the `hackku.policies` collection
+// 6. Set Index Name to "policy_vector_index"
+// 7. Use the following JSON configuration:
+//    {
+//      "fields": [
+//        {
+//          "type": "vector",
+//          "path": "embedding",
+//          "numDimensions": 768,
+//          "similarity": "cosine"
+//        }
+//      ]
+//    }
+// 8. Click "Create Search Index" and wait for it to build.
 // ============================================================
 
 import { MongoClient } from "mongodb";
