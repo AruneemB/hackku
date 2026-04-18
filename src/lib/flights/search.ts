@@ -16,38 +16,121 @@
 //     date: "2025-09-14", adults: 1 })
 // ============================================================
 
-// TODO: import { getJson } from "serpapi"
-// TODO: import type { Flight } from "@/types"
+import { getJson } from "serpapi";
+import type { Flight, FlightLeg, FlightSearchParams } from "@/types/flight";
+import { withFlightCache } from "./cache";
 
-// TODO: interface FlightSearchParams {
-//   origin: string;       // IATA airport code
-//   destination: string;
-//   date: string;         // YYYY-MM-DD
-//   returnDate?: string;
-//   adults?: number;
-// }
+type SerpFlightsQuery = Record<string, string | number | undefined>;
 
-// TODO: export async function searchFlights(params: FlightSearchParams): Promise<Flight[]> {
-//   // Call SerpAPI:
-//   // const results = await getJson({
-//   //   engine: "google_flights",
-//   //   departure_id: params.origin,
-//   //   arrival_id: params.destination,
-//   //   outbound_date: params.date,
-//   //   return_date: params.returnDate,
-//   //   currency: "USD",
-//   //   hl: "en",
-//   //   api_key: process.env.SERPAPI_KEY,
-//   // })
-//
-//   // Normalize results.best_flights + results.other_flights into Flight[]
-//
-//   // EXAMPLE normalized Flight result:
-//   // {
-//   //   "id": "serp_aa2345_mci_mxp_20250914",
-//   //   "outbound": { "origin": "MCI", "destination": "MXP", "carrier": "American Airlines",
-//   //     "flightNumber": "AA2345", "durationMinutes": 570 },
-//   //   "priceUsd": 1240,
-//   //   "source": "serpapi"
-//   // }
-// }
+interface SerpAirportRef {
+  id: string;
+  time: string;
+}
+
+interface SerpFlightSegmentRaw {
+  departure_airport: SerpAirportRef;
+  arrival_airport: SerpAirportRef;
+  airline: string;
+  flight_number: string;
+  duration: number;
+}
+
+interface SerpFlightOptionRaw {
+  flights?: SerpFlightSegmentRaw[];
+  price: number;
+}
+
+/**
+ * Internal implementation of flight search using SerpAPI.
+ */
+async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight[]> {
+  const apiKey = process.env.SERPAPI_KEY;
+
+  if (!apiKey) {
+    console.warn("SERPAPI_KEY is missing. Returning empty flight results.");
+    return [];
+  }
+
+  try {
+    const query: SerpFlightsQuery = {
+      engine: "google_flights",
+      departure_id: params.origin,
+      arrival_id: params.destination,
+      outbound_date: params.date,
+      currency: "USD",
+      hl: "en",
+      api_key: apiKey,
+    };
+
+    if (params.returnDate) {
+      query.return_date = params.returnDate;
+    }
+
+    if (params.adults) {
+      query.adults = params.adults;
+    }
+
+    const results = (await getJson(query)) as Record<string, unknown>;
+    const bestFlights = Array.isArray(results.best_flights) ? results.best_flights : [];
+    const otherFlights = Array.isArray(results.other_flights) ? results.other_flights : [];
+    const allFlightOptions = [...bestFlights, ...otherFlights] as SerpFlightOptionRaw[];
+
+    return allFlightOptions.map((option) => {
+      const flights = option.flights ?? [];
+      if (flights.length === 0) return null;
+
+      // Map a SerpAPI flight segment to our FlightLeg type
+      const mapToLeg = (f: SerpFlightSegmentRaw): FlightLeg => ({
+        origin: f.departure_airport.id,
+        destination: f.arrival_airport.id,
+        departureTime: new Date(f.departure_airport.time),
+        arrivalTime: new Date(f.arrival_airport.time),
+        carrier: f.airline,
+        flightNumber: f.flight_number,
+        durationMinutes: f.duration
+      });
+
+      const outbound = mapToLeg(flights[0]);
+      
+      // Inbound mapping logic:
+      // If it's a round trip, we expect at least two segments (outbound + inbound).
+      // We take the last segment as the representative inbound leg for now.
+      // If there's only one segment but a returnDate was requested, we fallback to the same leg or a dummy.
+      // Round-trip requires at least 2 segments; skip if return is missing
+      if (params.returnDate && flights.length < 2) return null;
+
+      const inbound = params.returnDate
+        ? mapToLeg(flights[flights.length - 1])
+        : outbound;
+
+      // Generate a consistent ID: serp_flightNumber_origin_destination_MMDD
+      const flightNumberNorm = outbound.flightNumber.toLowerCase().replace(/\s+/g, "");
+      const dateNorm = params.date.replace(/-/g, "").slice(4, 8); // Extract MMDD from YYYY-MM-DD
+      const id = `serp_${flightNumberNorm}_${outbound.origin.toLowerCase()}_${outbound.destination.toLowerCase()}_${dateNorm}`;
+
+      return {
+        id,
+        outbound,
+        inbound,
+        priceUsd: option.price,
+        saturdayNightStay: false,       // Calculated downstream by fairGrid.ts
+        saturdayNightSavingsUsd: 0,     // Calculated downstream
+        originAirport: outbound.origin, // Used for expanded airport search logic
+        distanceFromHomeAirportMiles: 0,
+        source: "serpapi"
+      } as Flight;
+    }).filter((f): f is Flight => f !== null);
+
+  } catch (error) {
+    console.warn("SerpAPI request failed:", error);
+    return [];
+  }
+}
+
+/**
+ * Searches for flights using SerpAPI's Google Flights engine.
+ * Results are cached for 60 seconds to prevent redundant API hits.
+ */
+export async function searchFlights(params: FlightSearchParams): Promise<Flight[]> {
+  return withFlightCache(params, searchFlightsInternal);
+}

@@ -16,40 +16,79 @@
 //   (created by scripts/create-vector-index.ts)
 // ============================================================
 
-// TODO: import clientPromise from "@/lib/mongodb/client"
-// TODO: import { generateEmbedding } from "@/lib/gemini/client"
-// TODO: import { geminiModel } from "@/lib/gemini/client"
-// TODO: import { buildPolicySummaryPrompt } from "@/lib/gemini/prompts"
+import clientPromise, { connectToDatabase } from "@/lib/mongodb/client";
+import { generateEmbedding, geminiModel } from "@/lib/gemini/client";
+import { buildPolicySummaryPrompt } from "@/lib/gemini/prompts";
+import { Trip } from "@/types/trip";
+import { Policy, PolicyFindings, VisaRequirement as VisaRequirementType } from "@/types/policy";
+import User from "@/lib/mongodb/models/User";
+import VisaRequirement from "@/lib/mongodb/models/VisaRequirement";
 
-// TODO: export async function queryPolicyForTrip(trip: Trip): Promise<PolicyFindings> {
-//   // Step 1: Generate query embedding
-//   // const query = `travel policy budget rules for ${trip.destination.city} ${trip.destination.country}`
-//   // const embedding = await generateEmbedding(query)
-//
-//   // Step 2: Atlas Vector Search
-//   // const db = (await clientPromise).db("hackku")
-//   // const results = await db.collection("policies").aggregate([
-//   //   { $vectorSearch: {
-//   //     index: "policy_vector_index",
-//   //     path: "embedding",
-//   //     queryVector: embedding,
-//   //     numCandidates: 10,
-//   //     limit: 1
-//   //   }},
-//   //   { $project: { embedding: 0 } }  // don't return the large embedding array
-//   // ]).toArray()
-//
-//   // Step 3: Gemini synthesizes findings
-//   // const policyDoc = results[0]
-//   // const prompt = buildPolicySummaryPrompt(policyDoc, trip)
-//   // const summary = await geminiModel.generateContent(prompt)
-//
-//   // EXAMPLE RETURN:
-//   // {
-//   //   "visa": { "destinationCountry": "IT", "visaRequired": false, "stayLimitDays": 90 },
-//   //   "hotelNightlyCapUsd": 200, "flightCapUsd": 1500,
-//   //   "requiresManagerApproval": true,
-//   //   "approvalReason": "Hotel exceeds $200 Milan cap",
-//   //   "mascotSummary": "No visa needed! But the hotel is $15 over cap — I'll need sign-off."
-//   // }
-// }
+export async function queryPolicyForTrip(
+  trip: Trip, 
+  costs?: { flightCostUsd?: number; hotelNightlyRateUsd?: number }
+): Promise<PolicyFindings> {
+  // Ensure we are connected to the DB (Mongoose and raw client)
+  await connectToDatabase();
+  const client = await clientPromise;
+
+  // Step 1: Generate query embedding
+  const query = `travel policy budget rules for ${trip.destination.city} ${trip.destination.country}`
+  const embedding = await generateEmbedding(query)
+
+  // Step 2: Atlas Vector Search
+  const db = client.db("hackku")
+  const results = await db.collection("policies").aggregate([
+    {
+      $vectorSearch: {
+        index: "policy_vector_index",
+        path: "embedding",
+        queryVector: embedding,
+        numCandidates: 10,
+        limit: 1
+      }
+    },
+    {
+      $project: { embedding: 0 }
+    }
+  ]).toArray()
+
+  if (results.length === 0) {
+    throw new Error(`No policy found for ${trip.destination.city}, ${trip.destination.country}`);
+  }
+
+  const policyDoc = results[0] as unknown as Policy;
+
+  // Step 3: Fetch Visa Requirements
+  const user = await User.findById(trip.userId);
+  if (!user) {
+    throw new Error(`User not found: ${trip.userId}`);
+  }
+
+  const visaInfo = await VisaRequirement.findOne({
+    destinationCountry: trip.destination.country,
+    citizenship: user.citizenship
+  });
+
+  if (!visaInfo) {
+    throw new Error(`Visa requirements not found for ${user.citizenship} to ${trip.destination.country}`);
+  }
+
+  // Step 4: Gemini synthesizes findings
+  const prompt = buildPolicySummaryPrompt(policyDoc, trip, visaInfo.toObject(), costs)
+  const result = await geminiModel.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json" }
+  })
+  const responseText = result.response.text()
+
+  try {
+    const findings = JSON.parse(responseText) as PolicyFindings;
+    // Ensure the visa field is the full record from our DB
+    findings.visa = visaInfo.toObject() as unknown as VisaRequirementType;
+    return findings;
+  } catch (error) {
+    console.error("Error parsing PolicyFindings JSON:", error);
+    throw new Error("Invalid PolicyFindings JSON returned from Gemini");
+  }
+}
