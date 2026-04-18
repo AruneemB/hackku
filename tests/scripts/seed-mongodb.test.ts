@@ -331,11 +331,11 @@ describe("demo trip", () => {
     expect(trip.receipts).toEqual([])
   })
 
-  it("sets budgetCap to 2800 and totalSpend to 0 (Decimal128)", async () => {
+  it("sets budgetCapUsd to 2800 and totalSpendUsd to 0 (Decimal128)", async () => {
     await main()
     const [trip] = COLS.trips.insertOne.mock.calls[0] as [Record<string, unknown>]
-    expect(String(trip.budgetCap)).toBe("2800")
-    expect(String(trip.totalSpend)).toBe("0")
+    expect(String(trip.budgetCapUsd)).toBe("2800")
+    expect(String(trip.totalSpendUsd)).toBe("0")
   })
 
   it("sets selectedBundle and policyFindings to null", async () => {
