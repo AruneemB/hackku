@@ -24,12 +24,18 @@ export interface AirportInfo {
  * Includes Kansas City area (origin) and Milan area (destination).
  */
 export const KNOWN_AIRPORTS: AirportInfo[] = [
+  // Kansas City area
   { code: "MCI", name: "Kansas City Intl", lat: 39.2976, lng: -94.7139, distanceMiles: 0 },
   { code: "MKC", name: "Downtown Kansas City", lat: 39.1232, lng: -94.5927, distanceMiles: 0 },
   { code: "STL", name: "St. Louis Lambert", lat: 38.7487, lng: -90.3700, distanceMiles: 0 },
   { code: "FOE", name: "Topeka Forbes Field", lat: 38.9509, lng: -95.6636, distanceMiles: 0 },
   { code: "ICT", name: "Wichita Eisenhower", lat: 37.6499, lng: -97.4331, distanceMiles: 0 },
   { code: "OMA", name: "Eppley Airfield", lat: 41.3032, lng: -95.8941, distanceMiles: 0 },
+  // Chicago area
+  { code: "ORD", name: "Chicago O'Hare Intl", lat: 41.9742, lng: -87.9073, distanceMiles: 0 },
+  { code: "MDW", name: "Chicago Midway", lat: 41.7868, lng: -87.7522, distanceMiles: 0 },
+  { code: "MKE", name: "Milwaukee Mitchell", lat: 42.9472, lng: -87.8966, distanceMiles: 0 },
+  // Milan area (destination)
   { code: "MXP", name: "Milan Malpensa", lat: 45.6301, lng: 8.7231, distanceMiles: 0 },
   { code: "LIN", name: "Milan Linate", lat: 45.4451, lng: 9.2767, distanceMiles: 0 },
   { code: "BGY", name: "Milan Bergamo", lat: 45.6672, lng: 9.7018, distanceMiles: 0 },
