@@ -36,11 +36,17 @@ export async function POST(req: NextRequest) {
       errors.push("targetReturn is required and must be a valid date string.");
     }
 
-    if (windowDays !== undefined && (typeof windowDays !== "number" || windowDays < 1)) {
-      errors.push("windowDays must be a positive number.");
+    if (
+      windowDays !== undefined &&
+      (typeof windowDays !== "number" || !Number.isInteger(windowDays) || windowDays < 1 || windowDays > 14)
+    ) {
+      errors.push("windowDays must be an integer between 1 and 14.");
     }
-    if (radiusMiles !== undefined && (typeof radiusMiles !== "number" || radiusMiles < 0)) {
-      errors.push("radiusMiles must be a non-negative number.");
+    if (
+      radiusMiles !== undefined &&
+      (typeof radiusMiles !== "number" || radiusMiles < 0 || radiusMiles > 300)
+    ) {
+      errors.push("radiusMiles must be between 0 and 300.");
     }
 
     if (errors.length > 0) {
