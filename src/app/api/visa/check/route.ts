@@ -28,7 +28,33 @@ import VisaRequirement from "@/lib/mongodb/models/VisaRequirement";
 export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
-    const { destinationCountry, citizenship } = await req.json();
+    
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 }
+      );
+    }
+
+    const { destinationCountry, citizenship } = body;
+
+    // Input Validation
+    if (!destinationCountry || typeof destinationCountry !== "string") {
+      return NextResponse.json(
+        { error: "destinationCountry is required and must be a string." },
+        { status: 400 }
+      );
+    }
+
+    if (!citizenship || typeof citizenship !== "string") {
+      return NextResponse.json(
+        { error: "citizenship is required and must be a string." },
+        { status: 400 }
+      );
+    }
 
     const doc = await VisaRequirement.findOne({
       destinationCountry,
