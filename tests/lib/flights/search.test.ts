@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { searchFlights } from "@/lib/flights/search";
 import { getJson } from "serpapi";
+import { clearFlightCache } from "@/lib/flights/cache";
 
 // Mock serpapi
 vi.mock("serpapi", () => ({
@@ -18,6 +19,7 @@ describe("searchFlights", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearFlightCache();
     process.env.SERPAPI_KEY = "test_key";
   });
 
@@ -133,5 +135,19 @@ describe("searchFlights", () => {
       expect.any(Error)
     );
     consoleSpy.mockRestore();
+  });
+
+  it("should cache results and avoid multiple API calls for the same parameters", async () => {
+    (getJson as any).mockResolvedValue({
+      best_flights: [],
+      other_flights: [],
+    });
+
+    // First call
+    await searchFlights(mockParams);
+    // Second call
+    await searchFlights(mockParams);
+
+    expect(getJson).toHaveBeenCalledTimes(1);
   });
 });
