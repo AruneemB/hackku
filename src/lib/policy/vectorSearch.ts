@@ -20,7 +20,7 @@ import clientPromise from "@/lib/mongodb/client";
 import { generateEmbedding, geminiModel } from "@/lib/gemini/client";
 import { buildPolicySummaryPrompt } from "@/lib/gemini/prompts";
 import { Trip } from "@/types/trip";
-import { PolicyFindings } from "@/types/policy";
+import { Policy, PolicyFindings } from "@/types/policy";
 
 export async function queryPolicyForTrip(trip: Trip): Promise<PolicyFindings> {
   // Step 1: Generate query embedding
@@ -49,7 +49,7 @@ export async function queryPolicyForTrip(trip: Trip): Promise<PolicyFindings> {
     throw new Error(`No policy found for ${trip.destination.city}, ${trip.destination.country}`);
   }
 
-  const policyDoc = results[0];
+  const policyDoc = results[0] as unknown as Policy;
 
   // Step 3: Gemini synthesizes findings
   const prompt = buildPolicySummaryPrompt(policyDoc, trip)
