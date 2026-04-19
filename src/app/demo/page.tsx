@@ -336,10 +336,10 @@ function buildApprovalEmail(input: {
   const subject = `Travel Approval - ${destCity}, ${dateRange}`;
 
   const flightLine = flightNum
-    ? `Flight: ${flightNum}, ${homeCode} to ${destCode} · $${flightPrice}`
+    ? `Flight: ${flightNum}, ${homeCode} to ${destCode} � ·  $${flightPrice}`
     : "Flight: not selected";
   const hotelLine = hotelName
-    ? `Hotel: ${hotelName} · $${hotelRate}/night × ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.` : ""}`
+    ? `Hotel: ${hotelName} � ·  $${hotelRate}/night × ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.` : ""}`
     : "Hotel: not selected";
 
   const bodyText = [
@@ -426,9 +426,9 @@ function getNearestVisibleFrameIndex(index: number): number {
 }
 
 const DEMO_BUNDLES = [
-  { label: "A", description: "MXP direct · Marriott Scala. Full compliance, hotel exception needed.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2340, savingsVsStandard: 0, complianceFlags: ["hotel_over_cap"] },
-  { label: "B", description: "BGY airport · AC Hotel 1.2 km. Saves $500. Fully compliant.", flightId: "af0264", hotelId: "ac-hotel-milan", totalCostUsd: 1840, savingsVsStandard: 500, complianceFlags: [] },
-  { label: "C", description: "Weekend stay strategy · Marriott Scala. Best overall value.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2010, savingsVsStandard: 330, complianceFlags: [] },
+  { label: "A", description: "MXP direct � ·  Marriott Scala. Full compliance, hotel exception needed.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2340, savingsVsStandard: 0, complianceFlags: ["hotel_over_cap"] },
+  { label: "B", description: "BGY airport � ·  AC Hotel 1.2 km. Saves $500. Fully compliant.", flightId: "af0264", hotelId: "ac-hotel-milan", totalCostUsd: 1840, savingsVsStandard: 500, complianceFlags: [] },
+  { label: "C", description: "Weekend stay strategy � ·  Marriott Scala. Best overall value.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2010, savingsVsStandard: 330, complianceFlags: [] },
 ];
 
 type RebookingData = {
@@ -677,7 +677,7 @@ async function executeFrameAction(
           newPriceUsd,
           changeFeeUsd,
           overageUsd: newPriceUsd - origPrice,
-          reason: `Thunderstorm at ${originCode} · missed connection`,
+          reason: `Thunderstorm at ${originCode} � ·  missed connection`,
           rebookedAt: new Date().toISOString(),
         },
       });
@@ -770,7 +770,7 @@ function TripCard({ tripData, travelerName }: { tripData?: TripData | null; trav
     <div className={styles.tripCard}>
       <div className={styles.tripDestination}>
         <div className={styles.tripCity}>{data.city}{data.country !== data.city ? `, ${data.country}` : ""}</div>
-        <div className={styles.tripDates}>{depStr} to {retStr} · {nights} nights</div>
+        <div className={styles.tripDates}>{depStr} to {retStr} � ·  {nights} nights</div>
       </div>
       {showWarning && (
         <div className={styles.alertBox}>
@@ -852,7 +852,7 @@ function FlightPicker({
                 <span className={styles.cardMain}>{g.route}</span>
                 {cheapestTotal !== undefined && <span className={styles.cardPrice}>from ${cheapestTotal}</span>}
               </div>
-              <span className={styles.cardMeta}>{g.depDate} · {g.dep} → {g.arr} · {g.dur}</span>
+              <span className={styles.cardMeta}>{g.depDate} � ·  {g.dep} → {g.arr} � ·  {g.dur}</span>
             </button>
             {isSelected && g.returns.length > 0 && (
               <div className={styles.returnOptions}>
@@ -865,10 +865,10 @@ function FlightPicker({
                     type="button"
                   >
                     <div className={styles.cardRow}>
-                      <span className={styles.cardLabel}>{r.flightNumber}{r.returnVia ? ` · ${r.returnVia}` : ""}</span>
+                      <span className={styles.cardLabel}>{r.flightNumber}{r.returnVia ? ` � ·  ${r.returnVia}` : ""}</span>
                       <span className={[styles.cardPrice, styles.returnCardPrice].join(" ")}>${r.totalPriceUsd}</span>
                     </div>
-                    <span className={styles.cardMeta}>{r.returnDate} · {r.dep} → {r.arr} · {r.dur}</span>
+                    <span className={styles.cardMeta}>{r.returnDate} � ·  {r.dep} → {r.arr} � ·  {r.dur}</span>
                   </button>
                 ))}
               </div>
@@ -904,7 +904,7 @@ function getStopDetail(route: string) {
   const airports = parseRouteAirports(route);
   const vias = airports.slice(1, -1);
   if (vias.length === 0) return "Nonstop";
-  return `${vias.length === 1 ? "1 stop" : `${vias.length} stops`} · ${vias.join(", ")}`;
+  return `${vias.length === 1 ? "1 stop" : `${vias.length} stops`} � ·  ${vias.join(", ")}`;
 }
 
 function FlightPickerV2({
@@ -951,7 +951,7 @@ function FlightPickerV2({
         <span className={styles.fpRoute}>{activeTrip.originCity} → {activeTrip.city}</span>
         <span className={styles.fpHeaderMeta}>
           {formatTripDateLabel(activeTrip.departure)} – {formatTripDateLabel(activeTrip.returnDate)}
-          {tripLengthDays ? ` · ${tripLengthDays} nights` : ""}
+          {tripLengthDays ? ` � ·  ${tripLengthDays} nights` : ""}
         </span>
       </div>
 
@@ -970,7 +970,7 @@ function FlightPickerV2({
                 type="button"
               >
                 <div className={styles.fpCardTop}>
-                  <span className={styles.fpAirline}>{g.carrier} · {g.flightNumber}</span>
+                  <span className={styles.fpAirline}>{g.carrier} � ·  {g.flightNumber}</span>
                   {tags[i] && (
                     <span className={[styles.cardTag, isSelected ? styles.cardTagSelected : ""].join(" ")}>
                       {tags[i]}
@@ -991,7 +991,7 @@ function FlightPickerV2({
                   <span className={[styles.fpAirport, styles.fpAirportRight].join(" ")}>{arrCode}</span>
                 </div>
                 <div className={styles.fpCardBottom}>
-                  <span className={styles.fpStopsMeta}>{getStopDetail(g.route)} · {g.dur}</span>
+                  <span className={styles.fpStopsMeta}>{getStopDetail(g.route)} � ·  {g.dur}</span>
                   {minPrice !== Infinity && <span className={styles.fpFromPrice}>from ${minPrice}</span>}
                 </div>
               </button>
@@ -1019,7 +1019,7 @@ function FlightPickerV2({
                             </div>
                             <div className={styles.fpReturnRowBottom}>
                               <span className={styles.fpReturnRowMeta}>
-                                {r.returnDate} · {r.flightNumber}{r.returnVia ? ` · ${r.returnVia}` : ""} · {r.dur}
+                                {r.returnDate} � ·  {r.flightNumber}{r.returnVia ? ` � ·  ${r.returnVia}` : ""} � ·  {r.dur}
                               </span>
                               <span className={styles.fpReturnRowPrice}>${r.totalPriceUsd}</span>
                             </div>
@@ -1114,7 +1114,7 @@ function ComplianceReport({
                 ? `US citizens must apply ≥ ${leadDays} days before departure`
                 : "Visa required — check consulate for processing times"}
               {applyUrl && (
-                <> · <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply →</a></>
+                <> � ·  <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply →</a></>
               )}
             </div>
           </div>
@@ -1139,8 +1139,8 @@ function ComplianceReport({
             <div className={styles.complianceBody}>
               {hotelName ?? "Selected hotel"} at ${hotelNightlyRateUsd}/night
               {hotelOverCap
-                ? ` · $${hotelExcess} over the $${hotelCapUsd} cap`
-                : ` · within the $${hotelCapUsd} cap`}
+                ? ` � ·  $${hotelExcess} over the $${hotelCapUsd} cap`
+                : ` � ·  within the $${hotelCapUsd} cap`}
             </div>
           </div>
         </div>
@@ -1162,10 +1162,10 @@ function ComplianceReport({
               {flightOverCap ? "Flight over budget" : "Flight within budget"}
             </div>
             <div className={styles.complianceBody}>
-              {`${flightNumber ? `${flightNumber} · ` : ""}$${flightTotalUsd} total`}
+              {`${flightNumber ? `${flightNumber} � ·  ` : ""}$${flightTotalUsd} total`}
               {flightOverCap
-                ? ` · $${Math.round(flightTotalUsd - flightCapUsd)} over the $${flightCapUsd} cap`
-                : ` · approved cap is $${flightCapUsd}`}
+                ? ` � ·  $${Math.round(flightTotalUsd - flightCapUsd)} over the $${flightCapUsd} cap`
+                : ` � ·  approved cap is $${flightCapUsd}`}
             </div>
           </div>
         </div>
@@ -1189,11 +1189,11 @@ function ComplianceReport({
               {stayOverLimit ? "Stay exceeds visa limit" : "Travel dates policy-compliant"}
             </div>
             <div className={styles.complianceBody}>
-              {depLabel} to {retLabel} · {nights}-night stay
+              {depLabel} to {retLabel} � ·  {nights}-night stay
               {stayLimit != null
                 ? stayOverLimit
-                  ? ` · exceeds ${stayLimit}-day limit`
-                  : ` · within ${stayLimit}-day limit`
+                  ? ` � ·  exceeds ${stayLimit}-day limit`
+                  : ` � ·  within ${stayLimit}-day limit`
                 : ""}
             </div>
           </div>
@@ -1211,8 +1211,8 @@ function ApprovalEmail() {
       <div className={styles.emailBody}>
         <p>Hi Sarah,</p>
         <p>I&#39;m requesting approval for a business trip to <strong>Milan, Italy, Sep 14-19, 2025</strong> for an on-site client meeting.</p>
-        <p><strong>Flight:</strong> LH 8904, ORD to MXP · $687 (nonstop)<br />
-        <strong>Hotel:</strong> Marriott Scala · $247/night x 5 = $1,235<br />
+        <p><strong>Flight:</strong> LH 8904, ORD to MXP � ·  $687 (nonstop)<br />
+        <strong>Hotel:</strong> Marriott Scala � ·  $247/night x 5 = $1,235<br />
         <strong>Note:</strong> Hotel is $47 over the $200 cap - closest preferred vendor to client office.</p>
         <p>Total estimated: $2,010. Please let me know if you have any questions.</p>
         <p>Thanks,<br />Lockey</p>
@@ -1226,7 +1226,7 @@ function HotelComparison() {
   return (
     <div className={styles.compareGrid}>
       <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
-        <div className={styles.compareBadge}>Rejected ✗</div>
+        <div className={styles.compareBadge}>Rejected x</div>
         <div className={styles.compareName}>Marriott Scala</div>
         <div className={styles.comparePrice}>$247 / night</div>
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
@@ -1239,7 +1239,7 @@ function HotelComparison() {
         <div className={styles.comparePrice}>$189 / night</div>
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
         <div className={styles.compareMeta}>1.2 km from office</div>
-        <div className={styles.compareReason}>Saves $290 total · fully compliant</div>
+        <div className={styles.compareReason}>Saves $290 total � ·  fully compliant</div>
       </div>
     </div>
   );
@@ -1276,10 +1276,10 @@ function ApprovalEmailPanel({
         <p>I&#39;m requesting approval for a business trip to <strong>{locationLabel}, {email.dateRange}</strong> for {email.purpose}.</p>
         <p>
           <strong>Flight:</strong> {email.flightNum
-            ? <>{email.flightNum}, {email.homeCode} to {email.destCode} · ${email.flightPrice}</>
+            ? <>{email.flightNum}, {email.homeCode} to {email.destCode} � ·  ${email.flightPrice}</>
             : <em>not selected</em>}<br />
           <strong>Hotel:</strong> {email.hotelName
-            ? <>{email.hotelName} · ${email.hotelRate}/night × {email.nights} = ${email.hotelTotal}</>
+            ? <>{email.hotelName} � ·  ${email.hotelRate}/night × {email.nights} = ${email.hotelTotal}</>
             : <em>not selected</em>}<br />
           {email.overCap && <><strong>Note:</strong> Hotel is ${email.hotelRate - 200} over the $200 cap - closest preferred vendor to client office.</>}
         </p>
@@ -1340,7 +1340,7 @@ function HotelComparisonPanel({
         <div className={styles.comparePrice}>${altRate} / night</div>
         <div className={styles.compareMeta}>â­ Preferred vendor</div>
         <div className={styles.compareMeta}>{altDistance} km from office</div>
-        <div className={styles.compareReason}>{savings > 0 ? `Saves $${savings} total · ` : ""}fully compliant</div>
+        <div className={styles.compareReason}>{savings > 0 ? `Saves $${savings} total � ·  ` : ""}fully compliant</div>
       </div>
     </div>
   );
@@ -1374,7 +1374,7 @@ function ApprovalPolling({
         </div>
         <div className={styles.watchStatus}>
           <div className={styles.watchDot} />
-          <span style={{ opacity: 0.85 }}>Monitoring inbox · Polling every 5 s</span>
+          <span style={{ opacity: 0.85 }}>Monitoring inbox � ·  Polling every 5 s</span>
         </div>
         <HotelComparisonPanel selectedHotel={selectedHotel} liveHotels={liveHotels} tripData={tripData} />
       </div>
@@ -1510,7 +1510,7 @@ function buildChecklistItems(
   }
 
   // Hotel check-in item
-  items.push({ text: `${hotelName} · ${hotelAddress} · Check-in ${checkInDate} at 3:00 PM` });
+  items.push({ text: `${hotelName} � ·  ${hotelAddress} � ·  Check-in ${checkInDate} at 3:00 PM` });
 
   // Travel insurance (always static)
   items.push({ text: "Confirm travel insurance coverage" });
@@ -1566,10 +1566,10 @@ function LiveDashboard() {
   return (
     <div className={styles.dashboard}>
       {[
-        { icon: "✈️", title: "LH 8904 · Gate B22", sub: "Boards 8:15 AM · Departs 8:45 AM", badge: "On time" },
-        { icon: "🌤️", title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight", badge: "" },
-        { icon: "🏨", title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM", badge: "Ready" },
-        { icon: "🚗", title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM to make your gate", badge: "" },
+        { icon: "✈️", title: "LH 8904 � ·  Gate B22", sub: "Boards 8:15 AM � ·  Departs 8:45 AM", badge: "On time" },
+        { icon: "🌤️", title: "Milan � ·  24 °C", sub: "Partly cloudy � ·  Low 18 °C tonight", badge: "" },
+        { icon: "🏨", title: "Marriott Scala � ·  Room 412", sub: "Check-in ready from 3:00 PM", badge: "Ready" },
+        { icon: "🚗", title: "Traffic to MXP � ·  32 min", sub: "Leave by 7:00 AM to make your gate", badge: "" },
       ].map(item => (
         <div className={styles.dashCard} key={item.title}>
           <span className={styles.dashIcon}>{item.icon}</span>
@@ -1590,18 +1590,18 @@ function FlightRebooking({ rebooking }: { rebooking: RebookingData }) {
   return (
     <div className={styles.rebooking}>
       <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
-        <div className={styles.rebookBadge}>Original · Cancelled ✗</div>
-        <div className={styles.rebookFlight}>{cancelled.flightNumber} &nbsp;·&nbsp; {cancelled.route}</div>
-        <div className={styles.rebookTime}>Departs {cancelled.dep} · {cancelled.carrier}</div>
-        <div className={styles.rebookMeta}>Thunderstorm at {AIRPORT_NAMES[cancelled.originAirport] ?? cancelled.originAirport} · missed connection</div>
+        <div className={styles.rebookBadge}>Original � ·  Cancelled x</div>
+        <div className={styles.rebookFlight}>{cancelled.flightNumber} &nbsp;� · &nbsp; {cancelled.route}</div>
+        <div className={styles.rebookTime}>Departs {cancelled.dep} � ·  {cancelled.carrier}</div>
+        <div className={styles.rebookMeta}>Thunderstorm at {AIRPORT_NAMES[cancelled.originAirport] ?? cancelled.originAirport} � ·  missed connection</div>
       </div>
       <div className={styles.rebookArrow}>↓ rebooked automatically</div>
       <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
-        <div className={styles.rebookBadge}>New booking · Confirmed ✓</div>
-        <div className={styles.rebookFlight}>{rebooked.flightNumber} &nbsp;·&nbsp; {rebooked.route}</div>
-        <div className={styles.rebookTime}>Departs {rebooked.dep} · {rebooked.carrier}</div>
+        <div className={styles.rebookBadge}>New booking � ·  Confirmed ✓</div>
+        <div className={styles.rebookFlight}>{rebooked.flightNumber} &nbsp;� · &nbsp; {rebooked.route}</div>
+        <div className={styles.rebookTime}>Departs {rebooked.dep} � ·  {rebooked.carrier}</div>
         <div className={styles.rebookMeta}>
-          {carrierChanged ? `${cancelled.carrier} → ${rebooked.carrier}` : "Same carrier"} · Change fee: ${rebooked.changeFeeUsd} · Seat {rebooked.seat} · Hotel notified ✓
+          {carrierChanged ? `${cancelled.carrier} → ${rebooked.carrier}` : "Same carrier"} � ·  Change fee: ${rebooked.changeFeeUsd} � ·  Seat {rebooked.seat} � ·  Hotel notified ✓
         </div>
       </div>
     </div>
@@ -1724,7 +1724,7 @@ function ArrivalSupport({
         <span className={styles.arrivalPin}></span>
         <div>
           <div className={styles.arrivalName}>Marriott Scala</div>
-          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan � {distLabel}</div>
+          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan  ·  {distLabel}</div>
         </div>
       </div>
       <div className={styles.cards}>
@@ -1756,7 +1756,7 @@ function ReceiptCapture() {
       <div className={styles.receiptHead}>
         <div className={styles.receiptMerchant}>Ristorante Al Porto</div>
         <div className={styles.receiptSub}>Via Serbelloni 3, Milan</div>
-        <div className={styles.receiptSub}>September 16, 2025 · 8:42 PM</div>
+        <div className={styles.receiptSub}>September 16, 2025 � ·  8:42 PM</div>
       </div>
       <div className={styles.receiptLines}>
         {[
@@ -1792,54 +1792,54 @@ type EmbassyInfo = { name: string; address: string; hours: string };
 
 const US_EMBASSIES: Record<string, EmbassyInfo> = {
   // Italy
-  milan:     { name: "US Embassy Milan (Consulate)", address: "Via Principe Amedeo 2/10, Milan", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
-  rome:      { name: "US Embassy Rome", address: "Via Vittorio Veneto 121, Rome", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  milan:     { name: "US Embassy Milan (Consulate)", address: "Via Principe Amedeo 2/10, Milan", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
+  rome:      { name: "US Embassy Rome", address: "Via Vittorio Veneto 121, Rome", hours: "Mon – Fri � ·  8:30 AM – 5:30 PM" },
   // Germany
-  berlin:    { name: "US Embassy Berlin", address: "Pariser Platz 2, 10117 Berlin", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
-  munich:    { name: "US Consulate Munich", address: "Königinstraße 5, 80539 Munich", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
-  frankfurt: { name: "US Consulate Frankfurt", address: "Gießener Str. 30, 60435 Frankfurt", hours: "Mon – Fri · 7:30 AM – 4:30 PM" },
+  berlin:    { name: "US Embassy Berlin", address: "Pariser Platz 2, 10117 Berlin", hours: "Mon – Fri � ·  8:00 AM – 4:30 PM" },
+  munich:    { name: "US Consulate Munich", address: "Königinstraße 5, 80539 Munich", hours: "Mon – Fri � ·  8:00 AM – 4:30 PM" },
+  frankfurt: { name: "US Consulate Frankfurt", address: "Gießener Str. 30, 60435 Frankfurt", hours: "Mon – Fri � ·  7:30 AM – 4:30 PM" },
   // France
-  paris:     { name: "US Embassy Paris", address: "2 Avenue Gabriel, 75008 Paris", hours: "Mon – Fri · 9:00 AM – 6:00 PM" },
+  paris:     { name: "US Embassy Paris", address: "2 Avenue Gabriel, 75008 Paris", hours: "Mon – Fri � ·  9:00 AM – 6:00 PM" },
   // UK
-  london:    { name: "US Embassy London", address: "33 Nine Elms Ln, London SW11 7US", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  london:    { name: "US Embassy London", address: "33 Nine Elms Ln, London SW11 7US", hours: "Mon – Fri � ·  8:30 AM – 5:30 PM" },
   // Spain
-  madrid:    { name: "US Embassy Madrid", address: "Calle de Serrano 75, 28006 Madrid", hours: "Mon – Fri · 9:00 AM – 6:00 PM" },
-  barcelona: { name: "US Consulate Barcelona", address: "Passeig Reina Elisenda 23, Barcelona", hours: "Mon – Fri · 9:00 AM – 1:00 PM" },
+  madrid:    { name: "US Embassy Madrid", address: "Calle de Serrano 75, 28006 Madrid", hours: "Mon – Fri � ·  9:00 AM – 6:00 PM" },
+  barcelona: { name: "US Consulate Barcelona", address: "Passeig Reina Elisenda 23, Barcelona", hours: "Mon – Fri � ·  9:00 AM – 1:00 PM" },
   // Netherlands
-  amsterdam: { name: "US Consulate Amsterdam", address: "Museumplein 19, 1071 DJ Amsterdam", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  amsterdam: { name: "US Consulate Amsterdam", address: "Museumplein 19, 1071 DJ Amsterdam", hours: "Mon – Fri � ·  8:30 AM – 5:00 PM" },
   // Switzerland
-  zurich:    { name: "US Consulate Zurich", address: "Dufourstrasse 101, 8008 Zürich", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
-  geneva:    { name: "US Mission Geneva", address: "Rue du Pré-de-la-Bichette 1, Geneva", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  zurich:    { name: "US Consulate Zurich", address: "Dufourstrasse 101, 8008 Zürich", hours: "Mon – Fri � ·  8:30 AM – 5:00 PM" },
+  geneva:    { name: "US Mission Geneva", address: "Rue du Pré-de-la-Bichette 1, Geneva", hours: "Mon – Fri � ·  8:30 AM – 5:00 PM" },
   // Japan
-  tokyo:     { name: "US Embassy Tokyo", address: "1-10-5 Akasaka, Minato-ku, Tokyo", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
-  osaka:     { name: "US Consulate Osaka", address: "2-11-5 Nishitenma, Kita-ku, Osaka", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  tokyo:     { name: "US Embassy Tokyo", address: "1-10-5 Akasaka, Minato-ku, Tokyo", hours: "Mon – Fri � ·  8:30 AM – 5:30 PM" },
+  osaka:     { name: "US Consulate Osaka", address: "2-11-5 Nishitenma, Kita-ku, Osaka", hours: "Mon – Fri � ·  8:30 AM – 5:30 PM" },
   // South Korea
-  seoul:     { name: "US Embassy Seoul", address: "188 Sejong-daero, Jongno-gu, Seoul", hours: "Mon – Fri · 7:30 AM – 4:00 PM" },
+  seoul:     { name: "US Embassy Seoul", address: "188 Sejong-daero, Jongno-gu, Seoul", hours: "Mon – Fri � ·  7:30 AM – 4:00 PM" },
   // Singapore
-  singapore: { name: "US Embassy Singapore", address: "27 Napier Rd, Singapore 258508", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  singapore: { name: "US Embassy Singapore", address: "27 Napier Rd, Singapore 258508", hours: "Mon – Fri � ·  8:00 AM – 4:30 PM" },
   // Australia
-  sydney:    { name: "US Consulate Sydney", address: "Level 10, MLC Centre, 19-29 Martin Pl", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
-  melbourne: { name: "US Consulate Melbourne", address: "553 St Kilda Rd, Melbourne VIC 3004", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  sydney:    { name: "US Consulate Sydney", address: "Level 10, MLC Centre, 19-29 Martin Pl", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
+  melbourne: { name: "US Consulate Melbourne", address: "553 St Kilda Rd, Melbourne VIC 3004", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
   // Canada
-  toronto:   { name: "US Consulate Toronto", address: "360 University Ave, Toronto ON M5G 1S4", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  toronto:   { name: "US Consulate Toronto", address: "360 University Ave, Toronto ON M5G 1S4", hours: "Mon – Fri � ·  8:00 AM – 4:30 PM" },
   // India
-  mumbai:    { name: "US Consulate Mumbai", address: "C-49, G-Block, Bandra Kurla Complex", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
-  delhi:     { name: "US Embassy New Delhi", address: "Shantipath, Chanakyapuri, New Delhi", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  mumbai:    { name: "US Consulate Mumbai", address: "C-49, G-Block, Bandra Kurla Complex", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
+  delhi:     { name: "US Embassy New Delhi", address: "Shantipath, Chanakyapuri, New Delhi", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
   // UAE
-  dubai:     { name: "US Consulate Dubai", address: "Al Seef Rd, Bur Dubai, Dubai", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  dubai:     { name: "US Consulate Dubai", address: "Al Seef Rd, Bur Dubai, Dubai", hours: "Mon – Fri � ·  8:00 AM – 4:30 PM" },
   // China
-  beijing:   { name: "US Embassy Beijing", address: "55 Anjialou Rd, Chaoyang, Beijing", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
-  shanghai:  { name: "US Consulate Shanghai", address: "1469 Huaihai Zhong Rd, Shanghai", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  beijing:   { name: "US Embassy Beijing", address: "55 Anjialou Rd, Chaoyang, Beijing", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
+  shanghai:  { name: "US Consulate Shanghai", address: "1469 Huaihai Zhong Rd, Shanghai", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
   // Brazil
-  "são paulo": { name: "US Consulate São Paulo", address: "Rua Henri Dunant 500, São Paulo", hours: "Mon – Fri · 7:30 AM – 4:30 PM" },
+  "são paulo": { name: "US Consulate São Paulo", address: "Rua Henri Dunant 500, São Paulo", hours: "Mon – Fri � ·  7:30 AM – 4:30 PM" },
   // Mexico
-  "mexico city": { name: "US Embassy Mexico City", address: "Paseo de la Reforma 305, Mexico City", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  "mexico city": { name: "US Embassy Mexico City", address: "Paseo de la Reforma 305, Mexico City", hours: "Mon – Fri � ·  8:00 AM – 5:00 PM" },
 };
 
 const EMBASSY_FALLBACK: EmbassyInfo = {
   name: "Nearest US Embassy",
   address: "Visit travel.state.gov for location",
-  hours: "Mon – Fri · 8:00 AM – 5:00 PM",
+  hours: "Mon – Fri � ·  8:00 AM – 5:00 PM",
 };
 
 function getEmbassy(city: string): EmbassyInfo {
@@ -1920,7 +1920,7 @@ function ComplianceReportRefined({
       icon: <HotelIcon size={18} strokeWidth={2.1} />,
       label: "Hotel",
       title: hotelOverCap ? "Exception needed" : "Within nightly policy",
-      body: `${hotelName ?? "Selected hotel"} · ${hotelNightlyRateUsd ?? hotelCapUsd}/night`,
+      body: `${hotelName ?? "Selected hotel"} � ·  ${hotelNightlyRateUsd ?? hotelCapUsd}/night`,
       detail: hotelOverCap
         ? `$${hotelExcess} over the $${hotelCapUsd}/night cap.`
         : `Aligned with the $${hotelCapUsd}/night cap.`,
@@ -1931,7 +1931,7 @@ function ComplianceReportRefined({
       icon: <PlaneTakeoff size={18} strokeWidth={2.1} />,
       label: "Flight",
       title: flightOverCap ? "Price needs review" : "Flight approved",
-      body: flightTotalUsd != null ? `${flightNumber ?? "Selected flight"} · $${flightTotalUsd}` : `Flight cap · $${flightCapUsd}`,
+      body: flightTotalUsd != null ? `${flightNumber ?? "Selected flight"} � ·  $${flightTotalUsd}` : `Flight cap � ·  $${flightCapUsd}`,
       detail: flightTotalUsd != null
         ? flightOverCap
           ? `$${Math.round(flightTotalUsd - flightCapUsd)} above the approved cap.`
@@ -1945,7 +1945,7 @@ function ComplianceReportRefined({
           icon: <CalendarClock size={18} strokeWidth={2.1} />,
           label: "Dates",
           title: stayOverLimit ? "Stay limit exceeded" : "Dates look compliant",
-          body: `${nights} night trip${tripWindow ? ` · ${tripWindow}` : ""}`,
+          body: `${nights} night trip${tripWindow ? ` � ·  ${tripWindow}` : ""}`,
           detail: stayLimit != null
             ? stayOverLimit
               ? `Over the ${stayLimit}-day entry window.`
@@ -1968,7 +1968,7 @@ function ComplianceReportRefined({
               <div className={[styles.cvDot, styles.cvDotWarn].join(" ")}>{item.icon}</div>
               <div>
                 <div className={styles.cvRowTitle}>{item.title}</div>
-                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` � ·  ${item.detail}` : ""}</div>
               </div>
             </div>
           ))}
@@ -1982,7 +1982,7 @@ function ComplianceReportRefined({
               <div className={[styles.cvDot, styles.cvDotOk].join(" ")}>{item.icon}</div>
               <div>
                 <div className={styles.cvRowTitle}>{item.title}</div>
-                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` � ·  ${item.detail}` : ""}</div>
               </div>
             </div>
           ))}
@@ -2019,7 +2019,7 @@ function HotelComparisonRefined() {
       <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
         <div className={styles.compareName}>Marriott Scala</div>
         <div className={styles.comparePrice}>$247 / night</div>
-        <div className={styles.compareMeta}>Preferred vendor · 0.4 km from office</div>
+        <div className={styles.compareMeta}>Preferred vendor � ·  0.4 km from office</div>
         <div className={styles.compareReason}>$47 over the $200 cap</div>
       </div>
       <div style={{ display: "flex", justifyContent: "center", padding: "2px 0" }}>
@@ -2028,7 +2028,7 @@ function HotelComparisonRefined() {
       <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
         <div className={styles.compareName}>AC Hotel Milan</div>
         <div className={styles.comparePrice}>$189 / night</div>
-        <div className={styles.compareMeta}>Preferred vendor · 1.2 km from office</div>
+        <div className={styles.compareMeta}>Preferred vendor � ·  1.2 km from office</div>
         <div className={styles.compareReason}>Saves $290 total</div>
       </div>
     </div>
@@ -2037,10 +2037,10 @@ function HotelComparisonRefined() {
 
 function LiveDashboardRefined() {
   const signals = [
-    { key: "flight", icon: <Plane size={18} strokeWidth={2.1} />, title: "LH 8904 · Gate B22", sub: "On time · Boards 8:15 AM" },
-    { key: "weather", icon: <CloudSun size={18} strokeWidth={2.1} />, title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight" },
-    { key: "hotel", icon: <Building2 size={18} strokeWidth={2.1} />, title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM" },
-    { key: "ground", icon: <CarFront size={18} strokeWidth={2.1} />, title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM for a comfortable buffer" },
+    { key: "flight", icon: <Plane size={18} strokeWidth={2.1} />, title: "LH 8904 � ·  Gate B22", sub: "On time � ·  Boards 8:15 AM" },
+    { key: "weather", icon: <CloudSun size={18} strokeWidth={2.1} />, title: "Milan � ·  24 °C", sub: "Partly cloudy � ·  Low 18 °C tonight" },
+    { key: "hotel", icon: <Building2 size={18} strokeWidth={2.1} />, title: "Marriott Scala � ·  Room 412", sub: "Check-in ready from 3:00 PM" },
+    { key: "ground", icon: <CarFront size={18} strokeWidth={2.1} />, title: "Traffic to MXP � ·  32 min", sub: "Leave by 7:00 AM for a comfortable buffer" },
   ];
 
   return (
@@ -2067,8 +2067,8 @@ function FlightRebookingRefined({ rebooking }: { rebooking: RebookingData }) {
       <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
         <div className={styles.rebookBadge}>Cancelled</div>
         <div className={styles.rebookFlight}>{cancelled.flightNumber}</div>
-        <div className={styles.rebookTime}>{cancelled.route} · departs {cancelled.dep}</div>
-        <div className={styles.rebookMeta}>{cancelled.carrier} · ${cancelled.priceUsd.toLocaleString()} original total</div>
+        <div className={styles.rebookTime}>{cancelled.route} � ·  departs {cancelled.dep}</div>
+        <div className={styles.rebookMeta}>{cancelled.carrier} � ·  ${cancelled.priceUsd.toLocaleString()} original total</div>
       </div>
       <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
         <MoveDown size={20} strokeWidth={2} color="var(--cc-body, #5a6672)" />
@@ -2076,9 +2076,9 @@ function FlightRebookingRefined({ rebooking }: { rebooking: RebookingData }) {
       <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
         <div className={styles.rebookBadge}>Confirmed Replacement</div>
         <div className={styles.rebookFlight}>{rebooked.flightNumber}</div>
-        <div className={styles.rebookTime}>{rebooked.route} · departs {rebooked.dep}</div>
+        <div className={styles.rebookTime}>{rebooked.route} � ·  departs {rebooked.dep}</div>
         <div className={styles.rebookMeta}>
-          {rebooked.carrier} · seat {rebooked.seat}{carrierChanged ? ` · switched from ${cancelled.carrier}` : ""}
+          {rebooked.carrier} � ·  seat {rebooked.seat}{carrierChanged ? ` � ·  switched from ${cancelled.carrier}` : ""}
         </div>
       </div>
       <div className={styles.infoGrid} style={{ marginTop: 16, borderTop: "1px solid rgba(159, 171, 183, 0.2)", paddingTop: 16 }}>
@@ -2142,16 +2142,16 @@ function ArrivalSupportRefined({
   //   - Walk          → Google Maps walking directions to the hotel
   // TODO: replace placeholder hrefs with real URLs once booking partners confirmed.
   const options = [
-    { icon: <CarFront size={18} strokeWidth={2.1} />, name: "Company taxi", time: loading ? "..." : liveData?.taxi.minutes ?? "18 min", cost: loading ? "..." : liveData?.taxi.cost ?? "$14", preferred: true, note: "Fastest pickup option from arrivals.", link: "https://m.uber.com/ul/" },
-    { icon: <TrainFront size={18} strokeWidth={2.1} />, name: "Metro M1 to M3", time: loading ? "..." : liveData?.metro.minutes ?? "35 min", cost: liveData?.metro.cost ?? "$2.50", preferred: false, note: "Lowest cost route into the city center.", link: "https://maps.google.com/?dirflg=r&destination=Marriott+Scala+Milan" },
-    { icon: <Footprints size={18} strokeWidth={2.1} />, name: "Walk", time: loading ? "..." : liveData?.walk.minutes ?? "28 min", cost: liveData?.walk.cost ?? "Free", preferred: false, note: "Best if you want to stay nearby on foot.", link: "https://maps.google.com/?dirflg=w&destination=Marriott+Scala+Milan" },
+    { icon: <CarFront size={18} strokeWidth={2.1} />, name: "Company taxi", time: loading ? "..." : liveData?.taxi?.minutes ?? "18 min", cost: loading ? "..." : liveData?.taxi?.cost ?? "$14", preferred: true, note: "Fastest pickup option from arrivals.", link: "https://m.uber.com/ul/" },
+    { icon: <TrainFront size={18} strokeWidth={2.1} />, name: "Metro M1 to M3", time: loading ? "..." : liveData?.metro?.minutes ?? "35 min", cost: liveData?.metro?.cost ?? "$2.50", preferred: false, note: "Lowest cost route into the city center.", link: "https://maps.google.com/?dirflg=r&destination=Marriott+Scala+Milan" },
+    { icon: <Footprints size={18} strokeWidth={2.1} />, name: "Walk", time: loading ? "..." : liveData?.walk?.minutes ?? "28 min", cost: liveData?.walk?.cost ?? "Free", preferred: false, note: "Best if you want to stay nearby on foot.", link: "https://maps.google.com/?dirflg=w&destination=Marriott+Scala+Milan" },
   ];
 
   return (
     <div className={styles.arrival}>
       <div className={styles.fpHeader}>
         <span className={styles.fpRoute}>Marriott Scala</span>
-        <span className={styles.fpHeaderMeta}>Via della Spiga 31, Milan · {distLabel}</span>
+        <span className={styles.fpHeaderMeta}>Via della Spiga 31, Milan � ·  {distLabel}</span>
       </div>
       <div className={styles.fpReturnRows}>
         {options.map((option, i) => {
@@ -2206,7 +2206,7 @@ function ContactCardsRefined({ city }: { city: string }) {
       icon: <Building2 size={18} strokeWidth={2.1} />,
       label: "Nearest Embassy",
       title: embassy.name,
-      detail: `${embassy.address} · ${embassy.hours}`,
+      detail: `${embassy.address} � ·  ${embassy.hours}`,
     },
   ];
 
@@ -2257,7 +2257,7 @@ const SPEND_FALLBACK: SpendSummaryData = {
   nights: 5,
   receiptsCount: 7,
   categories: [
-    { name: "Flights", icon: "✈️", amountUsd: 687, meta: "LH 8904 · ORD → MXP" },
+    { name: "Flights", icon: "✈️", amountUsd: 687, meta: "LH 8904 � ·  ORD → MXP" },
     { name: "Hotel (5 nights)", icon: "🏨", amountUsd: 945, meta: "Marriott Scala" },
     { name: "Meals", icon: "🍽️", amountUsd: 312, meta: "7 receipts logged" },
     { name: "Transport", icon: "🚕", amountUsd: 243, meta: "" },
@@ -2347,9 +2347,9 @@ function BundlePicker({ value, onChange }: { value?: number | null; onChange?: (
   const sel = value !== undefined ? value : localSel;
   const setSel = onChange ?? setLocalSel;
   const bundles = [
-    { name: "Path A", badge: "Policy-safe", price: "$2,340", detail: "MXP direct · Marriott Scala", note: "Requires hotel sign-off" },
-    { name: "Path B", badge: "Save $500", price: "$1,840", detail: "BGY airport · AC Hotel 1.2 km", note: "Fully compliant, no exceptions" },
-    { name: "Path C", badge: "Recommended", price: "$2,010", detail: "Weekend stay · Marriott Scala", note: "Best overall value" },
+    { name: "Path A", badge: "Policy-safe", price: "$2,340", detail: "MXP direct � ·  Marriott Scala", note: "Requires hotel sign-off" },
+    { name: "Path B", badge: "Save $500", price: "$1,840", detail: "BGY airport � ·  AC Hotel 1.2 km", note: "Fully compliant, no exceptions" },
+    { name: "Path C", badge: "Recommended", price: "$2,010", detail: "Weekend stay � ·  Marriott Scala", note: "Best overall value" },
   ];
   return (
     <div className={styles.cards}>
@@ -2380,7 +2380,7 @@ function TripConfirmed() {
           <CheckCircle2 size={38} strokeWidth={1.9} />
         </span>
         <div className={styles.confirmTitle}>Trip Draft Saved</div>
-        <div className={styles.confirmBody}>Milan · Sep 14 to 19 · Trip #TRP-20250914 is now active in your travel dashboard.</div>
+        <div className={styles.confirmBody}>Milan � ·  Sep 14 to 19 � ·  Trip #TRP-20250914 is now active in your travel dashboard.</div>
       </div>
     </div>
   );
@@ -2410,8 +2410,8 @@ function HotelConfirmed() {
     <div className={styles.confirmList}>
       {[
         { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala, Milan" },
-        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-in", val: "Sep 14 · 3:00 PM" },
-        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-out", val: "Sep 19 · 12:00 noon" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-in", val: "Sep 14 � ·  3:00 PM" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-out", val: "Sep 19 � ·  12:00 noon" },
         { icon: <Tag size={18} strokeWidth={2.1} />, label: "Conf. #", val: "MR-20250914-7741" },
         { icon: <DollarSign size={18} strokeWidth={2.1} />, label: "Total", val: "$1,235 (5 nights)" },
       ].map(item => (
@@ -2457,7 +2457,7 @@ function VisaGuide({ visa }: { visa?: DemoVisaInfo | null }) {
               <div className={styles.stepBody}>
                 {step.body}
                 {i === 0 && applyUrl && visa?.visaRequired && (
-                  <> · <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply here →</a></>
+                  <> � ·  <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply here →</a></>
                 )}
               </div>
             )}
@@ -2469,7 +2469,7 @@ function VisaGuide({ visa }: { visa?: DemoVisaInfo | null }) {
           <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Official visa application portal →</a>
         </div>
       ) : (
-        <div className={styles.guideLink}>No visa required · US passport accepted</div>
+        <div className={styles.guideLink}>No visa required � ·  US passport accepted</div>
       )}
     </div>
   );
@@ -2479,12 +2479,12 @@ function BundleConfirmed() {
   return (
     <div className={styles.itinerary}>
       <div className={styles.itineraryHeader}>
-        <div className={styles.itineraryTitle}>Path C · Confirmed</div>
+        <div className={styles.itineraryTitle}>Path C � ·  Confirmed</div>
         <div className={styles.itineraryTotal}>$2,010</div>
       </div>
       {[
-        { icon: <Plane size={18} strokeWidth={2.1} />, label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
-        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
+        { icon: <Plane size={18} strokeWidth={2.1} />, label: "Flight", val: "LH 8904 � ·  ORD → MXP", sub: "Sep 14 � ·  8:45 AM � ·  $687" },
+        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala � ·  5 nights", sub: "Sep 14 to 19 � ·  $1,235" },
         { icon: <ShieldCheck size={18} strokeWidth={2.1} />, label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
       ].map(item => (
         <div className={styles.itineraryRow} key={item.label}>
@@ -2511,7 +2511,7 @@ function ApprovalWatching() {
       </div>
       <div className={styles.watchStatus}>
         <div className={styles.watchDot} />
-        <span>Monitoring inbox · Last checked just now</span>
+        <span>Monitoring inbox � ·  Last checked just now</span>
       </div>
     </div>
   );
@@ -2593,7 +2593,7 @@ function RebookingConfirmed() {
           <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
         ))}
       </div>
-      <div className={[styles.eticketBadge, styles.eticketBadgeGreen].join(" ")}>Hotel notified · No further action needed</div>
+      <div className={[styles.eticketBadge, styles.eticketBadgeGreen].join(" ")}>Hotel notified � ·  No further action needed</div>
     </div>
   );
 }
@@ -2611,7 +2611,7 @@ function ExceptionPending() {
       </div>
       <div className={styles.watchStatus}>
         <div className={styles.watchDotUrgent} />
-        <span>Monitoring inbox · Hotel hold expires in 2 hours</span>
+        <span>Monitoring inbox � ·  Hotel hold expires in 2 hours</span>
       </div>
     </div>
   );
@@ -2644,7 +2644,7 @@ function ExceptionPolling({
         </div>
         <div className={styles.watchStatus}>
           <div className={styles.watchDotUrgent} />
-          <span style={{ opacity: 0.85 }}>Monitoring inbox · Hotel hold expires in 2 hours</span>
+          <span style={{ opacity: 0.85 }}>Monitoring inbox � ·  Hotel hold expires in 2 hours</span>
         </div>
       </div>
     );
@@ -2701,8 +2701,8 @@ function TransportConfirmed({
   const chosen = TRANSPORT_META[selectedIndex] ?? TRANSPORT_META[0];
   const normalizedLiveData = liveData ? normalizeTransportData(liveData) : null;
   const eta = normalizedLiveData
-    ? `${chosen.getTime(normalizedLiveData)} · ${chosen.getCost(normalizedLiveData)}`
-    : `${DEFAULT_TRANSPORT_DATA.taxi.minutes} · ${DEFAULT_TRANSPORT_DATA.taxi.cost}`;
+    ? `${chosen.getTime(normalizedLiveData)} � ·  ${chosen.getCost(normalizedLiveData)}`
+    : `${DEFAULT_TRANSPORT_DATA.taxi.minutes} � ·  ${DEFAULT_TRANSPORT_DATA.taxi.cost}`;
 
   const rows = [
     { icon: chosen.icon, label: "Transport", val: chosen.name },
@@ -2733,7 +2733,7 @@ function ReceiptSubmitted() {
           <CheckCircle2 size={38} strokeWidth={1.9} />
         </span>
         <div className={styles.confirmTitle}>Submitted to Expense System</div>
-        <div className={styles.confirmBody}>Ristorante Al Porto · €87.50 · Ref #EXP-20250916-09 · Categorized as &quot;Meals&quot;</div>
+        <div className={styles.confirmBody}>Ristorante Al Porto � ·  €87.50 � ·  Ref #EXP-20250916-09 � ·  Categorized as &quot;Meals&quot;</div>
       </div>
       <div className={styles.receiptTags}>
         <span className={styles.receiptTag}>
@@ -3574,12 +3574,12 @@ function PhoneShell({
                   <div className={styles.confirmCard}>
                     <div className={styles.confirmTitle}>{receiptScanResult.merchant}</div>
                     <div className={styles.confirmBody}>
-                      {receiptScanResult.date} · {toTitleCase(receiptScanResult.category)} · {receiptScanResult.amount} {receiptScanResult.currency}
+                      {receiptScanResult.date} � ·  {toTitleCase(receiptScanResult.category)} � ·  {receiptScanResult.amount} {receiptScanResult.currency}
                     </div>
                   </div>
                   <div className={styles.confirmList}>
                     {false ? [
-                      { icon: "🏷️", label: "Category", val: toTitleCase(receiptScanResult!.category) },
+                      { icon: "� · ️", label: "Category", val: toTitleCase(receiptScanResult!.category) },
                       { icon: "💶", label: "Original", val: `${receiptScanResult!.amount} ${receiptScanResult!.currency}` },
                       { icon: "💵", label: "USD Total", val: `$${receiptScanResult!.totalUsd}` },
                       { icon: "🎯", label: "Confidence", val: `${Math.round(receiptScanResult!.confidence * 100)}%` },
@@ -3706,7 +3706,7 @@ function LoginScreen() {
               width={120}
             />
             <div className={styles.loginTitle}>Lockey</div>
-            <div className={styles.loginSubtitle}>AI Travel Concierge · Lockton</div>
+            <div className={styles.loginSubtitle}>AI Travel Concierge � ·  Lockton</div>
           </div>
           <button
             className={styles.loginSignInButton}

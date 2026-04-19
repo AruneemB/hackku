@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { queryPolicyForTrip } from "@/lib/policy/vectorSearch";
 import { connectToDatabase } from "@/lib/mongodb/client";

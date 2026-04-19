@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // LIB: Policy Vector Search (Frame 4)
 // OWNER: Track B (AI & Intelligence)

@@ -161,7 +161,7 @@ export default function ApprovalPage() {
             <RejectionRecovery
               tripId={tripId}
               rejectionReason={rejectionReason}
-              policyCapUsd={trip.budgetCapUsd ?? 200}
+              policyCapUsd={parseFloat(trip.budgetCapUsd) || 200}
               onResubmitted={() => setRejectionReason(null)}
             />
           )}

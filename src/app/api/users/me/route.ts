@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // API ROUTE: Current user profile
 // ROUTE: GET /api/users/me

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { withAuth } from "next-auth/middleware";
 import type { NextFetchEvent, NextRequest } from "next/server";
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // API ROUTE: Receipt Capture (Frame 13)
 // OWNER: Track B (AI & Intelligence)

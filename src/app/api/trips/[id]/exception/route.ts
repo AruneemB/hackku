@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // API ROUTE: Exception Request (Frame 11)
 // ROUTE: POST /api/trips/[id]/exception

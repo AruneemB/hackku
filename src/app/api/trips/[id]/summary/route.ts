@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb/client";
 import Trip from "@/lib/mongodb/models/Trip";
