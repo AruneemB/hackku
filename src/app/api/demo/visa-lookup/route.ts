@@ -176,7 +176,7 @@ Return only the JSON object. Be accurate — this is used for business travel co
 
     const validated = validateVisaPayload(parsed);
     if (!validated.ok) {
-      return NextResponse.json({ error: validated.message }, { status: 400 });
+      return NextResponse.json({ error: (validated as { ok: false; message: string }).message }, { status: 400 });
     }
 
     return NextResponse.json(validated.data);

@@ -35,6 +35,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "@vitest/coverage-v8": "^4.1.4",
     "dotenv": "^17.4.2",
     "eslint": "^9",

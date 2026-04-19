@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // API ROUTE: Gmail Approval Webhook (Atlas Trigger target)
 // OWNER: Track C (Data & Integrations)

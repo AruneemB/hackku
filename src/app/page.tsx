@@ -1,10 +1,2960 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import Image from "next/image";
+import React, { useEffect, useRef, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
+import {
+  ArrowRight,
+  ArrowBigLeft,
+  Building2,
+  CalendarClock,
+  CarFront,
+  CheckCircle2,
+  CloudSun,
+  DollarSign,
+  Ellipsis,
+  Footprints,
+  Hotel as HotelIcon,
+  MapPin,
+  MoveDown,
+  Pencil,
+  Plane,
+  PlaneTakeoff,
+  PhoneCall,
+  ReceiptText,
+  Route,
+  ShieldAlert,
+  ShieldCheck,
+  Send as SendIcon,
+  Tag,
+  TrainFront,
+  Wallet,
+} from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
+import { DemoReceiptCapture, type DemoReceiptCapturePayload } from "@/components/receipts/DemoReceiptCapture";
+import { SpeechBubble } from "@/components/mascot/SpeechBubble";
 import { useMascot } from "@/hooks/useMascot";
+import type { FlightGroup } from "@/types/flight";
+import type { Hotel } from "@/types/hotel";
+import type { WeatherForecast } from "@/types/weather";
 import styles from "./page.module.css";
+import dynamic from "next/dynamic";
+
+const DynamicHotelMap = dynamic(() => import("@/components/map/LeafletHotelMap"), { ssr: false });
+
+// ── Types ──────────────────────────────────────────────────────
+
+type Tone = "neutral" | "excited" | "empathetic" | "urgent";
+
+type ManagerPollResult = {
+  found: boolean;
+  noAuth?: boolean;
+  status?: "approved" | "rejected";
+  reason?: string;
+  flaggedItems?: string[];
+  changes?: { hotel?: string; flight?: string; dates?: string; budget?: string };
+  snippet?: string;
+};
+
+type TransportLeg = {
+  minutes: string;
+  cost: string;
+  distanceKm?: number;
+};
+
+type TransportApiResult = {
+  distanceKm: number;
+  taxi?: TransportLeg;
+  metro?: TransportLeg;
+  walk?: TransportLeg;
+};
+
+const DEFAULT_TRANSPORT_DATA: Required<TransportApiResult> = {
+  distanceKm: 2.3,
+  taxi: { minutes: "18 min", cost: "$14", distanceKm: 2.3 },
+  metro: { minutes: "35 min", cost: "$2.50" },
+  walk: { minutes: "28 min", cost: "Free" },
+};
+
+function normalizeTransportData(data: TransportApiResult | null | undefined): Required<TransportApiResult> {
+  return {
+    distanceKm: data?.distanceKm ?? DEFAULT_TRANSPORT_DATA.distanceKm,
+    taxi: {
+      minutes: data?.taxi?.minutes ?? DEFAULT_TRANSPORT_DATA.taxi.minutes,
+      cost: data?.taxi?.cost ?? DEFAULT_TRANSPORT_DATA.taxi.cost,
+      distanceKm: data?.taxi?.distanceKm ?? data?.distanceKm ?? DEFAULT_TRANSPORT_DATA.taxi.distanceKm,
+    },
+    metro: {
+      minutes: data?.metro?.minutes ?? DEFAULT_TRANSPORT_DATA.metro.minutes,
+      cost: data?.metro?.cost ?? DEFAULT_TRANSPORT_DATA.metro.cost,
+    },
+    walk: {
+      minutes: data?.walk?.minutes ?? DEFAULT_TRANSPORT_DATA.walk.minutes,
+      cost: data?.walk?.cost ?? DEFAULT_TRANSPORT_DATA.walk.cost,
+    },
+  };
+}
+
+type TripData = {
+  city: string;
+  country: string;
+  originCity: string;
+  departure: string;
+  returnDate: string;
+  passportExpiry: string;
+  purpose: string;
+  approvalThread?: {
+    status: string;
+    reason: string | null;
+    flaggedItems?: string[];
+  };
+};
+
+type ConversationMessage = { role: "user" | "assistant"; content: string; frameIndex?: number };
+
+type DemoFrame = {
+  frameNumber: number;
+  tone: Tone;
+  message: string;
+  sheetTitle: string;
+  options: [string, string];
+  Visual: React.ComponentType<any>;
+  actionTitle: string;
+  ActionVisual: React.ComponentType<any>;
+};
+
+type DemoProgressSnapshot = {
+  version: 2;
+  currentIndex: number;
+  overlayReady: boolean;
+  overlayDismissed: boolean;
+  tripId: string | null;
+  tripData: TripData | null;
+  frameCompleted: Record<number, boolean>;
+  conversationMessages: ConversationMessage[];
+  knownFields: Record<string, string>;
+  selectedFlight: number;
+  selectedHotel: number;
+  selectedReturn: number;
+  selectedBundle: number | null;
+  selectedTransport: number;
+  liveWeather: WeatherForecast | null;
+};
+
+// ── Demo data (hardcoded for unimplemented integrations) ───────
+
+const DEMO_DEFAULTS: TripData = {
+  city: "Milan",
+  country: "IT",
+  originCity: "Chicago",
+  departure: "2026-06-14",
+  returnDate: "2026-06-21",
+  passportExpiry: "2028-12-01",
+  purpose: "Client on-site meeting",
+};
+
+type DisplayReturn = {
+  id: string; flightNumber: string; returnDate: string;
+  dep: string; arr: string; dur: string;
+  priceUsd: number; totalPriceUsd: number; returnVia?: string;
+};
+
+type DisplayFlightGroup = {
+  id: string; flightNumber: string; carrier: string; route: string;
+  depDate: string; dep: string; arr: string; dur: string;
+  tag?: string; returns: DisplayReturn[];
+};
+
+const DEMO_FLIGHT_GROUPS: DisplayFlightGroup[] = [
+  {
+    id: "lh8904", flightNumber: "LH 8904", carrier: "Lufthansa", route: "ORD → MXP",
+    depDate: "Sep 14", dep: "8:45 AM", arr: "11:20 AM+1", dur: "9h 35m",
+    returns: [
+      { id: "lh8904-r1", flightNumber: "LH 8905", returnDate: "Sep 19", dep: "1:20 PM", arr: "4:55 PM", dur: "9h 35m", priceUsd: 380, totalPriceUsd: 1067 },
+      { id: "lh8904-r2", flightNumber: "LX 0220", returnDate: "Sep 19", dep: "9:40 AM", arr: "1:15 PM+1", dur: "11h 35m", priceUsd: 310, totalPriceUsd: 997, returnVia: "via ZRH" },
+      { id: "lh8904-r3", flightNumber: "AF 1121", returnDate: "Sep 20", dep: "4:15 PM", arr: "7:50 PM", dur: "9h 35m", priceUsd: 420, totalPriceUsd: 1107 },
+    ],
+  },
+  {
+    id: "lx0117", flightNumber: "LX 0117", carrier: "Swiss", route: "ORD → ZRH → MXP",
+    depDate: "Sep 14", dep: "6:15 AM", arr: "2:50 PM+1", dur: "10h 35m",
+    returns: [
+      { id: "lx0117-r1", flightNumber: "LX 0118", returnDate: "Sep 19", dep: "11:50 AM", arr: "4:10 PM+1", dur: "10h 20m", priceUsd: 250, totalPriceUsd: 793, returnVia: "via ZRH" },
+      { id: "lx0117-r2", flightNumber: "LH 8905", returnDate: "Sep 19", dep: "1:20 PM", arr: "4:55 PM", dur: "9h 35m", priceUsd: 380, totalPriceUsd: 923 },
+    ],
+  },
+  {
+    id: "af0264", flightNumber: "AF 0264", carrier: "Air France", route: "ORD → BGY",
+    depDate: "Sep 14", dep: "10:30 AM", arr: "12:15 PM+1", dur: "8h 45m",
+    returns: [
+      { id: "af0264-r1", flightNumber: "ITA 502", returnDate: "Sep 19", dep: "6:30 AM", arr: "9:15 AM", dur: "9h 45m", priceUsd: 195, totalPriceUsd: 607 },
+      { id: "af0264-r2", flightNumber: "AF 0265", returnDate: "Sep 19", dep: "2:15 PM", arr: "5:00 PM", dur: "9h 45m", priceUsd: 280, totalPriceUsd: 692 },
+      { id: "af0264-r3", flightNumber: "AF 0267", returnDate: "Sep 20", dep: "11:00 AM", arr: "1:45 PM+1", dur: "10h 45m", priceUsd: 320, totalPriceUsd: 732, returnVia: "via CDG" },
+    ],
+  },
+];
+
+const CITY_TO_AIRPORT: Record<string, string> = {
+  // North America — origin cities
+  "kansas city": "MCI", "st. louis": "STL", "saint louis": "STL",
+  chicago: "ORD", milwaukee: "MKE",
+  "new york": "JFK", "new york city": "JFK", nyc: "JFK",
+  boston: "BOS",
+  washington: "DCA", "washington dc": "IAD", "washington d.c.": "IAD",
+  atlanta: "ATL",
+  miami: "MIA",
+  dallas: "DFW", "fort worth": "DFW",
+  houston: "IAH",
+  denver: "DEN",
+  phoenix: "PHX",
+  "los angeles": "LAX",
+  "san francisco": "SFO",
+  seattle: "SEA",
+  minneapolis: "MSP",
+  detroit: "DTW",
+  philadelphia: "PHL",
+  charlotte: "CLT",
+  toronto: "YYZ",
+  // Europe — destination cities
+  milan: "MXP", rome: "FCO", paris: "CDG", london: "LHR",
+  amsterdam: "AMS", frankfurt: "FRA", madrid: "MAD",
+  barcelona: "BCN", lisbon: "LIS", zurich: "ZRH",
+  // Asia / Pacific / Middle East — destination cities
+  tokyo: "NRT", dubai: "DXB", singapore: "SIN", sydney: "SYD",
+};
+
+const COUNTRY_CODES: Record<string, string> = {
+  IT: "Italy",
+  FR: "France",
+  DE: "Germany",
+  ES: "Spain",
+  GB: "United Kingdom",
+  NL: "Netherlands",
+  PT: "Portugal",
+  CH: "Switzerland",
+  JP: "Japan",
+  AE: "UAE",
+  SG: "Singapore",
+  AU: "Australia",
+  CA: "Canada",
+  MX: "Mexico",
+  US: "United States",
+};
+
+function expandCountry(code: string): string {
+  return COUNTRY_CODES[code.toUpperCase()] ?? code;
+}
+
+function fmtTime(d: Date | string) {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+function fmtDate(d: Date | string) {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function fmtDur(min: number) {
+  return `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+function fmtDateRange(start: Date | string, end: Date | string) {
+  const s = typeof start === "string" ? new Date(start) : start;
+  const e = typeof end === "string" ? new Date(end) : end;
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (s.getFullYear() !== e.getFullYear()) {
+    return `${s.toLocaleDateString("en-US", { ...opts, year: "numeric" })} – ${e.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`;
+  }
+  return `${s.toLocaleDateString("en-US", opts)} – ${e.toLocaleDateString("en-US", opts)}, ${e.getFullYear()}`;
+}
+
+type ApprovalEmailContent = {
+  managerEmail: string;
+  subject: string;
+  bodyText: string;
+  destCity: string;
+  destCountry: string;
+  destCountryCode: string;
+  dateRange: string;
+  homeCode: string;
+  destCode: string;
+  flightNum: string | null;
+  flightPrice: number;
+  hotelName: string | null;
+  hotelRate: number;
+  nights: number;
+  hotelTotal: number;
+  overCap: boolean;
+  totalEstimated: number;
+  purpose: string;
+};
+
+function buildApprovalEmail(input: {
+  tripData?: TripData | null;
+  liveFlightGroups?: FlightGroup[] | null;
+  liveHotels?: Hotel[] | null;
+  selectedFlight?: number;
+  selectedReturn?: number;
+  selectedHotel?: number;
+}): ApprovalEmailContent {
+  const tripData = input.tripData;
+  const selectedFlight = input.selectedFlight ?? 0;
+  const selectedReturn = input.selectedReturn ?? 0;
+  const selectedHotel = input.selectedHotel ?? 0;
+
+  const homeCode = tripData?.originCity
+    ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase())
+    : "—";
+  const destCode = tripData?.city
+    ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? tripData.city.substring(0, 3).toUpperCase())
+    : "—";
+  const destCity = tripData?.city ?? "your destination";
+  const destCountryCode = tripData?.country ?? "";
+  const destCountry = destCountryCode ? expandCountry(destCountryCode) : "";
+  const dateRange = tripData?.departure && tripData?.returnDate
+    ? fmtDateRange(tripData.departure, tripData.returnDate)
+    : "dates TBD";
+  const purpose = tripData?.purpose?.trim() || "an on-site client meeting";
+
+  const liveGroup = input.liveFlightGroups?.[selectedFlight];
+  const flightNum = liveGroup?.outbound.outbound.flightNumber ?? null;
+  const flightPrice = liveGroup
+    ? liveGroup.outbound.priceUsd + (liveGroup.returns[selectedReturn]?.priceUsd ?? 0)
+    : 0;
+
+  const hotelData = input.liveHotels?.[selectedHotel];
+  const hotelName = hotelData?.name ?? null;
+  const hotelRate = hotelData?.nightlyRateUsd ?? 0;
+
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.max(0, Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000))
+    : 0;
+  const hotelTotal = hotelRate * nights;
+  const overCap = hotelRate > 200;
+  const totalEstimated = flightPrice + hotelTotal;
+
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "manager@example.com";
+  const locationLabel = [destCity, destCountry].filter(Boolean).join(", ");
+  const subject = `Travel Approval - ${destCity}, ${dateRange}`;
+
+  const flightLine = flightNum
+    ? `Flight: ${flightNum}, ${homeCode} to ${destCode} · $${flightPrice}`
+    : "Flight: not selected";
+  const hotelLine = hotelName
+    ? `Hotel: ${hotelName} · $${hotelRate}/night × ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.` : ""}`
+    : "Hotel: not selected";
+
+  const bodyText = [
+    "Hi,",
+    "",
+    `I'm requesting approval for a business trip to ${locationLabel}, ${dateRange} for ${purpose}.`,
+    "",
+    flightLine,
+    hotelLine,
+    "",
+    `Total estimated: $${totalEstimated}. Please let me know if you have any questions.`,
+    "",
+    "Thanks,",
+    "Lockey",
+  ].join("\n");
+
+  return {
+    managerEmail, subject, bodyText,
+    destCity, destCountry, destCountryCode, dateRange,
+    homeCode, destCode,
+    flightNum, flightPrice,
+    hotelName, hotelRate, nights, hotelTotal, overCap, totalEstimated,
+    purpose,
+  };
+}
+
+function toTitleCase(value: string) {
+  return value.replace(/\w\S*/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase());
+}
+
+const DEMO_HOTELS = [
+  { id: "marriott-scala", name: "Marriott Scala", address: "Via della Spiga 31, Milan", pricePerNightUsd: 247, distanceKm: 0.4, isPreferred: true, confirmationNum: "MR-20250914-7741" },
+  { id: "ac-hotel-milan", name: "AC Hotel Milan", address: "Via Larga 23, Milan", pricePerNightUsd: 189, distanceKm: 1.2, isPreferred: true, confirmationNum: "AC-20250914-9921" },
+  { id: "nh-collection", name: "NH Collection", address: "Piazza Cavour 2, Milan", pricePerNightUsd: 165, distanceKm: 2.1, isPreferred: false, confirmationNum: "NH-20250914-3312" },
+];
+
+type DemoVisaInfo = {
+  visaRequired: boolean;
+  visaType: string | null;
+  stayLimitDays: number;
+  notes: string;
+  applicationUrl: string | null;
+  minApplicationLeadDays: number | null;
+};
+
+function buildDemoPolicy(country: string, visa: DemoVisaInfo) {
+  return {
+    visa: {
+      _id: "demo-visa",
+      destinationCountry: country,
+      citizenship: "US",
+      ...visa,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    hotelNightlyCapUsd: 200,
+    flightCapUsd: 800,
+    mealAllowancePerDayUsd: 75,
+    requiresManagerApproval: true,
+    approvalReason: "Hotel at $247/night exceeds $200 Milan cap",
+    mascotSummary: `Checked your company policy — ${visa.visaRequired ? `a ${visa.visaType} is required` : "no visa needed"} for US citizens visiting ${country}, but Marriott Scala is $47 over the $200 cap and needs manager sign-off.`,
+  };
+}
+
+const DEMO_PROGRESS_STORAGE_KEY = "hackku.demo.progress.v1";
+const HIDDEN_FRAME_INDEXES = new Set<number>([]);
+
+function isVisibleFrameIndex(index: number): boolean {
+  return index >= 0 && index < FRAMES.length && !HIDDEN_FRAME_INDEXES.has(index);
+}
+
+function getNearestVisibleFrameIndex(index: number): number {
+  if (isVisibleFrameIndex(index)) return index;
+
+  for (let next = index + 1; next < FRAMES.length; next += 1) {
+    if (isVisibleFrameIndex(next)) return next;
+  }
+
+  for (let prev = index - 1; prev >= 0; prev -= 1) {
+    if (isVisibleFrameIndex(prev)) return prev;
+  }
+
+  return 0;
+}
+
+const DEMO_BUNDLES = [
+  { label: "A", description: "MXP direct · Marriott Scala. Full compliance, hotel exception needed.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2340, savingsVsStandard: 0, complianceFlags: ["hotel_over_cap"] },
+  { label: "B", description: "BGY airport · AC Hotel 1.2 km. Saves $500. Fully compliant.", flightId: "af0264", hotelId: "ac-hotel-milan", totalCostUsd: 1840, savingsVsStandard: 500, complianceFlags: [] },
+  { label: "C", description: "Weekend stay strategy · Marriott Scala. Best overall value.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2010, savingsVsStandard: 330, complianceFlags: [] },
+];
+
+type RebookingData = {
+  cancelled: {
+    flightNumber: string;
+    carrier: string;
+    route: string;
+    dep: string;
+    priceUsd: number;
+    originAirport: string;
+  };
+  rebooked: {
+    flightNumber: string;
+    carrier: string;
+    route: string;
+    dep: string;
+    priceUsd: number;
+    changeFeeUsd: number;
+    overageUsd: number;
+    seat: string;
+  };
+};
+
+const AIRPORT_NAMES: Record<string, string> = {
+  ORD: "O'Hare", JFK: "JFK", LAX: "LAX", MCI: "Kansas City",
+  BOS: "Boston", ATL: "Atlanta", DFW: "Dallas/Fort Worth",
+  DEN: "Denver", PHX: "Phoenix", SFO: "San Francisco",
+  SEA: "Seattle", MSP: "Minneapolis", DTW: "Detroit",
+  PHL: "Philadelphia", CLT: "Charlotte", YYZ: "Toronto",
+};
+
+const REBOOK_CARRIER_ALT: Record<string, { carrier: string; flightNumber: string }> = {
+  "Lufthansa": { carrier: "United Airlines", flightNumber: "UA 986" },
+  "Swiss": { carrier: "United Airlines", flightNumber: "UA 986" },
+  "Air France": { carrier: "United Airlines", flightNumber: "UA 986" },
+  "United Airlines": { carrier: "American Airlines", flightNumber: "AA 742" },
+  "American Airlines": { carrier: "United Airlines", flightNumber: "UA 986" },
+};
+
+function buildRebookingData(group: DisplayFlightGroup, originalPriceUsd: number): RebookingData {
+  const routeParts = group.route.split(" → ");
+  const originAirport = routeParts[0] ?? "ORD";
+  const destAirport = routeParts[routeParts.length - 1] ?? "MXP";
+  const route = `${originAirport} → ${destAirport}`;
+  const alt = REBOOK_CARRIER_ALT[group.carrier] ?? { carrier: "United Airlines", flightNumber: "UA 986" };
+  const changeFeeUsd = 150;
+  const fareOverage = 230;
+  return {
+    cancelled: {
+      flightNumber: group.flightNumber,
+      carrier: group.carrier,
+      route,
+      dep: group.dep,
+      priceUsd: originalPriceUsd,
+      originAirport,
+    },
+    rebooked: {
+      flightNumber: alt.flightNumber,
+      carrier: alt.carrier,
+      route,
+      dep: "9:15 PM",
+      priceUsd: originalPriceUsd + fareOverage + changeFeeUsd,
+      changeFeeUsd,
+      overageUsd: fareOverage + changeFeeUsd,
+      seat: "14A",
+    },
+  };
+}
+
+const DEMO_RECEIPT = {
+  merchant: "Ristorante Al Porto",
+  category: "meal",
+  total: "87.50",
+  currency: "EUR",
+  date: "2025-09-16T20:42:00.000Z",
+  sanitized: true,
+};
+
+// ── MongoDB helpers ────────────────────────────────────────────
+
+async function patchTrip(tripId: string, data: Record<string, unknown>) {
+  const res = await fetch(`/api/trips/${tripId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Trip update failed");
+}
+
+type FrameActionResult = {
+  approvalSentAt?: number;
+  exceptionSentAt?: number;
+};
+
+async function executeFrameAction(
+  frameIdx: number,
+  tripId: string,
+  sel: {
+    flight: number;
+    hotel: number;
+    selectedReturn?: number;
+    bundle: number | null;
+    liveFlightGroups?: FlightGroup[] | null;
+    liveHotels?: Hotel[] | null;
+    tripCountry?: string;
+    visaInfo?: DemoVisaInfo | null;
+    tripData?: TripData | null;
+  }
+): Promise<FrameActionResult> {
+  const result: FrameActionResult = {};
+  const liveGroup = sel.liveFlightGroups?.[sel.flight];
+  const flight = liveGroup?.outbound ?? DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
+  const bundle = sel.bundle !== null ? DEMO_BUNDLES[sel.bundle] : DEMO_BUNDLES[2];
+
+  switch (frameIdx) {
+    case 2:
+      await patchTrip(tripId, { flights: [flight] });
+      break;
+    case 3: {
+      const hotel = sel.liveHotels?.[sel.hotel] ?? DEMO_HOTELS[sel.hotel] ?? DEMO_HOTELS[0];
+      await patchTrip(tripId, { hotels: [hotel] });
+      break;
+    }
+    case 4: {
+      const country = sel.tripCountry ?? DEMO_DEFAULTS.country;
+      const visa: DemoVisaInfo = sel.visaInfo ?? { visaRequired: false, visaType: null, stayLimitDays: 90, notes: "Check your destination's entry requirements.", applicationUrl: null, minApplicationLeadDays: null };
+      await patchTrip(tripId, { policyFindings: buildDemoPolicy(country, visa) });
+      break;
+    }
+    case 5:
+      await patchTrip(tripId, { selectedBundle: bundle });
+      break;
+    case 6: {
+      const email = buildApprovalEmail({
+        tripData: sel.tripData,
+        liveFlightGroups: sel.liveFlightGroups,
+        liveHotels: sel.liveHotels,
+        selectedFlight: sel.flight,
+        selectedReturn: sel.selectedReturn,
+        selectedHotel: sel.hotel,
+      });
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const sentAt = Date.now();
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: managerEmail,
+            subject: email.subject,
+            body: email.bodyText,
+          }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          throw new Error((gmailErr as { error?: string }).error ?? `gmail-send ${gmailRes.status}`);
+        }
+        result.approvalSentAt = sentAt;
+      }
+
+      await patchTrip(tripId, {
+        status: "pending_approval",
+        approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
+      });
+      break;
+    }
+    case 7: {
+      // Resubmission: switch to a compliant hotel if one exists, then re-send
+      // the approval email so the manager has a fresh request to act on.
+      const altHotel = sel.liveHotels?.find((h) => !h.overPolicyCap) ?? sel.liveHotels?.[1];
+      const altHotelIndex = altHotel
+        ? sel.liveHotels?.findIndex((h) => h.id === altHotel.id) ?? sel.hotel
+        : sel.hotel;
+      if (altHotel) {
+        await patchTrip(tripId, { hotels: [altHotel] });
+      }
+      const email = buildApprovalEmail({
+        tripData: sel.tripData,
+        liveFlightGroups: sel.liveFlightGroups,
+        liveHotels: sel.liveHotels,
+        selectedFlight: sel.flight,
+        selectedReturn: sel.selectedReturn,
+        selectedHotel: altHotelIndex,
+      });
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const sentAt = Date.now();
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: managerEmail,
+            subject: `[Resubmission] ${email.subject}`,
+            body: email.bodyText,
+          }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          throw new Error((gmailErr as { error?: string }).error ?? `gmail-send ${gmailRes.status}`);
+        }
+        result.approvalSentAt = sentAt;
+      }
+      await patchTrip(tripId, {
+        approvalThread: { gmailThreadId: "demo-thread-002", status: "pending", reason: null },
+      });
+      break;
+    }
+    case 8:
+      await patchTrip(tripId, { status: "approved" });
+      break;
+    case 9:
+      await patchTrip(tripId, { status: "active" });
+      break;
+    case 10: {
+      const liveRaw = sel.liveFlightGroups?.[sel.flight];
+      const demoGroup = DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
+      const origFlightNum = liveRaw?.outbound.outbound.flightNumber ?? demoGroup.flightNumber;
+      const origCarrier = liveRaw?.outbound.outbound.carrier ?? demoGroup.carrier;
+      const originCode = liveRaw?.outbound.outbound.origin ?? demoGroup.route.split(" → ")[0] ?? "ORD";
+      const destCode = liveRaw?.outbound.outbound.destination ?? demoGroup.route.split(" → ").pop() ?? "MXP";
+      const origPrice = liveRaw
+        ? liveRaw.outbound.priceUsd + (liveRaw.returns[sel.selectedReturn ?? 0]?.priceUsd ?? 0)
+        : demoGroup.returns?.[sel.selectedReturn ?? 0]?.totalPriceUsd ?? demoGroup.returns?.[0]?.totalPriceUsd ?? 1067;
+      const altEntry = REBOOK_CARRIER_ALT[origCarrier] ?? { carrier: "United Airlines", flightNumber: "UA 986" };
+      const changeFeeUsd = 150;
+      const newPriceUsd = origPrice + 230 + changeFeeUsd;
+      await patchTrip(tripId, {
+        flights: [{
+          id: altEntry.flightNumber.toLowerCase().replace(/\s+/g, ""),
+          flightNumber: altEntry.flightNumber,
+          carrier: altEntry.carrier,
+          route: `${originCode} → ${destCode}`,
+          priceUsd: newPriceUsd,
+          dep: "9:15 PM",
+          arr: "12:45 PM+1",
+          dur: "9h 30m",
+          stops: "Nonstop",
+        }],
+        rebooking: {
+          originalFlightNumber: origFlightNum,
+          originalCarrier: origCarrier,
+          originalPriceUsd: origPrice,
+          newFlightNumber: altEntry.flightNumber,
+          newCarrier: altEntry.carrier,
+          newPriceUsd,
+          changeFeeUsd,
+          overageUsd: newPriceUsd - origPrice,
+          reason: `Thunderstorm at ${originCode} · missed connection`,
+          rebookedAt: new Date().toISOString(),
+        },
+      });
+      break;
+    }
+    case 11: {
+      const flightGroup = sel.liveFlightGroups?.[sel.flight];
+      let rebooking: RebookingData | null = null;
+      if (flightGroup) {
+        const display: DisplayFlightGroup = {
+          id: flightGroup.outbound.id,
+          flightNumber: flightGroup.outbound.outbound.flightNumber,
+          carrier: flightGroup.outbound.outbound.carrier,
+          route: [flightGroup.outbound.outbound.origin, ...(flightGroup.outbound.outbound.layoverAirports ?? []), flightGroup.outbound.outbound.destination].join(" → "),
+          depDate: "",
+          dep: "",
+          arr: "",
+          dur: "",
+          returns: [],
+        };
+        const origPrice = flightGroup.outbound.priceUsd + (flightGroup.returns[sel.selectedReturn ?? 0]?.priceUsd ?? 0);
+        rebooking = buildRebookingData(display, origPrice);
+      } else {
+        const demoGroup = DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
+        const origPrice = demoGroup.returns?.[sel.selectedReturn ?? 0]?.totalPriceUsd ?? demoGroup.returns?.[0]?.totalPriceUsd ?? 0;
+        rebooking = buildRebookingData(demoGroup, origPrice);
+      }
+
+      const email = buildExceptionEmail(rebooking, sel.tripData);
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const sentAt = Date.now();
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: managerEmail,
+            subject: email.subject,
+            body: email.bodyText,
+          }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          throw new Error((gmailErr as { error?: string }).error ?? `gmail-send ${gmailRes.status}`);
+        }
+        result.exceptionSentAt = sentAt;
+      }
+
+      await patchTrip(tripId, {
+        approvalThread: { gmailThreadId: "exception-thread-001", status: "pending", reason: "Emergency rebooking over approved budget" },
+      });
+      break;
+    }
+    case 12:
+    case 14:
+      break;
+    case 13:
+      await patchTrip(tripId, { receipts: [DEMO_RECEIPT] });
+      break;
+    case 15:
+      await patchTrip(tripId, { status: "archived", totalSpendUsd: "2187.00" });
+      break;
+    default:
+      break;
+  }
+  return result;
+}
+
+function isPassportExpiringSoon(passportExpiry: string, departure: string): boolean {
+  const expiry = new Date(passportExpiry);
+  const dep = new Date(departure);
+  dep.setMonth(dep.getMonth() - 6);
+  return expiry <= dep;
+}
+
+// ── Visual components ──────────────────────────────────────────
+
+function TripCard({ tripData, travelerName }: { tripData?: TripData | null; travelerName?: string }) {
+  const data = tripData ?? DEMO_DEFAULTS;
+  const depDate = new Date(data.departure);
+  const retDate = new Date(data.returnDate);
+  const nights = Math.round((retDate.getTime() - depDate.getTime()) / 86400000);
+  const depStr = depDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const retStr = retDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const expiryStr = new Date(data.passportExpiry).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  const showWarning = isPassportExpiringSoon(data.passportExpiry, data.departure);
+  const purpose = data.purpose ? toTitleCase(data.purpose) : "Not specified";
+
+  return (
+    <div className={styles.tripCard}>
+      <div className={styles.tripDestination}>
+        <div className={styles.tripCity}>{data.city}{data.country !== data.city ? `, ${data.country}` : ""}</div>
+        <div className={styles.tripDates}>{depStr} to {retStr} · {nights} nights</div>
+      </div>
+      {showWarning && (
+        <div className={styles.alertBox}>
+          <span className={styles.alertIcon}>
+            <ShieldAlert size={18} strokeWidth={2.1} />
+          </span>
+          <div>
+            <div className={styles.alertTitle}>Passport expires {expiryStr}</div>
+            <div className={styles.alertBody}>Within 6 months of travel — renewal recommended</div>
+          </div>
+        </div>
+      )}
+      <div className={styles.infoGrid}>
+        {[
+          ["Traveler", travelerName ?? "—"],
+          ["Purpose", purpose],
+        ].map(([k, v]) => (
+          <div className={styles.infoRow} key={k}>
+            <span className={styles.infoKey}>{k}</span>
+            <span className={styles.infoVal}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FlightPicker({
+  value, onOutboundChange, returnValue, onReturnChange, groups,
+}: {
+  value?: number;
+  onOutboundChange?: (i: number) => void;
+  returnValue?: number;
+  onReturnChange?: (i: number) => void;
+  groups?: DisplayFlightGroup[] | null;
+}) {
+  const [localSel, setLocalSel] = useState(0);
+  const [localRetSel, setLocalRetSel] = useState(0);
+  const sel = value ?? localSel;
+  const retSel = returnValue ?? localRetSel;
+  const list = groups?.length ? groups : DEMO_FLIGHT_GROUPS;
+
+  function selectOutbound(i: number) {
+    (onOutboundChange ?? setLocalSel)(i);
+    (onReturnChange ?? setLocalRetSel)(0);
+  }
+  function selectReturn(i: number) {
+    (onReturnChange ?? setLocalRetSel)(i);
+  }
+
+  const tags: Record<number, string> = {};
+  if (list.length > 0) {
+    tags[0] = list[0].tag ?? "Best pick";
+    const cheapestIdx = list.reduce((ci, g, i) => {
+      const gPrice = g.returns[0]?.totalPriceUsd ?? Infinity;
+      const cPrice = list[ci].returns[0]?.totalPriceUsd ?? Infinity;
+      return gPrice < cPrice ? i : ci;
+    }, 0);
+    if (cheapestIdx !== 0) tags[cheapestIdx] = list[cheapestIdx].tag ?? "Cheapest";
+  }
+
+  return (
+    <div className={styles.cards}>
+      {list.map((g, i) => {
+        const cheapestTotal = g.returns[0]?.totalPriceUsd;
+        const isSelected = sel === i;
+        return (
+          <div className={styles.flightGroupWrap} key={g.id}>
+            <button
+              className={[styles.card, isSelected ? styles.cardSelected : ""].join(" ")}
+              onClick={() => selectOutbound(i)}
+              type="button"
+            >
+              <div className={styles.cardRow}>
+                <span className={styles.cardLabel}>{g.flightNumber}</span>
+                {tags[i] && <span className={styles.cardTag}>{tags[i]}</span>}
+              </div>
+              <div className={styles.cardRow}>
+                <span className={styles.cardMain}>{g.route}</span>
+                {cheapestTotal !== undefined && <span className={styles.cardPrice}>from ${cheapestTotal}</span>}
+              </div>
+              <span className={styles.cardMeta}>{g.depDate} · {g.dep} → {g.arr} · {g.dur}</span>
+            </button>
+            {isSelected && g.returns.length > 0 && (
+              <div className={styles.returnOptions}>
+                <span className={styles.returnOptionsLabel}>Return flights</span>
+                {g.returns.map((r, ri) => (
+                  <button
+                    className={[styles.returnCard, retSel === ri ? styles.returnCardSelected : ""].join(" ")}
+                    key={r.id}
+                    onClick={() => selectReturn(ri)}
+                    type="button"
+                  >
+                    <div className={styles.cardRow}>
+                      <span className={styles.cardLabel}>{r.flightNumber}{r.returnVia ? ` · ${r.returnVia}` : ""}</span>
+                      <span className={[styles.cardPrice, styles.returnCardPrice].join(" ")}>${r.totalPriceUsd}</span>
+                    </div>
+                    <span className={styles.cardMeta}>{r.returnDate} · {r.dep} → {r.arr} · {r.dur}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatTripDateLabel(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+function getTripLengthDays(start: string, end: string) {
+  const startDate = new Date(`${start}T12:00:00`);
+  const endDate = new Date(`${end}T12:00:00`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
+  return Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000));
+}
+
+function parseRouteAirports(route: string) {
+  return route
+    .split(/\s*(?:→|â†’|->)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getStopDetail(route: string) {
+  const airports = parseRouteAirports(route);
+  const vias = airports.slice(1, -1);
+  if (vias.length === 0) return "Nonstop";
+  return `${vias.length === 1 ? "1 stop" : `${vias.length} stops`} · ${vias.join(", ")}`;
+}
+
+function FlightPickerV2({
+  value, onOutboundChange, returnValue, onReturnChange, groups, tripData,
+}: {
+  value?: number;
+  onOutboundChange?: (i: number) => void;
+  returnValue?: number;
+  onReturnChange?: (i: number) => void;
+  groups?: DisplayFlightGroup[] | null;
+  tripData?: TripData | null;
+}) {
+  const [localSel, setLocalSel] = useState(0);
+  const [localRetSel, setLocalRetSel] = useState(0);
+  const sel = value ?? localSel;
+  const retSel = returnValue ?? localRetSel;
+  const list = groups?.length ? groups : DEMO_FLIGHT_GROUPS;
+  const activeTrip = tripData ?? DEMO_DEFAULTS;
+  const tripLengthDays = getTripLengthDays(activeTrip.departure, activeTrip.returnDate);
+
+  function selectOutbound(i: number) {
+    (onOutboundChange ?? setLocalSel)(i);
+    (onReturnChange ?? setLocalRetSel)(0);
+  }
+
+  function selectReturn(i: number) {
+    (onReturnChange ?? setLocalRetSel)(i);
+  }
+
+  const tags: Record<number, string> = {};
+  if (list.length > 0) {
+    tags[0] = list[0].tag ?? "Best pick";
+    const cheapestIdx = list.reduce((ci, g, i) => {
+      const gPrice = g.returns[0]?.totalPriceUsd ?? Infinity;
+      const cPrice = list[ci].returns[0]?.totalPriceUsd ?? Infinity;
+      return gPrice < cPrice ? i : ci;
+    }, 0);
+    if (cheapestIdx !== 0) tags[cheapestIdx] = list[cheapestIdx].tag ?? "Cheapest";
+  }
+
+  return (
+    <div className={styles.fpWrap}>
+      <div className={styles.fpHeader}>
+        <span className={styles.fpRoute}>{activeTrip.originCity} → {activeTrip.city}</span>
+        <span className={styles.fpHeaderMeta}>
+          {formatTripDateLabel(activeTrip.departure)} – {formatTripDateLabel(activeTrip.returnDate)}
+          {tripLengthDays ? ` · ${tripLengthDays} nights` : ""}
+        </span>
+      </div>
+
+      <div className={styles.fpCards}>
+        {list.map((g, i) => {
+          const isSelected = sel === i;
+          const airports = parseRouteAirports(g.route);
+          const depCode = airports[0] ?? "";
+          const arrCode = airports[airports.length - 1] ?? "";
+          const minPrice = g.returns.reduce((m, r) => Math.min(m, r.totalPriceUsd), Infinity);
+          return (
+            <div key={g.id} className={styles.fpFlightGroup}>
+              <button
+                className={[styles.fpCard, isSelected ? styles.fpCardSelected : ""].join(" ")}
+                onClick={() => selectOutbound(i)}
+                type="button"
+              >
+                <div className={styles.fpCardTop}>
+                  <span className={styles.fpAirline}>{g.carrier} · {g.flightNumber}</span>
+                  {tags[i] && (
+                    <span className={[styles.cardTag, isSelected ? styles.cardTagSelected : ""].join(" ")}>
+                      {tags[i]}
+                    </span>
+                  )}
+                </div>
+                <div className={styles.fpTimes}>
+                  <span className={styles.fpTimeVal}>{g.dep}</span>
+                  <div className={styles.fpArrowWrap}>
+                    <div className={styles.fpArrowLine} />
+                    <Plane className={styles.fpArrowPlane} size={13} />
+                    <div className={styles.fpArrowLine} />
+                  </div>
+                  <span className={styles.fpTimeVal}>{g.arr}</span>
+                </div>
+                <div className={styles.fpAirports}>
+                  <span className={styles.fpAirport}>{depCode}</span>
+                  <span className={[styles.fpAirport, styles.fpAirportRight].join(" ")}>{arrCode}</span>
+                </div>
+                <div className={styles.fpCardBottom}>
+                  <span className={styles.fpStopsMeta}>{getStopDetail(g.route)} · {g.dur}</span>
+                  {minPrice !== Infinity && <span className={styles.fpFromPrice}>from ${minPrice}</span>}
+                </div>
+              </button>
+
+              {isSelected && g.returns.length > 0 && (
+                <div className={styles.fpReturnsInline}>
+                  <span className={styles.fpReturnInlineLabel}>↩ Return</span>
+                  <div className={styles.fpReturnRows}>
+                    {g.returns.map((r, ri) => {
+                      const isRetSel = retSel === ri;
+                      return (
+                        <button
+                          key={r.id}
+                          className={[styles.fpReturnRow, isRetSel ? styles.fpReturnRowSelected : ""].join(" ")}
+                          onClick={() => selectReturn(ri)}
+                          type="button"
+                        >
+                          <div className={[styles.fpRadioDot, isRetSel ? styles.fpRadioDotSelected : ""].join(" ")}>
+                            {isRetSel && <div className={styles.fpRadioInner} />}
+                          </div>
+                          <div className={styles.fpReturnRowBody}>
+                            <div className={styles.fpReturnRowTimeLine}>
+                              <span className={styles.fpReturnTime}>{r.dep}</span>
+                              <span className={styles.fpReturnTime}>{r.arr}</span>
+                            </div>
+                            <div className={styles.fpReturnRowBottom}>
+                              <span className={styles.fpReturnRowMeta}>
+                                {r.returnDate} · {r.flightNumber}{r.returnVia ? ` · ${r.returnVia}` : ""} · {r.dur}
+                              </span>
+                              <span className={styles.fpReturnRowPrice}>${r.totalPriceUsd}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FlightSearchState({
+  title,
+  body,
+  icon,
+}: {
+  title: string;
+  body: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className={styles.alertBox}>
+      <span className={styles.alertIcon}>{icon}</span>
+      <div>
+        <div className={styles.alertTitle}>{title}</div>
+        <div className={styles.alertBody}>{body}</div>
+      </div>
+    </div>
+  );
+}
+
+function ComplianceReport({
+  visa,
+  hotelName,
+  hotelNightlyRateUsd,
+  hotelCapUsd = 200,
+  flightNumber,
+  flightTotalUsd,
+  flightCapUsd = 800,
+  departure,
+  returnDate,
+}: {
+  visa?: DemoVisaInfo | null;
+  hotelName?: string;
+  hotelNightlyRateUsd?: number;
+  hotelCapUsd?: number;
+  flightNumber?: string;
+  flightTotalUsd?: number;
+  flightCapUsd?: number;
+  departure?: string;
+  returnDate?: string;
+}) {
+  const visaRequired = visa?.visaRequired ?? false;
+  const visaType = visa?.visaType ?? "Visa";
+  const leadDays = visa?.minApplicationLeadDays ?? null;
+  const applyUrl = visa?.applicationUrl ?? null;
+
+  const hotelOverCap = hotelNightlyRateUsd != null && hotelNightlyRateUsd > hotelCapUsd;
+  const hotelExcess = hotelNightlyRateUsd != null ? Math.round(hotelNightlyRateUsd - hotelCapUsd) : 0;
+
+  const flightOverCap = flightTotalUsd != null && flightTotalUsd > flightCapUsd;
+
+  let nights = 0;
+  let depLabel = "";
+  let retLabel = "";
+  if (departure && returnDate) {
+    const dep = new Date(`${departure}T12:00:00`);
+    const ret = new Date(`${returnDate}T12:00:00`);
+    nights = Math.round((ret.getTime() - dep.getTime()) / (1000 * 60 * 60 * 24));
+    depLabel = fmtDate(dep);
+    retLabel = fmtDate(ret);
+  }
+  const stayLimit = visa?.stayLimitDays ?? null;
+  const stayOverLimit = stayLimit != null && nights > stayLimit;
+
+  return (
+    <div className={styles.complianceList}>
+      {visaRequired ? (
+        <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+          <span className={styles.complianceIcon}>⚠️</span>
+          <div>
+            <div className={styles.complianceTitle}>{visaType} Required</div>
+            <div className={styles.complianceBody}>
+              {leadDays != null
+                ? `US citizens must apply ≥ ${leadDays} days before departure`
+                : "Visa required — check consulate for processing times"}
+              {applyUrl && (
+                <> · <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply →</a></>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>✓</span>
+          <div>
+            <div className={styles.complianceTitle}>No Visa Required</div>
+            <div className={styles.complianceBody}>{visa?.notes ?? "US passport valid for this destination"}</div>
+          </div>
+        </div>
+      )}
+
+      {hotelNightlyRateUsd != null ? (
+        <div className={[styles.complianceItem, hotelOverCap ? styles.complianceWarn : styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>{hotelOverCap ? "⚠️" : "✓"}</span>
+          <div>
+            <div className={styles.complianceTitle}>
+              {hotelOverCap ? "Hotel Exception Needed" : "Hotel within budget"}
+            </div>
+            <div className={styles.complianceBody}>
+              {hotelName ?? "Selected hotel"} at ${hotelNightlyRateUsd}/night
+              {hotelOverCap
+                ? ` · $${hotelExcess} over the $${hotelCapUsd} cap`
+                : ` · within the $${hotelCapUsd} cap`}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>✓</span>
+          <div>
+            <div className={styles.complianceTitle}>Hotel within budget</div>
+            <div className={styles.complianceBody}>Cap is ${hotelCapUsd}/night</div>
+          </div>
+        </div>
+      )}
+
+      {flightTotalUsd != null ? (
+        <div className={[styles.complianceItem, flightOverCap ? styles.complianceWarn : styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>{flightOverCap ? "⚠️" : "✓"}</span>
+          <div>
+            <div className={styles.complianceTitle}>
+              {flightOverCap ? "Flight over budget" : "Flight within budget"}
+            </div>
+            <div className={styles.complianceBody}>
+              {`${flightNumber ? `${flightNumber} · ` : ""}$${flightTotalUsd} total`}
+              {flightOverCap
+                ? ` · $${Math.round(flightTotalUsd - flightCapUsd)} over the $${flightCapUsd} cap`
+                : ` · approved cap is $${flightCapUsd}`}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
+          <span className={styles.complianceIcon}>✓</span>
+          <div>
+            <div className={styles.complianceTitle}>Flight within budget</div>
+            <div className={styles.complianceBody}>Approved cap is ${flightCapUsd}</div>
+          </div>
+        </div>
+      )}
+
+      {nights > 0 && (
+        <div
+          className={[styles.complianceItem, stayOverLimit ? styles.complianceWarn : styles.complianceOk].join(" ")}
+        >
+          <span className={styles.complianceIcon}>{stayOverLimit ? "⚠️" : "✓"}</span>
+          <div>
+            <div className={styles.complianceTitle}>
+              {stayOverLimit ? "Stay exceeds visa limit" : "Travel dates policy-compliant"}
+            </div>
+            <div className={styles.complianceBody}>
+              {depLabel} to {retLabel} · {nights}-night stay
+              {stayLimit != null
+                ? stayOverLimit
+                  ? ` · exceeds ${stayLimit}-day limit`
+                  : ` · within ${stayLimit}-day limit`
+                : ""}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApprovalEmail() {
+  return (
+    <div className={styles.emailDraft}>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Travel Approval - Milan, Sep 14-19</span></div>
+      <div className={styles.emailBody}>
+        <p>Hi Sarah,</p>
+        <p>I&#39;m requesting approval for a business trip to <strong>Milan, Italy, Sep 14-19, 2025</strong> for an on-site client meeting.</p>
+        <p><strong>Flight:</strong> LH 8904, ORD to MXP · $687 (nonstop)<br />
+        <strong>Hotel:</strong> Marriott Scala · $247/night x 5 = $1,235<br />
+        <strong>Note:</strong> Hotel is $47 over the $200 cap - closest preferred vendor to client office.</p>
+        <p>Total estimated: $2,010. Please let me know if you have any questions.</p>
+        <p>Thanks,<br />Lockey</p>
+      </div>
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function HotelComparison() {
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareBadge}>Rejected ✗</div>
+        <div className={styles.compareName}>Marriott Scala</div>
+        <div className={styles.comparePrice}>$247 / night</div>
+        <div className={styles.compareMeta}>⭐ Preferred vendor</div>
+        <div className={styles.compareMeta}>0.4 km from office</div>
+        <div className={styles.compareReason}>$47 over the $200 cap</div>
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareBadge}>Alternative ✓</div>
+        <div className={styles.compareName}>AC Hotel Milan</div>
+        <div className={styles.comparePrice}>$189 / night</div>
+        <div className={styles.compareMeta}>⭐ Preferred vendor</div>
+        <div className={styles.compareMeta}>1.2 km from office</div>
+        <div className={styles.compareReason}>Saves $290 total · fully compliant</div>
+      </div>
+    </div>
+  );
+}
+
+function ApprovalEmailPanel({
+  tripData,
+  selectedHotel,
+  liveHotels,
+  selectedFlight,
+  liveFlightGroups,
+  selectedReturn,
+}: {
+  tripData?: TripData | null;
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  selectedFlight?: number;
+  liveFlightGroups?: FlightGroup[] | null;
+  selectedReturn?: number;
+}) {
+  const email = buildApprovalEmail({
+    tripData, liveFlightGroups, liveHotels,
+    selectedFlight, selectedReturn, selectedHotel,
+  });
+
+  const locationLabel = [email.destCity, email.destCountry].filter(Boolean).join(", ");
+
+  return (
+    <div className={styles.emailDraft}>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{email.managerEmail}</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>{email.subject}</span></div>
+      <div className={styles.emailBody}>
+        <p>Hi,</p>
+        <p>I&#39;m requesting approval for a business trip to <strong>{locationLabel}, {email.dateRange}</strong> for {email.purpose}.</p>
+        <p>
+          <strong>Flight:</strong> {email.flightNum
+            ? <>{email.flightNum}, {email.homeCode} to {email.destCode} · ${email.flightPrice}</>
+            : <em>not selected</em>}<br />
+          <strong>Hotel:</strong> {email.hotelName
+            ? <>{email.hotelName} · ${email.hotelRate}/night × {email.nights} = ${email.hotelTotal}</>
+            : <em>not selected</em>}<br />
+          {email.overCap && <><strong>Note:</strong> Hotel is ${email.hotelRate - 200} over the $200 cap - closest preferred vendor to client office.</>}
+        </p>
+        <p>Total estimated: ${email.totalEstimated}. Please let me know if you have any questions.</p>
+        <p>Thanks,<br />Lockey</p>
+      </div>
+    </div>
+  );
+}
+
+function HotelComparisonPanel({
+  selectedHotel,
+  liveHotels,
+  tripData,
+}: {
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  tripData?: TripData | null;
+}) {
+  if (!liveHotels?.length) return null;
+
+  const rejectedIndex = selectedHotel ?? 0;
+  const rejectedHotel = liveHotels[rejectedIndex] ?? liveHotels[0];
+  const altIdx = liveHotels.findIndex((hotel, index) => index !== rejectedIndex && !hotel.overPolicyCap);
+  const altHotel = altIdx >= 0
+    ? liveHotels[altIdx]
+    : liveHotels.find((_, index) => index !== rejectedIndex);
+
+  if (!rejectedHotel || !altHotel) return null;
+
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.max(1, Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000))
+    : 0;
+
+  const rejectedName = rejectedHotel.name;
+  const rejectedRate = rejectedHotel.nightlyRateUsd;
+  const rejectedDistance = rejectedHotel.distanceFromOfficeKm;
+  const altName = altHotel.name;
+  const altRate = altHotel.nightlyRateUsd;
+  const altDistance = altHotel.distanceFromOfficeKm;
+  const savings = nights > 0 ? Math.max(0, (rejectedRate - altRate) * nights) : 0;
+
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareBadge}>Rejected âœ—</div>
+        <div className={styles.compareName}>{rejectedName}</div>
+        <div className={styles.comparePrice}>${rejectedRate} / night</div>
+        <div className={styles.compareMeta}>â­ Preferred vendor</div>
+        <div className={styles.compareMeta}>{rejectedDistance} km from office</div>
+        {rejectedHotel.overPolicyCap && (
+          <div className={styles.compareReason}>${rejectedHotel.excessAboveCapUsd || Math.max(0, rejectedRate - 200)} over the $200 cap</div>
+        )}
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareBadge}>Alternative âœ“</div>
+        <div className={styles.compareName}>{altName}</div>
+        <div className={styles.comparePrice}>${altRate} / night</div>
+        <div className={styles.compareMeta}>â­ Preferred vendor</div>
+        <div className={styles.compareMeta}>{altDistance} km from office</div>
+        <div className={styles.compareReason}>{savings > 0 ? `Saves $${savings} total · ` : ""}fully compliant</div>
+      </div>
+    </div>
+  );
+}
+
+function ApprovalPolling({
+  pollResult,
+  selectedHotel,
+  liveHotels,
+  tripData,
+}: {
+  pollResult: ManagerPollResult | null;
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  tripData?: TripData | null;
+}) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
+
+  if (!pollResult || !pollResult.found) {
+    const isNoAuth = pollResult?.noAuth;
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>📡</span>
+          <div className={styles.confirmTitle}>Scanning Manager&#39;s Inbox</div>
+          <div className={styles.confirmBody}>
+            {isNoAuth
+              ? "Sign in with Google to enable real inbox scanning. Polling resumes once authenticated."
+              : `Checking for a reply from ${managerEmail} every 5 seconds...`}
+          </div>
+        </div>
+        <div className={styles.watchStatus}>
+          <div className={styles.watchDot} />
+          <span style={{ opacity: 0.85 }}>Monitoring inbox · Polling every 5 s</span>
+        </div>
+        <HotelComparisonPanel selectedHotel={selectedHotel} liveHotels={liveHotels} tripData={tripData} />
+      </div>
+    );
+  }
+
+  if (pollResult.status === "approved") {
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>✅</span>
+          <div className={styles.confirmTitle}>Manager Approved</div>
+          <div className={styles.confirmBody}>{pollResult.reason || "Your itinerary has been approved. Moving to the next step..."}</div>
+        </div>
+        {pollResult.snippet && (
+          <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+            <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+            <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 120)}{pollResult.snippet.length > 120 ? "..." : ""}&#34;</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const { changes, reason, flaggedItems } = pollResult;
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🔄</span>
+        <div className={styles.confirmTitle}>Revision Requested</div>
+        <div className={styles.confirmBody}>{reason || "Manager requested changes to the itinerary."}</div>
+      </div>
+      {pollResult.snippet && (
+        <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+          <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 160)}{pollResult.snippet.length > 160 ? "..." : ""}&#34;</span>
+        </div>
+      )}
+      {(changes?.hotel || changes?.flight || changes?.dates || changes?.budget) && (
+        <div className={styles.complianceList} style={{ marginTop: 8 }}>
+          {changes.hotel && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>🏨</span>
+              <div>
+                <div className={styles.complianceTitle}>Hotel Change</div>
+                <div className={styles.complianceBody}>{changes.hotel}</div>
+              </div>
+            </div>
+          )}
+          {changes.flight && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>✈️</span>
+              <div>
+                <div className={styles.complianceTitle}>Flight Change</div>
+                <div className={styles.complianceBody}>{changes.flight}</div>
+              </div>
+            </div>
+          )}
+          {changes.dates && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>📅</span>
+              <div>
+                <div className={styles.complianceTitle}>Date Change</div>
+                <div className={styles.complianceBody}>{changes.dates}</div>
+              </div>
+            </div>
+          )}
+          {changes.budget && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>💰</span>
+              <div>
+                <div className={styles.complianceTitle}>Budget Guidance</div>
+                <div className={styles.complianceBody}>{changes.budget}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {(flaggedItems?.includes("hotel") || !changes?.flight) && (
+        <HotelComparisonPanel selectedHotel={selectedHotel} liveHotels={liveHotels} tripData={tripData} />
+      )}
+    </div>
+  );
+}
+
+type PrepChecklistItem = { text: string; urgent?: boolean };
+
+function buildChecklistItems(
+  visa: DemoVisaInfo | null,
+  passportExpiry: string | null,
+  departure: string,
+  weather: WeatherForecast | null,
+  hotelName: string,
+  hotelAddress: string,
+  checkInDate: string,
+): PrepChecklistItem[] {
+  const items: PrepChecklistItem[] = [];
+
+  // Visa item
+  if (visa?.visaRequired && visa.applicationUrl) {
+    let domain = visa.applicationUrl;
+    try { domain = new URL(visa.applicationUrl).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
+    items.push({ text: `Apply for ${visa.visaType ?? "visa"} at ${domain}`, urgent: true });
+  } else if (visa?.visaRequired) {
+    items.push({ text: `Visa required — check embassy website`, urgent: true });
+  } else if (visa) {
+    items.push({ text: `No visa required for this destination` });
+  } else {
+    items.push({ text: `Verify visa requirements before travel`, urgent: true });
+  }
+
+  // Passport expiry item
+  if (passportExpiry) {
+    const expiry = new Date(passportExpiry);
+    const dep = new Date(departure);
+    const sixMonthsBeforeExp = new Date(expiry);
+    sixMonthsBeforeExp.setMonth(sixMonthsBeforeExp.getMonth() - 6);
+    const expiryLabel = expiry.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const urgent = dep >= sixMonthsBeforeExp;
+    items.push({ text: `Passport expires ${expiryLabel}${urgent ? " — renew before travel" : ""}`, urgent });
+  }
+
+  // Weather / packing item
+  if (weather && weather.days.length > 0) {
+    const avgHigh = Math.round(weather.days.reduce((s, d) => s + d.tempHighC, 0) / weather.days.length);
+    const rainDays = weather.days.filter((d) => d.condition === "Rain" || d.condition === "Drizzle").length;
+    const weatherNote = rainDays > 0
+      ? `Pack for ${avgHigh}°C, rain expected on ${rainDays} day${rainDays > 1 ? "s" : ""}`
+      : `Pack for ${avgHigh}°C, ${weather.days[0].condition.toLowerCase()} conditions`;
+    items.push({ text: weatherNote });
+  } else {
+    items.push({ text: `Check weather forecast before packing` });
+  }
+
+  // Hotel check-in item
+  items.push({ text: `${hotelName} · ${hotelAddress} · Check-in ${checkInDate} at 3:00 PM` });
+
+  // Travel insurance (always static)
+  items.push({ text: "Confirm travel insurance coverage" });
+
+  return items;
+}
+
+function PrepChecklist({
+  visa,
+  passportExpiry,
+  departure,
+  weather,
+  hotelName,
+  hotelAddress,
+  checkInDate,
+}: {
+  visa: DemoVisaInfo | null;
+  passportExpiry: string | null;
+  departure: string;
+  weather: WeatherForecast | null;
+  hotelName: string;
+  hotelAddress: string;
+  checkInDate: string;
+}) {
+  const [done, setDone] = useState<Set<number>>(new Set());
+  const items = buildChecklistItems(visa, passportExpiry, departure, weather, hotelName, hotelAddress, checkInDate);
+
+  function toggle(i: number) {
+    setDone((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  }
+  return (
+    <div className={styles.checklist}>
+      {items.map((item, i) => (
+        <button
+          className={[styles.checkItem, done.has(i) ? styles.checkDone : "", item.urgent ? styles.checkUrgent : ""].join(" ")}
+          key={item.text}
+          onClick={() => toggle(i)}
+          type="button"
+        >
+          <span className={styles.checkBox}>{done.has(i) ? "✓" : ""}</span>
+          <span className={styles.checkText}>{item.text}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LiveDashboard() {
+  return (
+    <div className={styles.dashboard}>
+      {[
+        { icon: "✈️", title: "LH 8904 · Gate B22", sub: "Boards 8:15 AM · Departs 8:45 AM", badge: "On time" },
+        { icon: "🌤️", title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight", badge: "" },
+        { icon: "🏨", title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM", badge: "Ready" },
+        { icon: "🚗", title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM to make your gate", badge: "" },
+      ].map(item => (
+        <div className={styles.dashCard} key={item.title}>
+          <span className={styles.dashIcon}>{item.icon}</span>
+          <div className={styles.dashText}>
+            <div className={styles.dashTitle}>{item.title}</div>
+            <div className={styles.dashSub}>{item.sub}</div>
+          </div>
+          {item.badge && <span className={styles.dashBadge}>{item.badge}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlightRebooking({ rebooking }: { rebooking: RebookingData }) {
+  const { cancelled, rebooked } = rebooking;
+  const carrierChanged = cancelled.carrier !== rebooked.carrier;
+  return (
+    <div className={styles.rebooking}>
+      <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
+        <div className={styles.rebookBadge}>Original · Cancelled ✗</div>
+        <div className={styles.rebookFlight}>{cancelled.flightNumber} &nbsp;·&nbsp; {cancelled.route}</div>
+        <div className={styles.rebookTime}>Departs {cancelled.dep} · {cancelled.carrier}</div>
+        <div className={styles.rebookMeta}>Thunderstorm at {AIRPORT_NAMES[cancelled.originAirport] ?? cancelled.originAirport} · missed connection</div>
+      </div>
+      <div className={styles.rebookArrow}>↓ rebooked automatically</div>
+      <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
+        <div className={styles.rebookBadge}>New booking · Confirmed ✓</div>
+        <div className={styles.rebookFlight}>{rebooked.flightNumber} &nbsp;·&nbsp; {rebooked.route}</div>
+        <div className={styles.rebookTime}>Departs {rebooked.dep} · {rebooked.carrier}</div>
+        <div className={styles.rebookMeta}>
+          {carrierChanged ? `${cancelled.carrier} → ${rebooked.carrier}` : "Same carrier"} · Change fee: ${rebooked.changeFeeUsd} · Seat {rebooked.seat} · Hotel notified ✓
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type ExceptionEmailContent = {
+  managerEmail: string;
+  subject: string;
+  bodyText: string;
+  destCity: string;
+  originName: string;
+};
+
+function buildExceptionEmail(rebooking: RebookingData, tripData?: TripData | null): ExceptionEmailContent {
+  const { cancelled, rebooked } = rebooking;
+  const destCity = tripData?.city
+    ?? cancelled.route.split(" → ").pop()
+    ?? "destination";
+  const originName = AIRPORT_NAMES[cancelled.originAirport]
+    ?? (tripData?.originCity ? toTitleCase(tripData.originCity) : cancelled.originAirport);
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "manager@example.com";
+  const subject = `[URGENT] Emergency Exception - ${destCity} Rebooking`;
+  const bodyText = [
+    "Hi,",
+    "",
+    `${cancelled.flightNumber} was cancelled due to a thunderstorm at ${originName}.`,
+    `The only available rebooking is ${rebooked.flightNumber} (${rebooked.carrier}) at $${rebooked.priceUsd.toLocaleString()}, which is $${rebooked.overageUsd} over the approved $${cancelled.priceUsd.toLocaleString()} budget.`,
+    "",
+    `A $${rebooked.changeFeeUsd} change fee applies due to carrier switch (${cancelled.carrier} → ${rebooked.carrier}). Force majeure — requesting emergency exception. Hotel hold expires in 2 hours.`,
+    "",
+    "Thanks,",
+    "Lockey",
+  ].join("\n");
+  return { managerEmail, subject, bodyText, destCity, originName };
+}
+
+function ExceptionEmail({
+  rebooking,
+  tripData,
+}: {
+  rebooking: RebookingData;
+  tripData?: TripData | null;
+}) {
+  const { cancelled, rebooked } = rebooking;
+  const email = buildExceptionEmail(rebooking, tripData);
+  return (
+    <div className={styles.emailDraft}>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{email.managerEmail}</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Priority</span><span className={[styles.emailVal, styles.emailUrgent].join(" ")}>HIGH - Action required</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>{email.subject}</span></div>
+      <div className={styles.emailBody}>
+        <p>Hi,</p>
+        <p><strong>{cancelled.flightNumber} was cancelled due to a thunderstorm</strong> at {email.originName}. The only available rebooking is {rebooked.flightNumber} ({rebooked.carrier}) at <strong>${rebooked.priceUsd.toLocaleString()}</strong>, which is ${rebooked.overageUsd} over the approved ${cancelled.priceUsd.toLocaleString()} budget.</p>
+        <p>A ${rebooked.changeFeeUsd} change fee applies due to carrier switch ({cancelled.carrier} → {rebooked.carrier}). Force majeure — requesting emergency exception. Hotel hold expires in 2 hours.</p>
+        <p>Thanks,<br />Lockey</p>
+      </div>
+    </div>
+  );
+}
+
+function ArrivalSupport({
+  value,
+  onChange,
+  onDataLoaded,
+}: {
+  value: number;
+  onChange: (i: number) => void;
+  onDataLoaded: (data: TransportApiResult) => void;
+}) {
+  const [liveData, setLiveData] = useState<TransportApiResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/transport/distance?hotel=Via+della+Spiga+31%2C+Milan&airport=MXP")
+      .then((r) => r.json())
+      .then((data: TransportApiResult) => {
+        if (cancelled) return;
+        const normalizedData = normalizeTransportData(data);
+        setLiveData(normalizedData);
+        onDataLoaded(normalizedData);
+      })
+      .catch(() => { /* fall back to defaults */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [onDataLoaded]);
+
+  const options = [
+    {
+      icon: "",
+      name: "Company taxi",
+      time: loading ? "..." : (liveData?.taxi?.minutes ?? DEFAULT_TRANSPORT_DATA.taxi.minutes),
+      cost: loading ? "..." : (liveData?.taxi?.cost ?? DEFAULT_TRANSPORT_DATA.taxi.cost),
+      preferred: true,
+    },
+    {
+      icon: "",
+      name: "Metro M1 -> M3",
+      time: loading ? "..." : (liveData?.metro?.minutes ?? DEFAULT_TRANSPORT_DATA.metro.minutes),
+      cost: liveData?.metro?.cost ?? DEFAULT_TRANSPORT_DATA.metro.cost,
+      preferred: false,
+    },
+    {
+      icon: "",
+      name: "Walk",
+      time: loading ? "..." : (liveData?.walk?.minutes ?? DEFAULT_TRANSPORT_DATA.walk.minutes),
+      cost: DEFAULT_TRANSPORT_DATA.walk.cost,
+      preferred: false,
+    },
+  ];
+
+  const distLabel = loading
+    ? "loading..."
+    : `${liveData?.distanceKm ?? DEFAULT_TRANSPORT_DATA.distanceKm} km from MXP`;
+
+  return (
+    <div className={styles.arrival}>
+      <div className={styles.arrivalDest}>
+        <span className={styles.arrivalPin}></span>
+        <div>
+          <div className={styles.arrivalName}>Marriott Scala</div>
+          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan � {distLabel}</div>
+        </div>
+      </div>
+      <div className={styles.cards}>
+        {options.map((o, i) => (
+          <button className={[styles.card, value === i ? styles.cardSelected : ""].join(" ")} key={o.name} onClick={() => onChange(i)} type="button">
+            <div className={styles.cardRow}>
+              <span className={styles.cardLabel}>{o.icon}  {o.name}</span>
+              {o.preferred && <span className={styles.cardTag}>Preferred</span>}
+            </div>
+            <div className={styles.cardRow}>
+              <span className={styles.cardMeta}>{o.time}</span>
+              <span className={styles.cardPrice}>{o.cost}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className={styles.allowanceRow}>
+        <span> Meal allowance today</span>
+        <strong>$75 remaining</strong>
+      </div>
+    </div>
+  );
+}
+
+
+function ReceiptCapture() {
+  return (
+    <div className={styles.receipt}>
+      <div className={styles.receiptHead}>
+        <div className={styles.receiptMerchant}>Ristorante Al Porto</div>
+        <div className={styles.receiptSub}>Via Serbelloni 3, Milan</div>
+        <div className={styles.receiptSub}>September 16, 2025 · 8:42 PM</div>
+      </div>
+      <div className={styles.receiptLines}>
+        {[
+          ["Antipasto misto", "€18.00"],
+          ["Risotto alla Milanese", "€24.50"],
+          ["Vino della casa", "€22.00"],
+          ["Acqua naturale", "€6.00"],
+          ["Coperto (2 pax)", "€3.00"],
+        ].map(([item, price]) => (
+          <div className={styles.receiptLine} key={item}>
+            <span>{item}</span><span>{price}</span>
+          </div>
+        ))}
+      </div>
+      <div className={styles.receiptTotal}>
+        <span>TOTAL</span><span>€87.50</span>
+      </div>
+      <div className={styles.receiptTags}>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Categorized: Meals
+        </span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          PII sanitized
+        </span>
+      </div>
+    </div>
+  );
+}
+
+type EmbassyInfo = { name: string; address: string; hours: string };
+
+const US_EMBASSIES: Record<string, EmbassyInfo> = {
+  // Italy
+  milan:     { name: "US Embassy Milan (Consulate)", address: "Via Principe Amedeo 2/10, Milan", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  rome:      { name: "US Embassy Rome", address: "Via Vittorio Veneto 121, Rome", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  // Germany
+  berlin:    { name: "US Embassy Berlin", address: "Pariser Platz 2, 10117 Berlin", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  munich:    { name: "US Consulate Munich", address: "Königinstraße 5, 80539 Munich", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  frankfurt: { name: "US Consulate Frankfurt", address: "Gießener Str. 30, 60435 Frankfurt", hours: "Mon – Fri · 7:30 AM – 4:30 PM" },
+  // France
+  paris:     { name: "US Embassy Paris", address: "2 Avenue Gabriel, 75008 Paris", hours: "Mon – Fri · 9:00 AM – 6:00 PM" },
+  // UK
+  london:    { name: "US Embassy London", address: "33 Nine Elms Ln, London SW11 7US", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  // Spain
+  madrid:    { name: "US Embassy Madrid", address: "Calle de Serrano 75, 28006 Madrid", hours: "Mon – Fri · 9:00 AM – 6:00 PM" },
+  barcelona: { name: "US Consulate Barcelona", address: "Passeig Reina Elisenda 23, Barcelona", hours: "Mon – Fri · 9:00 AM – 1:00 PM" },
+  // Netherlands
+  amsterdam: { name: "US Consulate Amsterdam", address: "Museumplein 19, 1071 DJ Amsterdam", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  // Switzerland
+  zurich:    { name: "US Consulate Zurich", address: "Dufourstrasse 101, 8008 Zürich", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  geneva:    { name: "US Mission Geneva", address: "Rue du Pré-de-la-Bichette 1, Geneva", hours: "Mon – Fri · 8:30 AM – 5:00 PM" },
+  // Japan
+  tokyo:     { name: "US Embassy Tokyo", address: "1-10-5 Akasaka, Minato-ku, Tokyo", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  osaka:     { name: "US Consulate Osaka", address: "2-11-5 Nishitenma, Kita-ku, Osaka", hours: "Mon – Fri · 8:30 AM – 5:30 PM" },
+  // South Korea
+  seoul:     { name: "US Embassy Seoul", address: "188 Sejong-daero, Jongno-gu, Seoul", hours: "Mon – Fri · 7:30 AM – 4:00 PM" },
+  // Singapore
+  singapore: { name: "US Embassy Singapore", address: "27 Napier Rd, Singapore 258508", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  // Australia
+  sydney:    { name: "US Consulate Sydney", address: "Level 10, MLC Centre, 19-29 Martin Pl", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  melbourne: { name: "US Consulate Melbourne", address: "553 St Kilda Rd, Melbourne VIC 3004", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  // Canada
+  toronto:   { name: "US Consulate Toronto", address: "360 University Ave, Toronto ON M5G 1S4", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  // India
+  mumbai:    { name: "US Consulate Mumbai", address: "C-49, G-Block, Bandra Kurla Complex", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  delhi:     { name: "US Embassy New Delhi", address: "Shantipath, Chanakyapuri, New Delhi", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  // UAE
+  dubai:     { name: "US Consulate Dubai", address: "Al Seef Rd, Bur Dubai, Dubai", hours: "Mon – Fri · 8:00 AM – 4:30 PM" },
+  // China
+  beijing:   { name: "US Embassy Beijing", address: "55 Anjialou Rd, Chaoyang, Beijing", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  shanghai:  { name: "US Consulate Shanghai", address: "1469 Huaihai Zhong Rd, Shanghai", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+  // Brazil
+  "são paulo": { name: "US Consulate São Paulo", address: "Rua Henri Dunant 500, São Paulo", hours: "Mon – Fri · 7:30 AM – 4:30 PM" },
+  // Mexico
+  "mexico city": { name: "US Embassy Mexico City", address: "Paseo de la Reforma 305, Mexico City", hours: "Mon – Fri · 8:00 AM – 5:00 PM" },
+};
+
+const EMBASSY_FALLBACK: EmbassyInfo = {
+  name: "Nearest US Embassy",
+  address: "Visit travel.state.gov for location",
+  hours: "Mon – Fri · 8:00 AM – 5:00 PM",
+};
+
+function getEmbassy(city: string): EmbassyInfo {
+  const key = city.toLowerCase().trim();
+  return US_EMBASSIES[key] ?? EMBASSY_FALLBACK;
+}
+
+function ComplianceReportRefined({
+  visa,
+  hotelName,
+  hotelNightlyRateUsd,
+  hotelCapUsd = 200,
+  flightNumber,
+  flightTotalUsd,
+  flightCapUsd = 800,
+  departure,
+  returnDate,
+}: {
+  visa?: DemoVisaInfo | null;
+  hotelName?: string;
+  hotelNightlyRateUsd?: number;
+  hotelCapUsd?: number;
+  flightNumber?: string;
+  flightTotalUsd?: number;
+  flightCapUsd?: number;
+  departure?: string;
+  returnDate?: string;
+}) {
+  const visaRequired = visa?.visaRequired ?? false;
+  const visaType = visa?.visaType ?? "Visa";
+  const leadDays = visa?.minApplicationLeadDays ?? null;
+  const applyUrl = visa?.applicationUrl ?? null;
+  const hotelOverCap = hotelNightlyRateUsd != null && hotelNightlyRateUsd > hotelCapUsd;
+  const hotelExcess = hotelNightlyRateUsd != null ? Math.round(hotelNightlyRateUsd - hotelCapUsd) : 0;
+  const flightOverCap = flightTotalUsd != null && flightTotalUsd > flightCapUsd;
+
+  let nights = 0;
+  let tripWindow = "";
+  if (departure && returnDate) {
+    const dep = new Date(`${departure}T12:00:00`);
+    const ret = new Date(`${returnDate}T12:00:00`);
+    nights = Math.round((ret.getTime() - dep.getTime()) / 86_400_000);
+    tripWindow = `${fmtDate(dep)} - ${fmtDate(ret)}`;
+  }
+
+  const stayLimit = visa?.stayLimitDays ?? null;
+  const stayOverLimit = stayLimit != null && nights > stayLimit;
+  const issueCount = [visaRequired, hotelOverCap, flightOverCap, stayOverLimit].filter(Boolean).length;
+
+  const checks: Array<{
+    key: string;
+    tone: "warn" | "ok";
+    icon: React.ReactNode;
+    label: string;
+    title: string;
+    body: string;
+    detail?: string;
+    ctaLabel?: string;
+    ctaHref?: string | null;
+  }> = [
+    {
+      key: "visa",
+      tone: visaRequired ? "warn" : "ok",
+      icon: visaRequired ? <ShieldAlert size={18} strokeWidth={2.1} /> : <ShieldCheck size={18} strokeWidth={2.1} />,
+      label: "Visa",
+      title: visaRequired ? `${visaType} required` : "No visa blocker",
+      body:
+        leadDays != null
+          ? `Apply at least ${leadDays} days before departure.`
+          : visa?.notes ?? "Entry requirements are already clear for this destination.",
+      detail: visaRequired ? visa?.notes ?? "Check current consular processing times." : undefined,
+      ctaLabel: applyUrl ? "Open visa form" : undefined,
+      ctaHref: applyUrl,
+    },
+    {
+      key: "hotel",
+      tone: hotelOverCap ? "warn" : "ok",
+      icon: <HotelIcon size={18} strokeWidth={2.1} />,
+      label: "Hotel",
+      title: hotelOverCap ? "Exception needed" : "Within nightly policy",
+      body: `${hotelName ?? "Selected hotel"} · ${hotelNightlyRateUsd ?? hotelCapUsd}/night`,
+      detail: hotelOverCap
+        ? `$${hotelExcess} over the $${hotelCapUsd}/night cap.`
+        : `Aligned with the $${hotelCapUsd}/night cap.`,
+    },
+    {
+      key: "flight",
+      tone: flightOverCap ? "warn" : "ok",
+      icon: <PlaneTakeoff size={18} strokeWidth={2.1} />,
+      label: "Flight",
+      title: flightOverCap ? "Price needs review" : "Flight approved",
+      body: flightTotalUsd != null ? `${flightNumber ?? "Selected flight"} · $${flightTotalUsd}` : `Flight cap · $${flightCapUsd}`,
+      detail: flightTotalUsd != null
+        ? flightOverCap
+          ? `$${Math.round(flightTotalUsd - flightCapUsd)} above the approved cap.`
+          : `Still within the $${flightCapUsd} cap.`
+        : undefined,
+    },
+    ...(nights > 0
+      ? [{
+          key: "stay",
+          tone: (stayOverLimit ? "warn" : "ok") as "warn" | "ok",
+          icon: <CalendarClock size={18} strokeWidth={2.1} />,
+          label: "Dates",
+          title: stayOverLimit ? "Stay limit exceeded" : "Dates look compliant",
+          body: `${nights} night trip${tripWindow ? ` · ${tripWindow}` : ""}`,
+          detail: stayLimit != null
+            ? stayOverLimit
+              ? `Over the ${stayLimit}-day entry window.`
+              : `Within the ${stayLimit}-day entry window.`
+            : "No visa stay limit is blocking these dates.",
+        }]
+      : []),
+  ];
+
+  const incomplete = checks.filter((c) => c.tone === "warn");
+  const complete = checks.filter((c) => c.tone === "ok");
+
+  return (
+    <div className={styles.cvList}>
+      {incomplete.length > 0 && (
+        <div className={styles.cvSection}>
+          <div className={styles.cvSectionLabel}>Needs Attention</div>
+          {incomplete.map((item) => (
+            <div className={styles.cvRow} key={item.key}>
+              <div className={[styles.cvDot, styles.cvDotWarn].join(" ")}>{item.icon}</div>
+              <div>
+                <div className={styles.cvRowTitle}>{item.title}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {complete.length > 0 && (
+        <div className={styles.cvSection}>
+          <div className={styles.cvSectionLabel}>Complete</div>
+          {complete.map((item) => (
+            <div className={styles.cvRow} key={item.key}>
+              <div className={[styles.cvDot, styles.cvDotOk].join(" ")}>{item.icon}</div>
+              <div>
+                <div className={styles.cvRowTitle}>{item.title}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HotelComparisonRefined() {
+  const options = [
+    {
+      key: "rejected",
+      tone: "warn" as const,
+      label: "Current request",
+      title: "Marriott Scala",
+      price: "$247 / night",
+      stats: ["Preferred vendor", "0.4 km from office"],
+      note: "$47 over the $200 policy cap.",
+    },
+    {
+      key: "approved",
+      tone: "ok" as const,
+      label: "Recommended switch",
+      title: "AC Hotel Milan",
+      price: "$189 / night",
+      stats: ["Preferred vendor", "1.2 km from office"],
+      note: "Saves $290 total and stays fully compliant.",
+    },
+  ];
+
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareName}>Marriott Scala</div>
+        <div className={styles.comparePrice}>$247 / night</div>
+        <div className={styles.compareMeta}>Preferred vendor · 0.4 km from office</div>
+        <div className={styles.compareReason}>$47 over the $200 cap</div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "2px 0" }}>
+        <MoveDown size={20} strokeWidth={2} color="var(--cc-body, #5a6672)" />
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareName}>AC Hotel Milan</div>
+        <div className={styles.comparePrice}>$189 / night</div>
+        <div className={styles.compareMeta}>Preferred vendor · 1.2 km from office</div>
+        <div className={styles.compareReason}>Saves $290 total</div>
+      </div>
+    </div>
+  );
+}
+
+function LiveDashboardRefined() {
+  const signals = [
+    { key: "flight", icon: <Plane size={18} strokeWidth={2.1} />, title: "LH 8904 · Gate B22", sub: "On time · Boards 8:15 AM" },
+    { key: "weather", icon: <CloudSun size={18} strokeWidth={2.1} />, title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight" },
+    { key: "hotel", icon: <Building2 size={18} strokeWidth={2.1} />, title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM" },
+    { key: "ground", icon: <CarFront size={18} strokeWidth={2.1} />, title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM for a comfortable buffer" },
+  ];
+
+  return (
+    <div className={styles.dashboard}>
+      {signals.map((s) => (
+        <div className={styles.dashCard} key={s.key}>
+          <span className={styles.dashIcon}>{s.icon}</span>
+          <div className={styles.dashText}>
+            <div className={styles.dashTitle}>{s.title}</div>
+            <div className={styles.dashSub}>{s.sub}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlightRebookingRefined({ rebooking }: { rebooking: RebookingData }) {
+  const { cancelled, rebooked } = rebooking;
+  const carrierChanged = cancelled.carrier !== rebooked.carrier;
+
+  return (
+    <div className={styles.rebooking}>
+      <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
+        <div className={styles.rebookBadge}>Cancelled</div>
+        <div className={styles.rebookFlight}>{cancelled.flightNumber}</div>
+        <div className={styles.rebookTime}>{cancelled.route} · departs {cancelled.dep}</div>
+        <div className={styles.rebookMeta}>{cancelled.carrier} · ${cancelled.priceUsd.toLocaleString()} original total</div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
+        <MoveDown size={20} strokeWidth={2} color="var(--cc-body, #5a6672)" />
+      </div>
+      <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
+        <div className={styles.rebookBadge}>Confirmed Replacement</div>
+        <div className={styles.rebookFlight}>{rebooked.flightNumber}</div>
+        <div className={styles.rebookTime}>{rebooked.route} · departs {rebooked.dep}</div>
+        <div className={styles.rebookMeta}>
+          {rebooked.carrier} · seat {rebooked.seat}{carrierChanged ? ` · switched from ${cancelled.carrier}` : ""}
+        </div>
+      </div>
+      <div className={styles.infoGrid} style={{ marginTop: 16, borderTop: "1px solid rgba(159, 171, 183, 0.2)", paddingTop: 16 }}>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Cost impact</span>
+          <span className={[styles.infoVal, styles.spendOver].join(" ")}>${rebooked.overageUsd} over budget</span>
+        </div>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Change fee</span>
+          <span className={styles.infoVal}>${rebooked.changeFeeUsd}</span>
+        </div>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Hotel</span>
+          <span className={styles.infoVal}>Reservation protected</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArrivalSupportRefined({
+  value,
+  onChange,
+  onDataLoaded,
+}: {
+  value: number;
+  onChange: (i: number) => void;
+  onDataLoaded: (data: TransportApiResult) => void;
+}) {
+  const [liveData, setLiveData] = useState<TransportApiResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/transport/distance?hotel=Via+della+Spiga+31%2C+Milan&airport=MXP")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: TransportApiResult) => {
+        if (cancelled) return;
+        setLiveData(data);
+        onDataLoaded(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onDataLoaded]);
+
+  const distLabel = loading ? "Loading route..." : `${liveData?.distanceKm ?? 2.3} km from MXP`;
+
+  // Each option carries a `link` — the external URL that opens when the user
+  // selects that row and taps "Got It" (or immediately on row tap, TBD).
+  // Intent: selecting an option opens the relevant booking / directions page
+  // so the traveller can complete the journey step without leaving the flow.
+  //   - Company taxi  → deep-link into the corporate Uber/taxi booking portal
+  //   - Metro         → Google Maps transit directions to the hotel
+  //   - Walk          → Google Maps walking directions to the hotel
+  // TODO: replace placeholder hrefs with real URLs once booking partners confirmed.
+  const options = [
+    { icon: <CarFront size={18} strokeWidth={2.1} />, name: "Company taxi", time: loading ? "..." : liveData?.taxi?.minutes ?? "18 min", cost: loading ? "..." : liveData?.taxi?.cost ?? "$14", preferred: true, note: "Fastest pickup option from arrivals.", link: "https://m.uber.com/ul/" },
+    { icon: <TrainFront size={18} strokeWidth={2.1} />, name: "Metro M1 to M3", time: loading ? "..." : liveData?.metro?.minutes ?? "35 min", cost: liveData?.metro?.cost ?? "$2.50", preferred: false, note: "Lowest cost route into the city center.", link: "https://maps.google.com/?dirflg=r&destination=Marriott+Scala+Milan" },
+    { icon: <Footprints size={18} strokeWidth={2.1} />, name: "Walk", time: loading ? "..." : liveData?.walk?.minutes ?? "28 min", cost: liveData?.walk?.cost ?? "Free", preferred: false, note: "Best if you want to stay nearby on foot.", link: "https://maps.google.com/?dirflg=w&destination=Marriott+Scala+Milan" },
+  ];
+
+  return (
+    <div className={styles.arrival}>
+      <div className={styles.fpHeader}>
+        <span className={styles.fpRoute}>Marriott Scala</span>
+        <span className={styles.fpHeaderMeta}>Via della Spiga 31, Milan · {distLabel}</span>
+      </div>
+      <div className={styles.fpReturnRows}>
+        {options.map((option, i) => {
+          const isSel = value === i;
+          return (
+            <button
+              key={option.name}
+              className={[styles.fpReturnRow, isSel ? styles.fpReturnRowSelected : ""].join(" ")}
+              // Selecting a row marks it active AND opens the option's link in a
+              // new tab so the user can continue (book the taxi, open Maps, etc.).
+              // If we want a single confirm tap instead, move window.open() to the
+              // "Got It" button handler at the frame level and pass `options[sel].link`
+              // up via a callback prop.
+              onClick={() => { onChange(i); window.open(option.link, "_blank", "noopener,noreferrer"); }}
+              type="button"
+            >
+              <div className={[styles.fpRadioDot, isSel ? styles.fpRadioDotSelected : ""].join(" ")}>
+                {isSel && <div className={styles.fpRadioInner} />}
+              </div>
+              <div className={styles.fpReturnRowBody}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 600, color: "var(--cc-text-primary)" }}>
+                    {option.name}
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--cc-text-primary)", flexShrink: 0 }}>{option.time}</span>
+                </div>
+                <div className={styles.fpReturnRowBottom}>
+                  <span className={styles.fpReturnRowMeta}>{option.note}</span>
+                  <span className={styles.fpReturnRowPrice}>{option.cost}</span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ContactCardsRefined({ city }: { city: string }) {
+  const embassy = getEmbassy(city);
+  const contacts = [
+    {
+      key: "travel-desk",
+      icon: <PhoneCall size={18} strokeWidth={2.1} />,
+      label: "Corporate Travel Desk",
+      title: "+1 (800) 555-0199",
+      detail: "Available 24 / 7 for booking support and disruptions.",
+    },
+    {
+      key: "embassy",
+      icon: <Building2 size={18} strokeWidth={2.1} />,
+      label: "Nearest Embassy",
+      title: embassy.name,
+      detail: `${embassy.address} · ${embassy.hours}`,
+    },
+  ];
+
+  return (
+    <div className={styles.refinedSheet}>
+      <div className={styles.refinedHero}>
+        <div className={styles.refinedHeroTop}>
+          <div>
+            <div className={styles.refinedEyebrow}>Support Contacts</div>
+            <div className={styles.refinedHeroTitle}>Important Help Lines for {city}</div>
+          </div>
+          <span className={[styles.refinedPill, styles.refinedPillOk].join(" ")}>Saved</span>
+        </div>
+        <div className={styles.refinedHeroBody}>
+          The fastest route back to support is already pinned here if anything changes on the ground.
+        </div>
+      </div>
+      <div className={styles.refinedGrid}>
+        {contacts.map((contact) => (
+          <div className={[styles.refinedCard, styles.refinedCardNeutral].join(" ")} key={contact.key}>
+            <div className={styles.refinedCardTop}>
+              <span className={styles.refinedIcon}>{contact.icon}</span>
+              <div className={styles.refinedCardHeading}>
+                <div className={styles.refinedCardLabel}>{contact.label}</div>
+                <div className={styles.refinedCardTitle}>{contact.title}</div>
+              </div>
+            </div>
+            <div className={styles.refinedCardBody}>{contact.detail}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type SpendCategory = { name: string; icon: string; amountUsd: number; meta?: string };
+type SpendSummaryData = {
+  totalSpendUsd: number;
+  budgetCapUsd: number;
+  nights: number;
+  receiptsCount: number;
+  categories: SpendCategory[];
+};
+
+const SPEND_FALLBACK: SpendSummaryData = {
+  totalSpendUsd: 2187,
+  budgetCapUsd: 2340,
+  nights: 5,
+  receiptsCount: 7,
+  categories: [
+    { name: "Flights", icon: "✈️", amountUsd: 687, meta: "LH 8904 · ORD → MXP" },
+    { name: "Hotel (5 nights)", icon: "🏨", amountUsd: 945, meta: "Marriott Scala" },
+    { name: "Meals", icon: "🍽️", amountUsd: 312, meta: "7 receipts logged" },
+    { name: "Transport", icon: "🚕", amountUsd: 243, meta: "" },
+  ],
+};
+
+function SpendSummary({ tripId }: { tripId?: string | null }) {
+  const [data, setData] = useState<SpendSummaryData | null>(null);
+
+  useEffect(() => {
+    if (!tripId) return;
+    fetch(`/api/trips/${tripId}/summary`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: SpendSummaryData) => {
+        if (d.totalSpendUsd > 0 || d.categories.some((c) => c.amountUsd > 0)) setData(d);
+      })
+      .catch(() => {});
+  }, [tripId]);
+
+  const d = data ?? SPEND_FALLBACK;
+  const pct = Math.min(100, Math.round((d.totalSpendUsd / d.budgetCapUsd) * 100));
+  const delta = d.budgetCapUsd - d.totalSpendUsd;
+  const isUnder = delta >= 0;
+
+  return (
+    <div className={styles.spendV2}>
+      <div className={styles.spendV2Hero}>
+        <div className={styles.spendV2Amount}>${d.totalSpendUsd.toLocaleString()}</div>
+        <div className={styles.spendV2Meta}>of ${d.budgetCapUsd.toLocaleString()} approved budget</div>
+        <div className={styles.spendV2Bar}>
+          <div
+            className={[styles.spendV2Fill, !isUnder ? styles.spendV2FillOver : ""].join(" ")}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className={[styles.spendV2Badge, isUnder ? styles.spendV2BadgeGreen : styles.spendV2BadgeRed].join(" ")}>
+          {isUnder
+            ? `$${delta.toLocaleString()} under budget`
+            : `$${Math.abs(delta).toLocaleString()} over budget`}
+        </span>
+      </div>
+
+      <div className={styles.spendV2Cards}>
+        {d.categories.map((cat) => (
+          <div className={styles.spendV2Card} key={cat.name}>
+            <span className={styles.spendV2CardLabel}>{cat.name}</span>
+            <span className={[styles.spendV2CardAmt, cat.amountUsd === 0 ? styles.spendV2CardAmtZero : ""].join(" ")}>
+              {cat.amountUsd > 0 ? `$${cat.amountUsd.toLocaleString()}` : "—"}
+            </span>
+            {cat.meta ? (
+              <div className={styles.spendV2CardBottom}>
+                <span className={styles.spendV2CardMeta}>{cat.meta}</span>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+    </div>
+  );
+}
+
+function PrivacySummary() {
+  return (
+    <div className={styles.privacyList}>
+      {[
+        { icon: <MapPin size={18} strokeWidth={2.1} />, label: "Location Tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
+        { icon: <Wallet size={18} strokeWidth={2.1} />, label: "Financial Data", detail: "Card numbers sanitized before storage", status: "Done" },
+        { icon: <ShieldCheck size={18} strokeWidth={2.1} />, label: "OAuth Tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Data Retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
+      ].map(item => (
+        <div className={styles.privacyItem} key={item.label}>
+          <span className={styles.privacyIcon}>{item.icon}</span>
+          <div className={styles.privacyBody}>
+            <div className={styles.privacyLabel}>{item.label}</div>
+            <div className={styles.privacyDetail}>{item.detail}</div>
+          </div>
+          <span className={styles.privacyStatus}>{item.status}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BundlePicker({ value, onChange }: { value?: number | null; onChange?: (i: number) => void }) {
+  const [localSel, setLocalSel] = useState<number | null>(null);
+  const sel = value !== undefined ? value : localSel;
+  const setSel = onChange ?? setLocalSel;
+  const bundles = [
+    { name: "Path A", badge: "Policy-safe", price: "$2,340", detail: "MXP direct · Marriott Scala", note: "Requires hotel sign-off" },
+    { name: "Path B", badge: "Save $500", price: "$1,840", detail: "BGY airport · AC Hotel 1.2 km", note: "Fully compliant, no exceptions" },
+    { name: "Path C", badge: "Recommended", price: "$2,010", detail: "Weekend stay · Marriott Scala", note: "Best overall value" },
+  ];
+  return (
+    <div className={styles.cards}>
+      {bundles.map((b, i) => (
+        <button className={[styles.card, sel === i ? styles.cardSelected : ""].join(" ")} key={b.name} onClick={() => setSel(i)} type="button">
+          <div className={styles.cardRow}>
+            <span className={styles.cardMain}>{b.name}</span>
+            <span className={[styles.cardTag, sel === i ? styles.cardTagSelected : ""].join(" ")}>{b.badge}</span>
+          </div>
+          <div className={styles.cardRow}>
+            <span className={styles.cardMeta}>{b.detail}</span>
+            <span className={styles.cardPrice}>{b.price}</span>
+          </div>
+          <span className={styles.cardNote}>{b.note}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Action visual components ────────────────────────────────────
+
+function TripConfirmed() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Trip Draft Saved</div>
+        <div className={styles.confirmBody}>Milan · Sep 14 to 19 · Trip #TRP-20250914 is now active in your travel dashboard.</div>
+      </div>
+    </div>
+  );
+}
+
+function FlightConfirmed() {
+  return (
+    <div className={styles.eticket}>
+      <div className={styles.eticketRow}>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
+        <div className={styles.eticketPlane}>
+          <Plane size={22} strokeWidth={2} />
+        </div>
+        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
+      </div>
+      <div className={styles.eticketGrid}>
+        {[["Flight","LH 8904"],["Date","Sep 14, 2025"],["Departs","8:45 AM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Class","Economy"]].map(([k,v]) => (
+          <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HotelConfirmed() {
+  return (
+    <div className={styles.confirmList}>
+      {[
+        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala, Milan" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-in", val: "Sep 14 · 3:00 PM" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-out", val: "Sep 19 · 12:00 noon" },
+        { icon: <Tag size={18} strokeWidth={2.1} />, label: "Conf. #", val: "MR-20250914-7741" },
+        { icon: <DollarSign size={18} strokeWidth={2.1} />, label: "Total", val: "$1,235 (5 nights)" },
+      ].map(item => (
+        <div className={styles.confirmRow} key={item.label}>
+          <span className={styles.confirmIcon}>{item.icon}</span>
+          <span className={styles.confirmLabel}>{item.label}</span>
+          <span className={styles.confirmVal}>{item.val}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function VisaGuide({ visa }: { visa?: DemoVisaInfo | null }) {
+  const [open, setOpen] = useState<number | null>(0);
+  const visaType = visa?.visaType ?? "Required Visa";
+  const leadDays = visa?.minApplicationLeadDays;
+  const applyUrl = visa?.applicationUrl;
+
+  const steps = visa?.visaRequired
+    ? [
+        { n: "1", title: "Complete online application", body: applyUrl ? `Apply for your ${visaType} at the official portal.` : `Contact the destination country's consulate to apply for your ${visaType}.` },
+        { n: "2", title: "Gather required documents", body: "Valid passport, invitation letter, travel insurance, hotel booking, flight itinerary, bank statements" },
+        { n: "3", title: "Submit and await processing", body: leadDays != null ? `Allow at least ${leadDays} days for processing. US citizens must apply ≥ ${leadDays} days before departure.` : "Check with the consulate for current processing times." },
+      ]
+    : [
+        { n: "1", title: "No visa required", body: visa?.notes ?? "Your US passport is sufficient for this destination." },
+        { n: "2", title: "Confirm passport validity", body: "Ensure your passport is valid for at least 6 months beyond your return date." },
+        { n: "3", title: "Check entry requirements", body: "Review any health, customs, or security requirements for your destination before departure." },
+      ];
+
+  return (
+    <div className={styles.guideWrap}>
+      <div className={styles.guideSteps}>
+        {steps.map((step, i) => (
+          <div className={styles.stepItem} key={step.n}>
+            <button className={styles.stepHeader} onClick={() => setOpen(open === i ? null : i)} type="button">
+              <span className={styles.stepNum}>{step.n}</span>
+              <span className={styles.stepTitle}>{step.title}</span>
+              <span className={styles.stepChevron}>{open === i ? "▲" : "▼"}</span>
+            </button>
+            {open === i && (
+              <div className={styles.stepBody}>
+                {step.body}
+                {i === 0 && applyUrl && visa?.visaRequired && (
+                  <> · <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Apply here →</a></>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {applyUrl && visa?.visaRequired ? (
+        <div className={styles.guideLink}>
+          <a href={applyUrl} target="_blank" rel="noopener noreferrer" className={styles.applyLink}>Official visa application portal →</a>
+        </div>
+      ) : (
+        <div className={styles.guideLink}>No visa required · US passport accepted</div>
+      )}
+    </div>
+  );
+}
+
+function BundleConfirmed() {
+  return (
+    <div className={styles.itinerary}>
+      <div className={styles.itineraryHeader}>
+        <div className={styles.itineraryTitle}>Path C · Confirmed</div>
+        <div className={styles.itineraryTotal}>$2,010</div>
+      </div>
+      {[
+        { icon: <Plane size={18} strokeWidth={2.1} />, label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
+        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
+        { icon: <ShieldCheck size={18} strokeWidth={2.1} />, label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
+      ].map(item => (
+        <div className={styles.itineraryRow} key={item.label}>
+          <span className={styles.itineraryIcon}>{item.icon}</span>
+          <div>
+            <div className={styles.itineraryLabel}>{item.val}</div>
+            <div className={styles.itinerarySub}>{item.sub}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ApprovalWatching() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <SendIcon size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Watching for Reply</div>
+        <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds.</div>
+      </div>
+      <div className={styles.watchStatus}>
+        <div className={styles.watchDot} />
+        <span>Monitoring inbox · Last checked just now</span>
+      </div>
+    </div>
+  );
+}
+
+function ResubmitEmail() {
+  const [sent, setSent] = useState(false);
+  if (sent) {
+    return (
+      <div className={styles.sentBanner}>
+        <CheckCircle2 size={18} strokeWidth={2.1} />
+        <span>Resubmission sent to mgr.sarah@lockton.com</span>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.emailDraft}>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Updated - Milan Approval, Hotel Revised</span></div>
+      <div className={styles.emailBody}>
+        <p>Hi Sarah,</p>
+        <p>Following your feedback, I&#39;ve switched to <strong>AC Hotel Milan at $189/night</strong> — fully within the $200 cap. Total drops to $1,840.</p>
+        <p>Everything else is the same. Please let me know if you&#39;re happy to approve.</p>
+        <p>Thanks,<br />Lockey</p>
+      </div>
+      <button className={styles.emailSend} onClick={() => setSent(true)} type="button">Send Updated Request</button>
+    </div>
+  );
+}
+
+function TripReady() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>You&#39;re Ready to Travel</div>
+        <div className={styles.confirmBody}>All checklist items reviewed. Documents, bookings, and reminders are in order.</div>
+      </div>
+      <div className={styles.countdownCard}>
+        <div className={styles.countdownNum}>12</div>
+        <div className={styles.countdownLabel}>days until departure</div>
+      </div>
+    </div>
+  );
+}
+
+function LiveConfirmed() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <Route size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Live Monitoring Active</div>
+        <div className={styles.confirmBody}>Gate, weather, hotel, and traffic updates will push to your device automatically throughout the trip.</div>
+      </div>
+      <div className={styles.watchStatus}>
+        <div className={styles.watchDot} />
+        <span>Updating every 60 seconds</span>
+      </div>
+    </div>
+  );
+}
+
+function RebookingConfirmed() {
+  return (
+    <div className={styles.eticket}>
+      <div className={styles.eticketRow}>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
+        <div className={styles.eticketPlane}>
+          <Plane size={22} strokeWidth={2} />
+        </div>
+        <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
+      </div>
+      <div className={styles.eticketGrid}>
+        {[["Flight","LH 9012"],["Date","Sep 14, 2025"],["Departs","9:00 PM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Change fee","None"]].map(([k,v]) => (
+          <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
+        ))}
+      </div>
+      <div className={[styles.eticketBadge, styles.eticketBadgeGreen].join(" ")}>Hotel notified · No further action needed</div>
+    </div>
+  );
+}
+
+function ExceptionPending() {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <ShieldAlert size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Exception Pending</div>
+        <div className={styles.confirmBody}>Urgent request sent to {managerEmail}. Polling for a reply every 5 seconds.</div>
+      </div>
+      <div className={styles.watchStatus}>
+        <div className={styles.watchDotUrgent} />
+        <span>Monitoring inbox · Hotel hold expires in 2 hours</span>
+      </div>
+    </div>
+  );
+}
+
+function ExceptionPolling({
+  pollResult,
+  rebooking,
+  tripData,
+}: {
+  pollResult: ManagerPollResult | null;
+  rebooking: RebookingData;
+  tripData?: TripData | null;
+}) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
+
+  if (!pollResult || !pollResult.found) {
+    const isNoAuth = pollResult?.noAuth;
+    return (
+      <div className={styles.actionStack}>
+        <ExceptionEmail rebooking={rebooking} tripData={tripData} />
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>⏳</span>
+          <div className={styles.confirmTitle}>Awaiting Exception Approval</div>
+          <div className={styles.confirmBody}>
+            {isNoAuth
+              ? "Sign in with Google to enable real inbox scanning. Polling resumes once authenticated."
+              : `Urgent request sent to ${managerEmail}. Checking for a reply every 5 seconds…`}
+          </div>
+        </div>
+        <div className={styles.watchStatus}>
+          <div className={styles.watchDotUrgent} />
+          <span style={{ opacity: 0.85 }}>Monitoring inbox · Hotel hold expires in 2 hours</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (pollResult.status === "approved") {
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>✅</span>
+          <div className={styles.confirmTitle}>Exception Approved</div>
+          <div className={styles.confirmBody}>{pollResult.reason || "Manager approved the emergency rebooking. Proceeding to ground transport…"}</div>
+        </div>
+        {pollResult.snippet && (
+          <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+            <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+            <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 160)}{pollResult.snippet.length > 160 ? "…" : ""}&#34;</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🔄</span>
+        <div className={styles.confirmTitle}>Exception Denied — Resubmit Required</div>
+        <div className={styles.confirmBody}>{pollResult.reason || "Manager denied the request. Tap Resubmit to send an updated request."}</div>
+      </div>
+      {pollResult.snippet && (
+        <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+          <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 200)}{pollResult.snippet.length > 200 ? "…" : ""}&#34;</span>
+        </div>
+      )}
+      <ExceptionEmail rebooking={rebooking} tripData={tripData} />
+    </div>
+  );
+}
+
+function TransportConfirmed({
+  selectedIndex,
+  liveData,
+}: {
+  selectedIndex: number;
+  liveData: TransportApiResult | null;
+}) {
+  const TRANSPORT_META = [
+    { icon: "🚕", name: "Company taxi", getTime: (d: Required<TransportApiResult>) => d.taxi.minutes, getCost: (d: Required<TransportApiResult>) => d.taxi.cost },
+    { icon: "🚇", name: "Metro M1 → M3", getTime: (d: Required<TransportApiResult>) => d.metro.minutes, getCost: () => DEFAULT_TRANSPORT_DATA.metro.cost },
+    { icon: "🚶", name: "Walk", getTime: (d: Required<TransportApiResult>) => d.walk.minutes, getCost: () => DEFAULT_TRANSPORT_DATA.walk.cost },
+  ];
+  const chosen = TRANSPORT_META[selectedIndex] ?? TRANSPORT_META[0];
+  const normalizedLiveData = liveData ? normalizeTransportData(liveData) : null;
+  const eta = normalizedLiveData
+    ? `${chosen.getTime(normalizedLiveData)} · ${chosen.getCost(normalizedLiveData)}`
+    : `${DEFAULT_TRANSPORT_DATA.taxi.minutes} · ${DEFAULT_TRANSPORT_DATA.taxi.cost}`;
+
+  const rows = [
+    { icon: chosen.icon, label: "Transport", val: chosen.name },
+    { icon: <MapPin size={18} strokeWidth={2.1} />, label: "Pickup", val: "MXP Arrivals Hall B" },
+    { icon: <Building2 size={18} strokeWidth={2.1} />, label: "Drop-off", val: "Marriott Scala, Milan" },
+    { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "ETA", val: eta },
+    { icon: <PhoneCall size={18} strokeWidth={2.1} />, label: "Driver", val: "+39 02 555 0122" },
+  ];
+
+  return (
+    <div className={styles.confirmList}>
+      {rows.map((item) => (
+        <div className={styles.confirmRow} key={item.label}>
+          <span className={styles.confirmIcon}>{item.icon}</span>
+          <span className={styles.confirmLabel}>{item.label}</span>
+          <span className={styles.confirmVal}>{item.val}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReceiptSubmitted() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Submitted to Expense System</div>
+        <div className={styles.confirmBody}>Ristorante Al Porto · €87.50 · Ref #EXP-20250916-09 · Categorized as &quot;Meals&quot;</div>
+      </div>
+      <div className={styles.receiptTags}>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Within daily allowance
+        </span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Manager notified
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ContactsSaved({ city }: { city: string }) {
+  const embassy = getEmbassy(city);
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <PhoneCall size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Contacts Saved</div>
+        <div className={styles.confirmBody}>Corporate Travel Desk and {embassy.name} added to your emergency contacts for this trip.</div>
+      </div>
+    </div>
+  );
+}
+
+function TripArchived() {
+  return (
+    <div className={styles.archiveWrap}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <ReceiptText size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Trip #TRP-20250914 Archived</div>
+        <div className={styles.confirmBody}>Expense report drafted and sent to mgr.sarah@lockton.com for final sign-off.</div>
+      </div>
+      <div className={styles.archiveSummary}>
+        {[["Total spent","$2,187"],["Under budget by","$153"],["Receipts logged","7"],["Days on trip","5"]].map(([k,v]) => (
+          <div className={styles.archiveRow} key={k}>
+            <span className={styles.archiveKey}>{k}</span>
+            <span className={styles.archiveVal}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DataCleared() {
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>
+          <ShieldCheck size={38} strokeWidth={1.9} />
+        </span>
+        <div className={styles.confirmTitle}>Your Data Is Protected</div>
+        <div className={styles.confirmBody}>Location tracking stopped. Financial data sanitized. OAuth tokens expired. Trip data scheduled for deletion Dec 18.</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Frame definitions ──────────────────────────────────────────
+
+function FoxLoadingFrame() {
+  return (
+    <div className={styles.foxLoadingCard}>
+      <div className={styles.foxLoadingFigure}>
+        <Image
+          alt="Lockey fox mascot loading"
+          className={styles.foxLoadingImage}
+          height={220}
+          priority
+          src="/mascot/thinking.png"
+          width={220}
+        />
+      </div>
+      <SpeechBubble
+        className={styles.speech}
+        isThinking
+        size="lg"
+        text=""
+        variant="plain"
+      />
+    </div>
+  );
+}
+
+function SheetDotsLoader() {
+  return (
+    <div aria-label="Loading" className={styles.sheetLoader} role="status">
+      <div className={styles.sheetLoaderDots}>
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
+}
+
+const FRAMES: DemoFrame[] = [
+  { frameNumber: 0, tone: "neutral", message: "Lockey is loading and getting your travel workspace ready.", sheetTitle: "Lockey Is Loading", options: ["Ready", "Dismiss"], Visual: FoxLoadingFrame, actionTitle: "Lockey Ready", ActionVisual: FoxLoadingFrame },
+  { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
+  { frameNumber: 2, tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
+  { frameNumber: 3, tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
+  { frameNumber: 4, tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
+  { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
+  { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
+  { frameNumber: 7, tone: "empathetic", message: "I'm scanning your manager's inbox every few seconds. Once I see a reply, I'll tell you exactly what changes are needed so we can move fast.", sheetTitle: "Waiting for Manager Reply", options: ["Resubmit", "Adjust"], Visual: ApprovalPolling, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
+  { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboardRefined, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
+  { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebookingRefined, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
+  { frameNumber: 11, tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
+  { frameNumber: 12, tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupportRefined, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
+  { frameNumber: 13, tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
+  { frameNumber: 14, tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCardsRefined, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
+  { frameNumber: 15, tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
+];
+
+// ── Roadmap data ───────────────────────────────────────────────
+
+const ROADMAP_PHASES = [
+  {
+    label: "Start",
+    steps: [
+      { index: 0, label: "Load Lockey", icon: <Ellipsis size={16} strokeWidth={2.2} /> },
+    ],
+  },
+  {
+    label: "Planning",
+    steps: [
+      { index: 0, label: "Share Trip Details", icon: <Route size={16} strokeWidth={2.2} /> },
+      { index: 1, label: "Choose a Flight", icon: <Plane size={16} strokeWidth={2.2} /> },
+      { index: 2, label: "Find a Hotel", icon: <HotelIcon size={16} strokeWidth={2.2} /> },
+      { index: 3, label: "Compliance Check", icon: <ShieldCheck size={16} strokeWidth={2.2} /> },
+      { index: 4, label: "Choose Bundle", icon: <Tag size={16} strokeWidth={2.2} /> },
+    ],
+  },
+  {
+    label: "Approval",
+    steps: [
+      { index: 5, label: "Submit for Approval", icon: <SendIcon size={16} strokeWidth={2.2} /> },
+      { index: 6, label: "Handle Rejection", icon: <ShieldAlert size={16} strokeWidth={2.2} /> },
+    ],
+  },
+  {
+    label: "Pre-Trip",
+    steps: [
+      { index: 7, label: "Travel Checklist", icon: <CheckCircle2 size={16} strokeWidth={2.2} /> },
+    ],
+  },
+  {
+    label: "Live Travel",
+    steps: [
+      { index: 8, label: "Live Mode Active", icon: <Route size={16} strokeWidth={2.2} /> },
+      { index: 9, label: "Handle Disruption", icon: <ShieldAlert size={16} strokeWidth={2.2} /> },
+      { index: 10, label: "Emergency Exception", icon: <PhoneCall size={16} strokeWidth={2.2} /> },
+      { index: 11, label: "Arrival & Transport", icon: <CarFront size={16} strokeWidth={2.2} /> },
+      { index: 12, label: "Capture Receipts", icon: <ReceiptText size={16} strokeWidth={2.2} /> },
+      { index: 13, label: "Human Support", icon: <PhoneCall size={16} strokeWidth={2.2} /> },
+    ],
+  },
+  {
+    label: "Post-Trip",
+    steps: [
+      { index: 14, label: "Expense Summary", icon: <DollarSign size={16} strokeWidth={2.2} /> },
+      { index: 15, label: "Data & Privacy", icon: <ShieldCheck size={16} strokeWidth={2.2} /> },
+    ],
+  },
+];
+
+function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number; frameCompleted: Record<number, boolean> }) {
+  const roadmapPhases = ROADMAP_PHASES.map((phase) => ({
+    ...phase,
+    steps: phase.steps.map((step) => ({
+      ...step,
+      index: phase.label === "Start" ? step.index : step.index + 1,
+    })),
+  }));
+  const allSteps = roadmapPhases.flatMap((p) => p.steps).filter((step) => isVisibleFrameIndex(step.index));
+  const total = allSteps.length;
+
+  return (
+    <div className={styles.roadmapWrap}>
+      <h2 className={styles.sheetTitle}>Your Journey</h2>
+      {roadmapPhases.map((phase) => (
+        <div key={phase.label}>
+          <div className={styles.roadmapPhaseLabel}>{phase.label}</div>
+          {phase.steps.filter((step) => isVisibleFrameIndex(step.index)).map((step) => {
+            const isDone = !!frameCompleted[step.index];
+            const isCurrent = currentIndex === step.index;
+            const globalIdx = allSteps.findIndex((s) => s.index === step.index);
+            const isLast = globalIdx === total - 1;
+            return (
+              <div key={step.index} className={styles.roadmapStepWrap}>
+                <div className={[
+                  styles.roadmapStep,
+                  isDone ? styles.roadmapStepDone : isCurrent ? styles.roadmapStepCurrent : styles.roadmapStepUpcoming,
+                ].join(" ")}>
+                  <div className={styles.roadmapStepDot}>
+                    {isDone ? <CheckCircle2 size={16} strokeWidth={2.2} /> : step.icon}
+                  </div>
+                  <div className={styles.roadmapStepInfo}>
+                    <span className={styles.roadmapStepLabel}>{step.label}</span>
+                  </div>
+                </div>
+                {!isLast && <div className={styles.roadmapConnector} />}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Icons ──────────────────────────────────────────────────────
 
 function MenuIcon() {
   return (
@@ -16,57 +2966,20 @@ function MenuIcon() {
   );
 }
 
-function ListIcon() {
+function MicIcon({ active, size = 36 }: { active?: boolean; size?: number }) {
   return (
-    <svg aria-hidden="true" fill="none" height="30" viewBox="0 0 24 24" width="30">
-      <path d="M8 6h13" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-      <path d="M8 12h13" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-      <path d="M8 18h13" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-      <path
-        d="M4 6h.01"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.6"
-      />
-      <path
-        d="M4 12h.01"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.6"
-      />
-      <path
-        d="M4 18h.01"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.6"
-      />
-    </svg>
-  );
-}
-
-function MicIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" height="40" viewBox="0 0 24 24" width="40">
-      <rect height="13" rx="3" stroke="currentColor" strokeWidth="2" width="6" x="9" y="2" />
-      <path d="M12 19v3" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+    <svg aria-hidden="true" fill="none" height={size} viewBox="0 0 24 24" width={size}>
+      <rect height="13" rx="3" stroke={active ? "#f35b4f" : "currentColor"} strokeWidth="2" width="6" x="9" y="2" />
+      <path d="M12 19v3" stroke={active ? "#f35b4f" : "currentColor"} strokeLinecap="round" strokeWidth="2" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke={active ? "#f35b4f" : "currentColor"} strokeLinecap="round" strokeWidth="2" />
     </svg>
   );
 }
 
 function MessageCircleMoreIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="30" viewBox="0 0 24 24" width="30">
-      <path
-        d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
+    <svg aria-hidden="true" fill="none" height="26" viewBox="0 0 24 24" width="26">
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
       <path d="M8 12h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
       <path d="M12 12h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
       <path d="M16 12h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
@@ -74,73 +2987,1876 @@ function MessageCircleMoreIcon() {
   );
 }
 
-export default function HomePage() {
-  const { say } = useMascot();
-  const { data: session } = useSession();
-  const [mode, setMode] = useState<"talk" | "text">("talk");
+// ── Audio visualizer ──────────────────────────────────────────
+
+function AudioBars({ analyserNode }: { analyserNode: AnalyserNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const firstName = session?.user?.name?.split(" ")[0] ?? "there"
-    void say(`Hi ${firstName}! Where are we headed today?`, "neutral");
-  }, [say, session?.user?.name]);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-  function handleTalk() {
-    setMode("talk");
-    void say("Talk mode is ready.", "excited");
+    const data = new Uint8Array(analyserNode.frequencyBinCount);
+    let frameId: number;
+
+    function draw() {
+      analyserNode.getByteFrequencyData(data);
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+
+      const count = 5;
+      const bw = 4, gap = 3;
+      const totalW = count * bw + (count - 1) * gap;
+      const sx = (canvas!.width - totalW) / 2;
+      const maxH = canvas!.height - 8;
+
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor((i / count) * (data.length * 0.35));
+        const vol = data[idx] / 255;
+        const idle = Math.sin(Date.now() / 280 + i * 1.3) * 0.07 + 0.06;
+        const h = Math.max(4, (vol * 0.9 + idle) * maxH);
+        const x = sx + i * (bw + gap);
+        const y = (canvas!.height - h) / 2;
+
+        ctx!.fillStyle = "rgba(255,255,255,0.92)";
+        ctx!.beginPath();
+        if (typeof ctx!.roundRect === "function") {
+          ctx!.roundRect(x, y, bw, h, 2);
+        } else {
+          ctx!.rect(x, y, bw, h);
+        }
+        ctx!.fill();
+      }
+
+      frameId = requestAnimationFrame(draw);
+    }
+
+    draw();
+    return () => cancelAnimationFrame(frameId);
+  }, [analyserNode]);
+
+  return <canvas height={36} ref={canvasRef} style={{ display: "block" }} width={36} />;
+}
+
+type DemoReceiptScanState = "idle" | "scanning" | "saving" | "ready" | "error";
+
+type DemoReceiptScanResult = {
+  merchant: string;
+  amount: string;
+  currency: string;
+  date: string;
+  category: string;
+  confidence: number;
+  totalUsd: string;
+};
+
+// ── PhoneShell ────────────────────────────────────────────────
+
+function PhoneShell({
+  sheetScrollContent,
+  sheetFooter,
+  sheetOpen,
+  onSheetClose,
+  showEllipsis,
+  onEllipsisOpen,
+  isListening,
+  isProcessing,
+  onMicClick,
+  analyserNode,
+  menuOpen,
+  onMenuToggle,
+  onResetDemo,
+  chatMode,
+  onChatToggle,
+  chatMessages,
+  chatInput,
+  onChatInputChange,
+  onChatSend,
+  onOpenSheet,
+  roadmapOpen,
+  onRoadmapOpen,
+  onRoadmapClose,
+  onEnsureDemoTrip,
+  currentFrameIndex,
+  frameCompleted,
+  onForceApproval,
+  onForceRejection,
+  onForceRebooking,
+  onForceArrival,
+}: {
+  sheetScrollContent: React.ReactNode;
+  sheetFooter: React.ReactNode;
+  sheetOpen: boolean;
+  onSheetClose: () => void;
+  showEllipsis: boolean;
+  onEllipsisOpen: () => void;
+  isListening: boolean;
+  isProcessing: boolean;
+  onMicClick: () => void;
+  analyserNode: AnalyserNode | null;
+  menuOpen: boolean;
+  onMenuToggle: () => void;
+  onResetDemo: () => void;
+  chatMode: boolean;
+  onChatToggle: () => void;
+  chatMessages: ConversationMessage[];
+  chatInput: string;
+  onChatInputChange: (v: string) => void;
+  onChatSend: () => void;
+  onOpenSheet: () => void;
+  roadmapOpen: boolean;
+  onRoadmapOpen: () => void;
+  onRoadmapClose: () => void;
+  onEnsureDemoTrip: () => Promise<string | null>;
+  currentFrameIndex: number;
+  frameCompleted: Record<number, boolean>;
+  onForceApproval: () => void;
+  onForceRejection: () => void;
+  onForceRebooking: () => void;
+  onForceArrival: () => void;
+}) {
+  const isLiveTravelFrame = currentFrameIndex >= 9 && currentFrameIndex <= 14;
+
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef(0);
+  const dragging = useRef(false);
+  const roadmapSheetRef = useRef<HTMLDivElement>(null);
+  const rdragStartY = useRef(0);
+  const rdragging = useRef(false);
+  const receiptSheetRef = useRef<HTMLDivElement>(null);
+  const receiptScanRequestRef = useRef(0);
+  const rcDragStartY = useRef(0);
+  const rcDragging = useRef(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [receiptCaptureOpen, setReceiptCaptureOpen] = useState(false);
+  const [receiptSheetOpen, setReceiptSheetOpen] = useState(false);
+  const [receiptScanState, setReceiptScanState] = useState<DemoReceiptScanState>("idle");
+  const [receiptScanResult, setReceiptScanResult] = useState<DemoReceiptScanResult | null>(null);
+  const [receiptCapturePayload, setReceiptCapturePayload] = useState<DemoReceiptCapturePayload | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const receiptSheetLoading = receiptScanState === "scanning" || receiptScanState === "saving";
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
+  useEffect(() => {
+    if (chatMode && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMode]);
+
+  function resetReceiptFlow() {
+    receiptScanRequestRef.current += 1;
+    setReceiptScanState("idle");
+    setReceiptScanResult(null);
+    setReceiptCapturePayload(null);
+    setReceiptPreviewUrl(null);
+    setReceiptError(null);
   }
 
-  function handleText() {
-    setMode("text");
-    void say("Text mode is ready.", "neutral");
+  function handleReceiptOpen() {
+    console.info("[demo] Receipt button clicked", { frame: currentFrameIndex });
+    onSheetClose();
+    resetReceiptFlow();
+    setReceiptSheetOpen(false);
+    setReceiptCaptureOpen(true);
   }
+
+  function handleReceiptCameraClose() {
+    console.info("[demo] Receipt camera closed");
+    setReceiptCaptureOpen(false);
+    resetReceiptFlow();
+  }
+
+  async function handleReceiptCaptured(payload: DemoReceiptCapturePayload) {
+    const requestId = receiptScanRequestRef.current + 1;
+    receiptScanRequestRef.current = requestId;
+    console.info("[demo] Receipt image captured, opening result sheet");
+    setReceiptCaptureOpen(false);
+    setReceiptCapturePayload(payload);
+    setReceiptPreviewUrl(payload.previewDataUrl);
+    setReceiptError(null);
+    setReceiptScanResult(null);
+    setReceiptScanState("scanning");
+    setReceiptSheetOpen(true);
+
+    try {
+      const res = await fetch("/api/receipt/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: payload.imageBase64,
+          mimeType: payload.mimeType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Scan failed");
+      if (receiptScanRequestRef.current !== requestId) return;
+      console.info("[demo] Receipt scan parsed", data);
+      setReceiptScanResult(data as DemoReceiptScanResult);
+      setReceiptScanState("ready");
+    } catch (err) {
+      if (receiptScanRequestRef.current !== requestId) return;
+      console.error("[demo] Receipt scan failed", err);
+      setReceiptError(err instanceof Error ? err.message : "Failed to parse receipt");
+      setReceiptScanState("error");
+    }
+  }
+
+  async function handleReceiptConfirm() {
+    if (!receiptCapturePayload) return;
+
+    console.info("[demo] Receipt confirmation requested");
+    setReceiptError(null);
+    setReceiptScanState("saving");
+
+    try {
+      const ensuredTripId = await onEnsureDemoTrip();
+      if (!ensuredTripId) throw new Error("Trip could not be created");
+
+      const res = await fetch(`/api/trips/${ensuredTripId}/receipts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: receiptCapturePayload.imageBase64,
+          mimeType: receiptCapturePayload.mimeType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Receipt save failed");
+
+      console.info("[demo] Receipt saved to trip", data);
+      setReceiptSheetOpen(false);
+      resetReceiptFlow();
+    } catch (err) {
+      console.error("[demo] Receipt save failed", err);
+      setReceiptError(err instanceof Error ? err.message : "Failed to save receipt");
+      setReceiptScanState("ready");
+    }
+  }
+
+  function handleReceiptSheetClose() {
+    if (receiptSheetLoading) return;
+    console.info("[demo] Receipt result sheet closed");
+    setReceiptSheetOpen(false);
+    resetReceiptFlow();
+  }
+
+  function handleReceiptRetake() {
+    console.info("[demo] Receipt retake requested");
+    setReceiptSheetOpen(false);
+    resetReceiptFlow();
+    setReceiptCaptureOpen(true);
+  }
+
+  function handlePointerDown(e: React.PointerEvent) {
+    dragging.current = true;
+    dragStartY.current = e.clientY;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragging.current) return;
+    const dy = Math.max(0, e.clientY - dragStartY.current);
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = "none";
+      sheetRef.current.style.transform = `translateY(${dy}px)`;
+    }
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const dy = Math.max(0, e.clientY - dragStartY.current);
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = "";
+      sheetRef.current.style.transform = "";
+    }
+    if (dy > 100) onSheetClose();
+  }
+
+  function handlePointerCancel() {
+    dragging.current = false;
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = "";
+      sheetRef.current.style.transform = "";
+    }
+  }
+
+  function handleRPointerDown(e: React.PointerEvent) {
+    rdragging.current = true;
+    rdragStartY.current = e.clientY;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleRPointerMove(e: React.PointerEvent) {
+    if (!rdragging.current) return;
+    const dy = Math.max(0, e.clientY - rdragStartY.current);
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "none";
+      roadmapSheetRef.current.style.transform = `translateY(${dy}px)`;
+    }
+  }
+
+  function handleRPointerUp(e: React.PointerEvent) {
+    if (!rdragging.current) return;
+    rdragging.current = false;
+    const dy = Math.max(0, e.clientY - rdragStartY.current);
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "";
+      roadmapSheetRef.current.style.transform = "";
+    }
+    if (dy > 100) onRoadmapClose();
+  }
+
+  function handleRPointerCancel() {
+    rdragging.current = false;
+    if (roadmapSheetRef.current) {
+      roadmapSheetRef.current.style.transition = "";
+      roadmapSheetRef.current.style.transform = "";
+    }
+  }
+
+  function handleRcPointerDown(e: React.PointerEvent) {
+    rcDragging.current = true;
+    rcDragStartY.current = e.clientY;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleRcPointerMove(e: React.PointerEvent) {
+    if (!rcDragging.current) return;
+    const dy = Math.max(0, e.clientY - rcDragStartY.current);
+    if (receiptSheetRef.current) {
+      receiptSheetRef.current.style.transition = "none";
+      receiptSheetRef.current.style.transform = `translateY(${dy}px)`;
+    }
+  }
+
+  function handleRcPointerUp(e: React.PointerEvent) {
+    if (!rcDragging.current) return;
+    rcDragging.current = false;
+    const dy = Math.max(0, e.clientY - rcDragStartY.current);
+    if (receiptSheetRef.current) {
+      receiptSheetRef.current.style.transition = "";
+      receiptSheetRef.current.style.transform = "";
+    }
+    if (dy > 100) handleReceiptSheetClose();
+  }
+
+  function handleRcPointerCancel() {
+    rcDragging.current = false;
+    if (receiptSheetRef.current) {
+      receiptSheetRef.current.style.transition = "";
+      receiptSheetRef.current.style.transform = "";
+    }
+  }
+
+  // Last assistant message index for showing card
+  const lastAssistantIdx = chatMessages.reduce<number>((acc, m, i) => m.role === "assistant" ? i : acc, -1);
+
+  return (
+    <div className={styles.phone}>
+      <section className={styles.shell}>
+        <div className={styles.content}>
+          <div className={styles.topBar}>
+            <div className={styles.menuWrap}>
+              <button aria-label="Open menu" className={styles.menuButton} onClick={onMenuToggle} type="button">
+                <MenuIcon />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className={styles.menuBackdrop} onClick={onMenuToggle} />
+                  <div className={styles.menuPanel}>
+                    {/* Context-sensitive demo controls */}
+                    {currentFrameIndex === 5 && (
+                      <button className={styles.menuItem} onClick={() => { onMenuToggle(); onForceApproval(); }} type="button">
+                        🎭 Force Manager Approval
+                      </button>
+                    )}
+                    {currentFrameIndex === 6 && (
+                      <button className={styles.menuItem} onClick={() => { onMenuToggle(); onForceRejection(); }} type="button">
+                        ❌ Force Manager Rejection
+                      </button>
+                    )}
+                    {currentFrameIndex === 9 && (
+                      <button className={styles.menuItem} onClick={() => { onMenuToggle(); onForceRebooking(); }} type="button">
+                        ⛈️ Force Flight Rebooking
+                      </button>
+                    )}
+                    {currentFrameIndex === 11 && (
+                      <button className={styles.menuItem} onClick={() => { onMenuToggle(); onForceArrival(); }} type="button">
+                        ✈️ Force Arrival
+                      </button>
+                    )}
+
+                    <button className={styles.menuItem} onClick={onRoadmapOpen} type="button">
+                      📍 View Journey Progress
+                    </button>
+                    <button className={[styles.menuItem, styles.menuItemDanger].join(" ")} onClick={onResetDemo} type="button">
+                      Reset Demo
+                    </button>
+                    <button className={styles.menuItem} onClick={() => void signOut({ callbackUrl: "/" })} type="button">
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            {chatMode && (
+              <button aria-label="Back to voice mode" className={styles.backToVoiceButton} onClick={onChatToggle} type="button">
+                <ArrowBigLeft size={26} />
+              </button>
+            )}
+          </div>
+
+          {chatMode ? (
+            <div className={styles.chatView}>
+              <div className={styles.chatMessages} ref={chatScrollRef}>
+                {chatMessages.length === 0 ? (
+                  <div className={styles.chatEmpty}>
+                    <span>Start a conversation with Lockey</span>
+                  </div>
+                ) : (
+                  chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={[styles.chatMsg, msg.role === "user" ? styles.chatMsgUser : styles.chatMsgAssistant].join(" ")}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className={styles.chatAvatarWrap}>
+                          <div className={styles.chatAvatar}>
+                            <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                          </div>
+                        </div>
+                      )}
+                      <div className={styles.chatBubbleWrap}>
+                        <div className={styles.chatBubble}>{msg.content}</div>
+                        {msg.role === "assistant" && i === lastAssistantIdx && msg.frameIndex !== undefined && (
+                          <button className={styles.chatCard} onClick={onOpenSheet} type="button">
+                            <span className={styles.chatCardIcon}>
+                              <ArrowRight size={15} strokeWidth={2.2} />
+                            </span>
+                            <span className={styles.chatCardText}>{FRAMES[msg.frameIndex]?.sheetTitle}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isProcessing && (
+                  <div className={[styles.chatMsg, styles.chatMsgAssistant].join(" ")}>
+                    <div className={styles.chatAvatarWrap}>
+                      <div className={styles.chatAvatar}>
+                        <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                      </div>
+                    </div>
+                    <div className={styles.chatBubble}>
+                      <div className={styles.chatTyping}>
+                        <span /><span /><span />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className={styles.chatControls}>
+                <div className={styles.chatInputWrap}>
+                  <input
+                    className={styles.chatInput}
+                    disabled={isProcessing}
+                    onChange={(e) => onChatInputChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        onChatSend();
+                      }
+                    }}
+                    placeholder="Message Lockey…"
+                    type="text"
+                    value={chatInput}
+                  />
+                  <button
+                    aria-label="Send message"
+                    className={[styles.chatIconButton, styles.chatSendButton].join(" ")}
+                    disabled={isProcessing || !chatInput.trim()}
+                    onClick={onChatSend}
+                    type="button"
+                  >
+                    <SendIcon size={17} />
+                  </button>
+                </div>
+                <button
+                  aria-label="Open roadmap"
+                  className={styles.chatPencilButton}
+                  onClick={onRoadmapOpen}
+                  type="button"
+                >
+                  <Pencil size={18} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.stage}>
+              {currentFrameIndex === 0 ? (
+                <FoxLoadingFrame />
+              ) : (
+                <Mascot
+                  bubbleAfterTextSlot={showEllipsis ? (
+                    <button aria-label="View details" className={styles.ellipsisButton} onClick={onEllipsisOpen} type="button">
+                      <Ellipsis size={18} />
+                    </button>
+                  ) : null}
+                  bubbleClassName={styles.speech}
+                  bubblePosition="below"
+                  bubbleSize="lg"
+                  bubbleVariant="plain"
+                  className={styles.mascot}
+                  figureClassName={styles.figure}
+                />
+              )}
+            </div>
+          )}
+
+          {!chatMode && (
+            <div className={styles.controls}>
+              <button
+                aria-label="View trip roadmap"
+                className={[styles.iconButton, styles.sideButton, styles.leftButton].join(" ")}
+                onClick={onRoadmapOpen}
+                type="button"
+              >
+                <Pencil size={22} />
+              </button>
+              {isLiveTravelFrame ? (
+                <div className={styles.controlsCenter}>
+                  <button
+                    aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
+                    className={[styles.iconButton, styles.primaryButtonSmall, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
+                    disabled={isProcessing}
+                    onClick={onMicClick}
+                    type="button"
+                  >
+                    {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} size={22} />}
+                  </button>
+                  <button
+                    aria-label="Scan a receipt"
+                    className={[styles.iconButton, styles.sideButton].join(" ")}
+                    onClick={handleReceiptOpen}
+                    type="button"
+                  >
+                    <ReceiptText size={22} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
+                  className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
+                  disabled={isProcessing}
+                  onClick={onMicClick}
+                  type="button"
+                >
+                  {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
+                </button>
+              )}
+              <button
+                aria-label="Switch to chat mode"
+                className={[styles.iconButton, styles.sideButton, styles.rightButton].join(" ")}
+                onClick={onChatToggle}
+                type="button"
+              >
+                <MessageCircleMoreIcon />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {receiptCaptureOpen ? (
+          <DemoReceiptCapture onCapture={handleReceiptCaptured} onClose={handleReceiptCameraClose} />
+        ) : null}
+
+        <div
+          className={[styles.sheetBackdrop, styles.receiptBackdrop, receiptSheetOpen ? styles.sheetBackdropVisible : ""].join(" ")}
+          onClick={handleReceiptSheetClose}
+        />
+        <div ref={receiptSheetRef} className={[styles.sheet, styles.receiptSheet, receiptSheetOpen ? styles.sheetOpen : ""].join(" ")}>
+          <div className={styles.sheetDragArea} onPointerCancel={handleRcPointerCancel} onPointerDown={handleRcPointerDown} onPointerMove={handleRcPointerMove} onPointerUp={handleRcPointerUp}>
+            <div className={styles.sheetHandle} />
+          </div>
+          <div className={styles.sheetScroll}>
+            {receiptSheetLoading ? (
+              <SheetDotsLoader />
+            ) : (
+              <div className={styles.sheetContent}>
+              <h2 className={styles.sheetTitle}>
+                {receiptScanState === "error" ? "Receipt Scan Failed" : "Receipt Captured"}
+              </h2>
+
+              {receiptPreviewUrl ? (
+                <div style={{ borderRadius: 22, overflow: "hidden", border: "1px solid rgba(159, 171, 183, 0.18)", background: "#f6f7f8" }}>
+                  <img alt="Captured receipt" src={receiptPreviewUrl} style={{ display: "block", width: "100%", maxHeight: 210, objectFit: "contain" }} />
+                </div>
+              ) : null}
+
+                {receiptScanState === "ready" && receiptScanResult ? (
+                  <div className={styles.actionStack}>
+                  <div className={styles.confirmCard}>
+                    <div className={styles.confirmTitle}>{receiptScanResult.merchant}</div>
+                    <div className={styles.confirmBody}>
+                      {receiptScanResult.date} · {toTitleCase(receiptScanResult.category)} · {receiptScanResult.amount} {receiptScanResult.currency}
+                    </div>
+                  </div>
+                  <div className={styles.confirmList}>
+                    {false ? [
+                      { icon: "🏷️", label: "Category", val: toTitleCase(receiptScanResult!.category) },
+                      { icon: "💶", label: "Original", val: `${receiptScanResult!.amount} ${receiptScanResult!.currency}` },
+                      { icon: "💵", label: "USD Total", val: `$${receiptScanResult!.totalUsd}` },
+                      { icon: "🎯", label: "Confidence", val: `${Math.round(receiptScanResult!.confidence * 100)}%` },
+                    ].map((item) => (
+                      <div className={styles.confirmRow} key={item.label}>
+                        <span className={styles.confirmIcon}>{item.icon}</span>
+                        <span className={styles.confirmLabel}>{item.label}</span>
+                        <span className={styles.confirmVal}>{item.val}</span>
+                      </div>
+                    )) : null}
+                  </div>
+                  <div className={styles.confirmList}>
+                    {[
+                      { icon: <Tag size={16} strokeWidth={2} />, label: "Category", val: toTitleCase(receiptScanResult.category) },
+                      { icon: <ReceiptText size={16} strokeWidth={2} />, label: "Original", val: `${receiptScanResult.amount} ${receiptScanResult.currency}` },
+                      { icon: <DollarSign size={16} strokeWidth={2} />, label: "USD Total", val: `$${receiptScanResult.totalUsd}` },
+                    ].map((item) => (
+                      <div className={styles.confirmRow} key={item.label}>
+                        <span className={styles.confirmIcon}>{item.icon}</span>
+                        <span className={styles.confirmLabel}>{item.label}</span>
+                        <span className={styles.confirmVal}>{item.val}</span>
+                      </div>
+                    ))}
+                  </div>
+                  </div>
+                ) : null}
+
+                {receiptScanState === "ready" && receiptError ? (
+                  <div className={styles.confirmCard}>
+                    <div className={styles.confirmTitle}>Unable to Save Receipt</div>
+                    <div className={styles.confirmBody}>{receiptError}</div>
+                  </div>
+                ) : null}
+
+                {receiptScanState === "error" ? (
+                <div className={styles.confirmCard}>
+                  <div className={styles.confirmTitle}>Try Another Photo</div>
+                  <div className={styles.confirmBody}>
+                    {receiptError ?? "The receipt couldn’t be parsed from this image. Retake it with the full page in frame."}
+                  </div>
+                </div>
+              ) : null}
+              </div>
+            )}
+          </div>
+          <div className={styles.sheetFooter}>
+            {receiptSheetLoading ? null : (
+              <div className={styles.sheetActions}>
+                {receiptScanState === "ready" ? (
+                  <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={() => void handleReceiptConfirm()} type="button">
+                    Looks Right
+                  </button>
+                ) : null}
+                {receiptScanState === "error" ? (
+                <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={handleReceiptRetake} type="button">
+                  Try Again
+                </button>
+              ) : null}
+                <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={receiptScanState === "ready" ? handleReceiptRetake : handleReceiptSheetClose} type="button">
+                  {receiptScanState === "ready" ? "Adjust" : "Close"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={[styles.sheetBackdrop, sheetOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onSheetClose} />
+
+        <div ref={sheetRef} className={[styles.sheet, sheetOpen ? styles.sheetOpen : ""].join(" ")}>
+          <div className={styles.sheetDragArea} onPointerCancel={handlePointerCancel} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
+            <div className={styles.sheetHandle} />
+          </div>
+          <div className={styles.sheetScroll}>{sheetScrollContent}</div>
+          <div className={styles.sheetFooter}>{sheetFooter}</div>
+        </div>
+
+        <div className={[styles.sheetBackdrop, styles.roadmapBackdrop, roadmapOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onRoadmapClose} />
+        <div ref={roadmapSheetRef} className={[styles.sheet, styles.roadmapSheet, roadmapOpen ? styles.sheetOpen : ""].join(" ")}>
+          <div className={styles.sheetDragArea} onPointerCancel={handleRPointerCancel} onPointerDown={handleRPointerDown} onPointerMove={handleRPointerMove} onPointerUp={handleRPointerUp}>
+            <div className={styles.sheetHandle} />
+          </div>
+          <div className={styles.sheetScroll}>
+            <RoadmapContent currentIndex={currentFrameIndex} frameCompleted={frameCompleted} />
+          </div>
+          <div className={styles.sheetFooter}>
+            <div className={styles.sheetActions}>
+              <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={onRoadmapClose} type="button">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ── Login screen (shown inside the phone shell before demo starts) ─
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+      <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
+    </svg>
+  );
+}
+
+function LoginScreen() {
+  const [loading, setLoading] = React.useState(false);
+  return (
+    <div className={styles.phone}>
+      <section className={styles.shell}>
+        <div className={styles.loginContent}>
+          <div className={styles.loginBrand}>
+            <Image
+              alt="Lockey fox mascot"
+              className={styles.loginMascot}
+              height={120}
+              priority
+              src="/mascot/greeting.png"
+              width={120}
+            />
+            <div className={styles.loginTitle}>Lockey</div>
+            <div className={styles.loginSubtitle}>AI Travel Concierge · Lockton</div>
+          </div>
+          <button
+            className={styles.loginSignInButton}
+            disabled={loading}
+            onClick={() => { setLoading(true); void signIn("google", { callbackUrl: "/demo" }); }}
+            type="button"
+          >
+            <GoogleIcon />
+            {loading ? "Signing in…" : "Sign in with Google"}
+          </button>
+          <p className={styles.loginDisclaimer}>
+            Authorizes Gmail access for travel approvals and receipt scanning.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────
+
+export default function DemoPage() {
+  const visibleFrames = FRAMES.map((frame, index) => ({ ...frame, index })).filter(({ index }) => isVisibleFrameIndex(index));
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [overlayReady, setOverlayReady] = useState(false);
+  const [overlayDismissed, setOverlayDismissed] = useState(false);
+
+  // MongoDB state
+  const [tripId, setTripId] = useState<string | null>(null);
+  const [tripData, setTripData] = useState<TripData | null>(null);
+  const [frameCompleted, setFrameCompleted] = useState<Record<number, boolean>>({});
+
+  // Conversation state
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [knownFields, setKnownFields] = useState<Record<string, string>>({});
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Selection state (lifted from sub-components)
+  const [selectedFlight, setSelectedFlight] = useState(0);
+  const [selectedHotel, setSelectedHotel] = useState(0);
+  const [selectedReturn, setSelectedReturn] = useState(0);
+  const [selectedBundle, setSelectedBundle] = useState<number | null>(null);
+  const [selectedTransport, setSelectedTransport] = useState(0);
+  const [liveTransportData, setLiveTransportData] = useState<TransportApiResult | null>(null);
+  const [liveFlights, setLiveFlights] = useState<DisplayFlightGroup[] | null>(null);
+  const [liveFlightResults, setLiveFlightResults] = useState<FlightGroup[] | null>(null);
+  const [isFlightSearchLoading, setIsFlightSearchLoading] = useState(false);
+  const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
+  const [liveHotels, setLiveHotels] = useState<Hotel[] | null>(null);
+  const [isProgressHydrated, setIsProgressHydrated] = useState(false);
+  const [visaInfo, setVisaInfo] = useState<DemoVisaInfo | null>(null);
+  const visaFetchedForRef = useRef<string | null>(null);
+  const [liveWeather, setLiveWeather] = useState<WeatherForecast | null>(null);
+  const weatherFetchedForRef = useRef<string | null>(null);
+  const [approvalPollResult, setApprovalPollResult] = useState<ManagerPollResult | null>(null);
+  const [approvalSentAt, setApprovalSentAt] = useState<number | null>(null);
+  const [exceptionPollResult, setExceptionPollResult] = useState<ManagerPollResult | null>(null);
+  const [exceptionSentAt, setExceptionSentAt] = useState<number | null>(null);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { data: session, status } = useSession();
+  const [userProfile, setUserProfile] = useState<{ name: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data: { name: string }) => setUserProfile(data))
+      .catch(() => {});
+  }, []);
+
+  const travelerName = userProfile?.name ?? session?.user?.name ?? undefined;
+
+  // Roadmap + chat state
+  const [roadmapOpen, setRoadmapOpen] = useState(false);
+  const [chatMode, setChatMode] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const greetedFrames = useRef<Set<number>>(new Set());
+
+  const { say, setThinking, stopSpeaking, speech, visibleLength } = useMascot();
+  const frame = FRAMES[currentIndex];
+  const sheetOpen = overlayReady && !overlayDismissed;
+  const showEllipsis = overlayReady && overlayDismissed && speech.length > 0 && visibleLength >= speech.length;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled || typeof window === "undefined") return;
+
+      try {
+        const raw = window.localStorage.getItem(DEMO_PROGRESS_STORAGE_KEY);
+        if (!raw) return;
+
+        const snapshot = JSON.parse(raw) as Partial<DemoProgressSnapshot>;
+        if (snapshot.version !== 2) {
+          window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
+          return;
+        }
+
+        if (typeof snapshot.currentIndex === "number") {
+          const savedIndex = Math.max(0, Math.min(FRAMES.length - 1, snapshot.currentIndex));
+          setCurrentIndex(getNearestVisibleFrameIndex(savedIndex));
+        }
+        if (typeof snapshot.overlayReady === "boolean") setOverlayReady(snapshot.overlayReady);
+        if (typeof snapshot.overlayDismissed === "boolean") setOverlayDismissed(snapshot.overlayDismissed);
+        if (typeof snapshot.tripId === "string" || snapshot.tripId === null) setTripId(snapshot.tripId);
+        if (snapshot.tripData) setTripData(snapshot.tripData);
+        if (snapshot.frameCompleted) setFrameCompleted(snapshot.frameCompleted);
+        if (Array.isArray(snapshot.conversationMessages)) setConversationMessages(snapshot.conversationMessages);
+        if (snapshot.knownFields) setKnownFields(snapshot.knownFields);
+        if (typeof snapshot.selectedFlight === "number") setSelectedFlight(snapshot.selectedFlight);
+        if (typeof snapshot.selectedHotel === "number") setSelectedHotel(snapshot.selectedHotel);
+        if (typeof snapshot.selectedReturn === "number") setSelectedReturn(snapshot.selectedReturn);
+        if (typeof snapshot.selectedBundle === "number" || snapshot.selectedBundle === null) {
+          setSelectedBundle(snapshot.selectedBundle);
+        }
+        if (typeof snapshot.selectedTransport === "number") setSelectedTransport(snapshot.selectedTransport);
+        if (snapshot.liveWeather) setLiveWeather(snapshot.liveWeather);
+      } catch {
+        window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
+      } finally {
+        if (!cancelled) setIsProgressHydrated(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isProgressHydrated || typeof window === "undefined") return;
+
+    const snapshot: DemoProgressSnapshot = {
+      version: 2,
+      currentIndex,
+      overlayReady,
+      overlayDismissed,
+      tripId,
+      tripData,
+      frameCompleted,
+      conversationMessages,
+      knownFields,
+      selectedFlight,
+      selectedHotel,
+      selectedReturn,
+      selectedBundle,
+      selectedTransport,
+      liveWeather,
+    };
+
+    window.localStorage.setItem(DEMO_PROGRESS_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [
+    conversationMessages,
+    currentIndex,
+    frameCompleted,
+    isProgressHydrated,
+    knownFields,
+    overlayDismissed,
+    overlayReady,
+    selectedBundle,
+    selectedFlight,
+    selectedHotel,
+    selectedReturn,
+    selectedTransport,
+    tripData,
+    tripId,
+    liveWeather,
+  ]);
+
+  // Speak the frame greeting, then open the sheet once Lockey finishes talking.
+  // Frame 1 is special: sheet only opens after Gemini parses the user's speech.
+  useEffect(() => {
+    if (!isProgressHydrated || status !== "authenticated") return;
+    let cancelled = false;
+
+    async function run() {
+      if (currentIndex === 0) {
+        setOverlayReady(false);
+        setOverlayDismissed(false);
+        setThinking(true);
+        return;
+      }
+
+      const firstName = session?.user?.name?.split(" ")[0];
+      let message = currentIndex === 1 && firstName
+        ? `Hey, ${firstName}! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.`
+        : frame.message;
+
+      if (currentIndex === 3) {
+        const country = tripData?.country ?? DEMO_DEFAULTS.country;
+        const city = tripData?.city ?? DEMO_DEFAULTS.city;
+
+        let visaForGreeting: DemoVisaInfo | null = null;
+        if (visaFetchedForRef.current === country && visaInfo) {
+          visaForGreeting = visaInfo;
+        } else {
+          try {
+            const visaRes = await fetch("/api/demo/visa-lookup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ country }),
+            });
+            if (!cancelled && visaRes.ok) {
+              visaForGreeting = (await visaRes.json()) as DemoVisaInfo;
+              setVisaInfo(visaForGreeting);
+              visaFetchedForRef.current = country;
+            } else {
+              visaFetchedForRef.current = null;
+            }
+          } catch {
+            visaFetchedForRef.current = null;
+          }
+        }
+
+        try {
+          const res = await fetch("/api/demo/compliance-greeting", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              city,
+              country,
+              visaRequired: visaForGreeting?.visaRequired ?? false,
+              visaType: visaForGreeting?.visaType ?? null,
+            }),
+          });
+          if (!cancelled && res.ok) {
+            const data = (await res.json()) as { mascotMessage?: string };
+            if (data.mascotMessage) message = data.mascotMessage;
+          }
+        } catch { /* fall back to static frame message */ }
+      }
+      // Store greeting in chat history (deduplicated)
+      if (!greetedFrames.current.has(currentIndex)) {
+        greetedFrames.current.add(currentIndex);
+        setConversationMessages((prev) => {
+          const alreadyHas = prev.some(
+            (m) => m.role === "assistant" && m.frameIndex === currentIndex && m.content === message
+          );
+          if (alreadyHas) return prev;
+          return [...prev, { role: "assistant", content: message, frameIndex: currentIndex }];
+        });
+      }
+      await say(message, frame.tone);
+      if (!cancelled && currentIndex !== 1) setOverlayReady(true);
+    }
+
+    void run();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated, status, tripData?.country, tripData?.city]);
+
+  // Fetch weather forecast when entering frame 7 (prep checklist, index 7)
+  useEffect(() => {
+    if (!isProgressHydrated || currentIndex !== 7) return;
+    const city = tripData?.city ?? DEMO_DEFAULTS.city;
+    const country = tripData?.country ?? DEMO_DEFAULTS.country;
+    const key = `${city},${country}`;
+    if (weatherFetchedForRef.current === key) return;
+    weatherFetchedForRef.current = key;
+    let cancelled = false;
+
+    fetch(`/api/weather?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: WeatherForecast | null) => {
+        if (!cancelled && data && data.days) setLiveWeather(data);
+      })
+      .catch(() => { /* keep null — checklist shows fallback text */ });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated]);
+
+  // Ensure visa info is available at frame 7 even if frame 3 was skipped
+  useEffect(() => {
+    if (!isProgressHydrated || currentIndex !== 7 || visaInfo !== null) return;
+    const country = tripData?.country ?? DEMO_DEFAULTS.country;
+    if (visaFetchedForRef.current === country) return;
+    visaFetchedForRef.current = country;
+    let cancelled = false;
+
+    fetch("/api/demo/visa-lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ country }),
+    })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: DemoVisaInfo | null) => {
+        if (!cancelled && data) setVisaInfo(data);
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated, visaInfo]);
+
+  // Fetch real flights when entering frame 2 (flight picker)
+  useEffect(() => {
+    if (!isProgressHydrated) return;
+    if (currentIndex !== 2) return;
+    const trip = tripData ?? DEMO_DEFAULTS;
+    const homeAirport = CITY_TO_AIRPORT[trip.originCity?.toLowerCase() ?? ""] ?? "ORD";
+    const destAirport = CITY_TO_AIRPORT[trip.city.toLowerCase()] ?? "MXP";
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setIsFlightSearchLoading(true);
+      setFlightSearchMessage(null);
+      setLiveFlights(null);
+      setLiveFlightResults(null);
+    });
+
+    fetch("/api/flights/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        homeAirport,
+        destination: destAirport,
+        targetDeparture: trip.departure,
+        targetReturn: trip.returnDate,
+      }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error("Flight search failed");
+        return r.json();
+      })
+      .then((flights: unknown) => {
+        if (cancelled) return;
+        if (!Array.isArray(flights) || flights.length === 0) {
+          setFlightSearchMessage("Fair Grid returned no live flights for this search. The API request succeeded, but it came back empty.");
+          return;
+        }
+        setSelectedFlight(0);
+        setSelectedReturn(0);
+        const groups = (flights as FlightGroup[]).slice(0, 3);
+        setLiveFlightResults(groups);
+        const mapped: DisplayFlightGroup[] = groups.map((g, i) => ({
+          id: g.outbound.id,
+          flightNumber: g.outbound.outbound.flightNumber,
+          carrier: g.outbound.outbound.carrier,
+          route: [g.outbound.outbound.origin, ...(g.outbound.outbound.layoverAirports ?? []), g.outbound.outbound.destination].join(' → '),
+          depDate: fmtDate(g.outbound.outbound.departureTime),
+          dep: fmtTime(g.outbound.outbound.departureTime),
+          arr: fmtTime(g.outbound.outbound.arrivalTime),
+          dur: fmtDur(g.outbound.outbound.durationMinutes),
+          tag: g.outbound.saturdayNightSavingsUsd > 0 ? `Save $${g.outbound.saturdayNightSavingsUsd}` : i === 0 ? "Best pick" : undefined,
+          returns: g.returns.slice(0, 4).map(r => ({
+            id: r.id,
+            flightNumber: r.outbound.flightNumber,
+            returnDate: fmtDate(r.outbound.departureTime),
+            dep: fmtTime(r.outbound.departureTime),
+            arr: fmtTime(r.outbound.arrivalTime),
+            dur: fmtDur(r.outbound.durationMinutes),
+            priceUsd: r.priceUsd,
+            totalPriceUsd: g.outbound.priceUsd + r.priceUsd,
+            returnVia: (r.outbound.layoverAirports ?? []).length > 0 ? `via ${(r.outbound.layoverAirports ?? []).join(', ')}` : undefined,
+          })),
+        }));
+        setLiveFlights(mapped);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFlightSearchMessage("Live flight search failed, so no results are being shown. Check the Fair Grid provider response instead of relying on demo data.");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsFlightSearchLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated]);
+
+  // Fetch real hotels when entering frame 3 (hotel picker)
+  useEffect(() => {
+    if (!isProgressHydrated) return;
+    if (currentIndex !== 3) return;
+    const trip = tripData ?? DEMO_DEFAULTS;
+    let cancelled = false;
+
+    fetch("/api/hotels/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        city: trip.city,
+        country: trip.country,
+        checkIn: trip.departure,
+        checkOut: trip.returnDate,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { hotels: Hotel[] }) => {
+        if (!cancelled && data.hotels?.length) setLiveHotels(data.hotels.slice(0, 6));
+      })
+      .catch(() => {}); // silently fall back to DEMO_HOTELS
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, isProgressHydrated]);
+
+  // ── Voice input (Gemini STT) ─────────────────────────────────
+
+  useEffect(() => {
+    const pollingActive = frameCompleted[6] && (currentIndex === 6 || currentIndex === 7);
+    if (!pollingActive) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll() {
+      if (cancelled) return;
+
+      try {
+        const url = approvalSentAt
+          ? `/api/gmail/poll-approval?since=${approvalSentAt}`
+          : "/api/gmail/poll-approval";
+        const res = await fetch(url);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = (await res.json()) as ManagerPollResult;
+          if (cancelled) return;
+          setApprovalPollResult(data);
+
+          if (data.found && data.status === "approved") {
+            stopSpeaking();
+            setOverlayReady(false);
+            setOverlayDismissed(false);
+            setFrameCompleted((prev) => ({ ...prev, 6: true, 7: true }));
+            setCurrentIndex(8);
+            return;
+          }
+
+          if (data.found && data.status === "rejected") {
+            setTripData((prev) => prev ? {
+              ...prev,
+              approvalThread: {
+                status: "rejected",
+                reason: data.reason ?? null,
+                flaggedItems: data.flaggedItems ?? [],
+              },
+            } : prev);
+
+            if (currentIndex === 6) {
+              stopSpeaking();
+              setOverlayReady(false);
+              setOverlayDismissed(false);
+              setCurrentIndex(7);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Ignore transient polling errors and keep trying.
+      }
+
+      if (!cancelled) {
+        timer = setTimeout(() => {
+          void poll();
+        }, 5000);
+      }
+    }
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, frameCompleted, approvalSentAt]);
+
+  // Poll for the manager's reply to the emergency exception (frame 11)
+  useEffect(() => {
+    const pollingActive = frameCompleted[11] && currentIndex === 11;
+    if (!pollingActive) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll() {
+      if (cancelled) return;
+
+      try {
+        const url = exceptionSentAt
+          ? `/api/gmail/poll-approval?since=${exceptionSentAt}`
+          : "/api/gmail/poll-approval";
+        const res = await fetch(url);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = (await res.json()) as ManagerPollResult;
+          if (cancelled) return;
+          setExceptionPollResult(data);
+
+          if (data.found && data.status === "approved") {
+            stopSpeaking();
+            setOverlayReady(false);
+            setOverlayDismissed(false);
+            setCurrentIndex(12);
+            return;
+          }
+          // On rejection: stay on frame 11 with denial state visible.
+          // User must click "Resubmit" to send a fresh request.
+        }
+      } catch {
+        // Ignore transient polling errors and keep trying.
+      }
+
+      if (!cancelled) {
+        timer = setTimeout(() => {
+          void poll();
+        }, 5000);
+      }
+    }
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, frameCompleted, exceptionSentAt]);
+
+  function stopListening() {
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setIsListening(false);
+  }
+
+  function startListening() {
+    if (isListening || isProcessing) return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      streamRef.current = stream;
+
+      const audioCtx = new AudioContext();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      setAnalyserNode(analyser);
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        if (silenceTimerRef.current) {
+          clearInterval(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+        setAnalyserNode(null);
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size < 500) {
+          void say("I didn't quite catch that. Could you try again?", "empathetic");
+          return;
+        }
+        void transcribeAndProcess(blob, (recorder.mimeType || "audio/webm").split(";")[0]);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsListening(true);
+
+      // Auto-stop after sustained silence, with a noise gate so fan
+      // hum doesn't count as speech. The mic only "arms" once it
+      // detects audio above SPEECH_THRESHOLD, and the silence timer
+      // only triggers when levels drop below SILENCE_THRESHOLD.
+      const SILENCE_THRESHOLD = 30;   // fan noise sits ~5-20
+      const SPEECH_THRESHOLD  = 35;   // must exceed this to arm
+      const SILENCE_MS        = 2200; // ms of quiet before auto-stop
+      let silenceStart: number | null = null;
+      let speechDetected = false;
+
+      silenceTimerRef.current = setInterval(() => {
+        if (mediaRecorderRef.current?.state !== "recording") {
+          clearInterval(silenceTimerRef.current!);
+          silenceTimerRef.current = null;
+          return;
+        }
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((s, v) => s + v, 0) / data.length;
+
+        // Noise gate: don't start silence countdown until real
+        // speech has been detected at least once.
+        if (!speechDetected) {
+          if (avg >= SPEECH_THRESHOLD) speechDetected = true;
+          return; // keep waiting for speech
+        }
+
+        if (avg < SILENCE_THRESHOLD) {
+          silenceStart = silenceStart ?? Date.now();
+          if (Date.now() - silenceStart >= SILENCE_MS) stopListening();
+        } else {
+          silenceStart = null;
+        }
+      }, 100);
+    }).catch(() => {
+      alert("Microphone access is required. Please allow mic permissions in your browser.");
+    });
+  }
+
+  async function transcribeAndProcess(blob: Blob, mimeType: string) {
+    setIsProcessing(true);
+    setThinking(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(",")[1] ?? "");
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const sttRes = await fetch("/api/stt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio: base64, mimeType }),
+      });
+
+      if (!sttRes.ok) throw new Error("STT failed");
+      const { text } = (await sttRes.json()) as { text: string };
+
+      if (text?.trim()) {
+        await handleUserSpeech(text.trim());
+      } else {
+        setThinking(false);
+        void say("I didn't quite catch that. Could you try again?", "empathetic");
+      }
+    } catch {
+      setThinking(false);
+      void say("I'm having trouble with voice right now. Please try again.", "empathetic");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  function handleMicClick() {
+    if (isListening) stopListening();
+    else startListening();
+  }
+
+  function handleRoadmapOpen() { setRoadmapOpen(true); }
+  function handleRoadmapClose() { setRoadmapOpen(false); }
+  function handleChatToggle() { setChatMode((v) => !v); }
+
+  async function handleChatSend() {
+    if (!chatInput.trim() || isProcessing) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    await handleUserSpeech(text);
+  }
+
+  function handleOpenSheet() {
+    setOverlayReady(true);
+    setOverlayDismissed(false);
+  }
+
+  async function handleUserSpeech(userText: string) {
+    const msgs: ConversationMessage[] = [
+      ...conversationMessages,
+      { role: "user", content: userText },
+    ];
+    setConversationMessages(msgs);
+    setThinking(true);
+
+    try {
+      const res = await fetch("/api/demo/conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: msgs, frameIndex: currentIndex, knownFields }),
+      });
+      const resJson = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) throw new Error(typeof resJson.error === "string" ? resJson.error : "Conversation failed");
+      const data = resJson as {
+        mascotMessage: string;
+        tone: Tone;
+        extractedData: (Record<string, string> & { return: string }) | null;
+        isComplete: boolean;
+        knownFields?: Record<string, string>;
+      };
+
+      if (data.knownFields) setKnownFields(data.knownFields);
+
+      if (data.extractedData && currentIndex === 1) {
+        setTripData({
+          city: data.extractedData.city,
+          country: data.extractedData.country,
+          originCity: data.extractedData.originCity ?? "Chicago",
+          departure: data.extractedData.departure,
+          returnDate: data.extractedData.return,
+          passportExpiry: data.extractedData.passportExpiry,
+          purpose: data.extractedData.purpose ?? "",
+        });
+      }
+
+      setConversationMessages([...msgs, { role: "assistant", content: data.mascotMessage, frameIndex: currentIndex }]);
+      setThinking(false);
+      await say(data.mascotMessage, data.tone);
+      if (data.extractedData && currentIndex === 1) setOverlayReady(true);
+    } catch {
+      setThinking(false);
+      await say("I'm having trouble connecting right now. Please try again.", "empathetic");
+    }
+  }
+
+  // ── Frame actions ────────────────────────────────────────────
+
+  async function handlePrimary() {
+    // Allow re-running on frame 7 (resubmit after rejection) and frame 11
+    // (resubmit exception after denial). Otherwise, completed frames are locked.
+    const isResubmittableLoop = currentIndex === 7 || currentIndex === 11;
+    if (isProcessing || (frameCompleted[currentIndex] && !isResubmittableLoop)) return;
+
+    setIsProcessing(true);
+    try {
+      if (currentIndex === 1) {
+        await ensureDemoTrip();
+      } else {
+        const ensuredTripId = tripId ?? await ensureDemoTrip();
+        if (ensuredTripId) {
+          if (currentIndex === 6 || currentIndex === 7) {
+            setApprovalPollResult(null);
+          }
+          if (currentIndex === 11) {
+            setExceptionPollResult(null);
+          }
+          const actionResult = await executeFrameAction(currentIndex, ensuredTripId, {
+            flight: selectedFlight,
+            hotel: selectedHotel,
+            selectedReturn,
+            bundle: selectedBundle,
+            liveFlightGroups: liveFlightResults,
+            liveHotels,
+            tripCountry: tripData?.country ?? DEMO_DEFAULTS.country,
+            visaInfo,
+            tripData,
+          });
+          if (actionResult.approvalSentAt) setApprovalSentAt(actionResult.approvalSentAt);
+          if (actionResult.exceptionSentAt) setExceptionSentAt(actionResult.exceptionSentAt);
+        }
+      }
+
+      setFrameCompleted((prev) => ({ ...prev, [currentIndex]: true }));
+      setOverlayDismissed(true); // close sheet on success
+
+      // Auto-progress to next visible frame
+      // Skip auto-progression for polling/resubmit frames:
+      //   Frame 6 (approval sent) → advances to 7 (manager polling), handled by auto-progress
+      //   Frame 7 (resubmit loop) → stays until manager approves (polling handles advance)
+      //   Frame 11 (exception loop) → stays until manager approves (polling handles advance)
+      //   Frame 15 (archive/final) → no next frame
+      const isPollingFrame = currentIndex === 7 || currentIndex === 11;
+      const isFinalFrame = currentIndex >= FRAMES.length - 1;
+      if (!isPollingFrame && !isFinalFrame) {
+        const nextVisibleIndex = getNearestVisibleFrameIndex(currentIndex + 1);
+        if (nextVisibleIndex > currentIndex && nextVisibleIndex < FRAMES.length) {
+          setTimeout(() => {
+            stopSpeaking();
+            setOverlayReady(false);
+            setOverlayDismissed(false);
+            setCurrentIndex(nextVisibleIndex);
+          }, 800);
+        }
+      }
+    } catch (err) {
+      console.error("Frame action error:", err);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  function handleSecondary() { setOverlayDismissed(true); }
+  function handleEllipsisOpen() { setOverlayDismissed(false); }
+  function handleSheetClose() { setOverlayDismissed(true); }
+  function handleResetDemo() {
+    window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
+    window.location.reload();
+  }
+
+  function handleFrameSelect(nextIndex: number) {
+    if (isProcessing || nextIndex === currentIndex || !isVisibleFrameIndex(nextIndex)) return;
+    stopSpeaking();
+    setOverlayReady(false);
+    setOverlayDismissed(false);
+    setCurrentIndex(nextIndex);
+  }
+
+  function handleForceApproval() {
+    stopSpeaking();
+    setOverlayReady(false);
+    setOverlayDismissed(false);
+    setApprovalPollResult({ found: true, status: "approved", reason: "Force-approved via demo controls" });
+    setFrameCompleted((prev) => ({ ...prev, 5: true, 6: true, 7: true }));
+    setCurrentIndex(8);
+  }
+
+  function handleForceRejection() {
+    stopSpeaking();
+    setOverlayReady(false);
+    setOverlayDismissed(false);
+    setApprovalPollResult({ found: true, status: "rejected", reason: "Force-rejected via demo controls", flaggedItems: ["Flight cost over budget"] });
+    setTripData((prev) => prev ? {
+      ...prev,
+      approvalThread: {
+        status: "rejected",
+        reason: "Force-rejected via demo controls",
+        flaggedItems: ["Flight cost over budget"],
+      },
+    } : prev);
+    setFrameCompleted((prev) => ({ ...prev, 6: true }));
+    setCurrentIndex(7);
+  }
+
+  function handleForceRebooking() {
+    stopSpeaking();
+    setOverlayReady(false);
+    setOverlayDismissed(false);
+    setFrameCompleted((prev) => ({ ...prev, 9: true }));
+    setCurrentIndex(10);
+  }
+
+  function handleForceArrival() {
+    stopSpeaking();
+    setOverlayReady(false);
+    setOverlayDismissed(false);
+    setFrameCompleted((prev) => ({ ...prev, 11: true }));
+    setCurrentIndex(12);
+  }
+
+  async function ensureDemoTrip() {
+    if (tripId) return tripId;
+
+    const data = tripData ?? DEMO_DEFAULTS;
+    try {
+      const res = await fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destination: { city: data.city, country: data.country, officeLat: 45.4654, officeLng: 9.1866 },
+          dates: { departure: data.departure, return: data.returnDate },
+        }),
+      });
+
+      if (!res.ok) return null;
+      const trip = (await res.json()) as { _id: string };
+      setTripId(trip._id);
+      return trip._id;
+    } catch {
+      return null;
+    }
+  }
+
+  if (status === "unauthenticated") {
+    return (
+      <main className={styles.page}>
+        <LoginScreen />
+      </main>
+    );
+  }
+
+  if (!isProgressHydrated || status === "loading") {
+    return (
+      <main className={styles.page}>
+        <div className={styles.phone}>
+          <section className={styles.shell} />
+        </div>
+      </main>
+    );
+  }
+
+  // ── Render helpers ───────────────────────────────────────────
+
+  function renderFrameVisual() {
+    switch (currentIndex) {
+      case 0: return <FoxLoadingFrame />;
+      case 1: return <TripCard travelerName={travelerName} tripData={tripData} />;
+      case 2:
+        if (isFlightSearchLoading) {
+          return (
+            <FlightSearchState
+              body="Running Fair Grid across live dates and nearby airports."
+              icon={<PlaneTakeoff size={18} strokeWidth={2.1} />}
+              title="Searching Live Flights"
+            />
+          );
+        }
+        if (flightSearchMessage) {
+          return (
+            <FlightSearchState
+              body={flightSearchMessage}
+              icon={<ShieldAlert size={18} strokeWidth={2.1} />}
+              title="Live Flight Search Required"
+            />
+          );
+        }
+        if (!liveFlights?.length) {
+          return (
+            <FlightSearchState
+              body="No live flight options are loaded yet."
+              icon={<Route size={18} strokeWidth={2.1} />}
+              title="Waiting for Fair Grid"
+            />
+          );
+        }
+        return (
+          <FlightPickerV2
+            groups={liveFlights}
+            onOutboundChange={setSelectedFlight}
+            onReturnChange={setSelectedReturn}
+            returnValue={selectedReturn}
+            tripData={tripData}
+            value={selectedFlight}
+          />
+        );
+      case 3: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
+      case 4: {
+        const flightGroups = liveFlights ?? DEMO_FLIGHT_GROUPS;
+        const flightGroup = flightGroups[selectedFlight] ?? flightGroups[0];
+        const returnFlight = flightGroup?.returns?.[selectedReturn] ?? flightGroup?.returns?.[0];
+        const liveHotel = liveHotels?.[selectedHotel] ?? liveHotels?.[0];
+        const demoHotel = DEMO_HOTELS[selectedHotel] ?? DEMO_HOTELS[0];
+        const hotelName = liveHotel?.name ?? demoHotel.name;
+        const hotelRate = liveHotel?.nightlyRateUsd ?? demoHotel.pricePerNightUsd;
+        return (
+          <ComplianceReportRefined
+            visa={visaInfo}
+            hotelName={hotelName}
+            hotelNightlyRateUsd={hotelRate}
+            hotelCapUsd={200}
+            flightNumber={flightGroup?.flightNumber}
+            flightTotalUsd={returnFlight?.totalPriceUsd}
+            flightCapUsd={800}
+            departure={tripData?.departure ?? DEMO_DEFAULTS.departure}
+            returnDate={tripData?.returnDate ?? DEMO_DEFAULTS.returnDate}
+          />
+        );
+      }
+      case 5: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
+      case 6:
+        return (
+          <ApprovalEmailPanel
+            liveFlightGroups={liveFlightResults}
+            liveHotels={liveHotels}
+            selectedFlight={selectedFlight}
+            selectedHotel={selectedHotel}
+            selectedReturn={selectedReturn}
+            tripData={tripData}
+          />
+        );
+      case 7:
+        return (
+          <ApprovalPolling
+            liveHotels={liveHotels}
+            pollResult={approvalPollResult}
+            selectedHotel={selectedHotel}
+            tripData={tripData}
+          />
+        );
+      case 8: {
+        const liveHotel = liveHotels?.[selectedHotel] ?? liveHotels?.[0];
+        const demoHotel = DEMO_HOTELS[selectedHotel] ?? DEMO_HOTELS[0];
+        const hotelName = liveHotel?.name ?? demoHotel.name;
+        const hotelAddress = liveHotel?.address ?? demoHotel.address;
+        const departure = tripData?.departure ?? DEMO_DEFAULTS.departure;
+        return (
+          <PrepChecklist
+            visa={visaInfo}
+            passportExpiry={tripData?.passportExpiry ?? DEMO_DEFAULTS.passportExpiry}
+            departure={departure}
+            weather={liveWeather}
+            hotelName={hotelName}
+            hotelAddress={hotelAddress}
+            checkInDate={fmtDate(departure)}
+          />
+        );
+      }
+      case 10: case 11: {
+        const flightGroups = liveFlights ?? DEMO_FLIGHT_GROUPS;
+        const group = flightGroups[selectedFlight] ?? flightGroups[0];
+        const returnFlight = group.returns?.[selectedReturn] ?? group.returns?.[0];
+        const origPrice = returnFlight?.totalPriceUsd ?? group.returns?.[0]?.totalPriceUsd ?? 1067;
+        const rebooking = buildRebookingData(group, origPrice);
+        if (currentIndex === 10) return <FlightRebooking rebooking={rebooking} />;
+        if (frameCompleted[11]) {
+          return <ExceptionPolling pollResult={exceptionPollResult} rebooking={rebooking} tripData={tripData} />;
+        }
+        return <ExceptionEmail rebooking={rebooking} tripData={tripData} />;
+      }
+      case 12:
+        if (frameCompleted[12]) {
+          return <TransportConfirmed selectedIndex={selectedTransport} liveData={liveTransportData} />;
+        }
+        return (
+          <ArrivalSupportRefined
+            value={selectedTransport}
+            onChange={setSelectedTransport}
+            onDataLoaded={setLiveTransportData}
+          />
+        );
+      case 14: return <ContactCardsRefined city={tripData?.city ?? DEMO_DEFAULTS.city} />;
+      case 15: return <SpendSummary tripId={tripId} />;
+      default: { const V = frame.Visual; return <V />; }
+    }
+  }
+
+  const canConfirmCurrentFrame = true;
+  const isSheetLoading = isProcessing || (currentIndex === 2 && isFlightSearchLoading);
+
+  const scrollContent = isSheetLoading ? (
+    <SheetDotsLoader />
+  ) : (
+    <div className={styles.sheetContent}>
+      <h2 className={styles.sheetTitle}>{frame.sheetTitle}</h2>
+      {renderFrameVisual()}
+    </div>
+  );
+
+  // Frames 7 and 11 are resubmit loops: stay clickable after first send
+  // so the user can re-send when the manager rejects the request.
+  const loopPoll =
+    currentIndex === 7 ? approvalPollResult :
+    currentIndex === 11 && frameCompleted[11] ? exceptionPollResult :
+    null;
+  const isResubmitLoop = currentIndex === 7 || currentIndex === 11;
+  const isAwaitingReply =
+    isResubmitLoop &&
+    frameCompleted[currentIndex] &&
+    (!loopPoll || !loopPoll.found || loopPoll.status !== "rejected");
+  const wasRejected = isResubmitLoop && loopPoll?.found && loopPoll.status === "rejected";
+
+  const primaryDisabled =
+    isProcessing ||
+    !canConfirmCurrentFrame ||
+    isAwaitingReply ||
+    (frameCompleted[currentIndex] && !isResubmitLoop);
+
+  const primaryLabel = isProcessing
+    ? "Saving…"
+    : isAwaitingReply
+    ? "Waiting for Reply…"
+    : wasRejected
+    ? "Resubmit"
+    : frameCompleted[currentIndex]
+    ? "Done"
+    : frame.options[0];
+
+  const footerContent = isSheetLoading ? null : (
+    <div className={styles.sheetActions}>
+      <button
+        className={[styles.actionButton, styles.primaryAction].join(" ")}
+        disabled={primaryDisabled}
+        onClick={() => void handlePrimary()}
+        type="button"
+      >
+        {primaryLabel}
+      </button>
+      <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={handleSecondary} type="button">
+        {frame.options[1]}
+      </button>
+    </div>
+  );
 
   return (
     <main className={styles.page}>
-      <section className={styles.shell}>
-        <button aria-label="Open menu" className={styles.menuButton} type="button">
-          <MenuIcon />
-        </button>
-
-        <div className={styles.stage}>
-          <Mascot
-            bubbleClassName={styles.speech}
-            bubblePosition="below"
-            bubbleSize="lg"
-            bubbleVariant="plain"
-            className={styles.mascot}
-            figureClassName={styles.figure}
-          />
-        </div>
-
-        <div className={styles.controls}>
-          <button
-            aria-label="Trip planning unavailable"
-            className={[styles.iconButton, styles.sideButton, styles.leftButton, styles.disabledButton].join(" ")}
-            disabled
-            type="button"
-          >
-            <ListIcon />
-          </button>
-
-          <button
-            aria-label="Use speech mode"
-            className={[styles.iconButton, styles.primaryButton, mode === "talk" ? styles.buttonActive : ""].join(" ")}
-            onClick={handleTalk}
-            type="button"
-          >
-            <MicIcon />
-          </button>
-
-          <button
-            aria-label="Use text mode"
-            className={[styles.iconButton, styles.sideButton, styles.rightButton, mode === "text" ? styles.buttonActive : ""].join(" ")}
-            onClick={handleText}
-            type="button"
-          >
-            <MessageCircleMoreIcon />
-          </button>
-        </div>
-      </section>
+      <PhoneShell
+        analyserNode={analyserNode}
+        chatInput={chatInput}
+        chatMessages={conversationMessages}
+        chatMode={chatMode}
+        currentFrameIndex={currentIndex}
+        frameCompleted={frameCompleted}
+        isListening={isListening}
+        isProcessing={isProcessing}
+        menuOpen={menuOpen}
+        onChatInputChange={setChatInput}
+        onChatSend={() => void handleChatSend()}
+        onChatToggle={handleChatToggle}
+        onEllipsisOpen={handleEllipsisOpen}
+        onMenuToggle={() => setMenuOpen((v) => !v)}
+        onMicClick={handleMicClick}
+        onOpenSheet={handleOpenSheet}
+        onResetDemo={handleResetDemo}
+        onRoadmapClose={handleRoadmapClose}
+        onRoadmapOpen={handleRoadmapOpen}
+        onEnsureDemoTrip={ensureDemoTrip}
+        onForceApproval={handleForceApproval}
+        onForceRejection={handleForceRejection}
+        onForceRebooking={handleForceRebooking}
+        onForceArrival={handleForceArrival}
+        onSheetClose={handleSheetClose}
+        roadmapOpen={roadmapOpen}
+        sheetFooter={footerContent}
+        sheetScrollContent={scrollContent}
+        sheetOpen={sheetOpen}
+        showEllipsis={showEllipsis}
+      />
     </main>
   );
 }

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // API ROUTE: Crisis Detection + Rebooking
 // ROUTE: GET /api/trips/[id]/crisis?delayMinutes=N

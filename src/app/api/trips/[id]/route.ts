@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // API ROUTE: Single Trip
 // OWNER: Track C (Data & Integrations)

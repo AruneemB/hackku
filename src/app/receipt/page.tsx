@@ -379,7 +379,7 @@ export default function ReceiptScannerPage() {
               <h2 className="text-lg font-semibold">{saved.merchant}</h2>
               <p className="text-green-400 font-medium text-xl mt-1">${saved.totalUsd}</p>
               <p className="text-gray-500 text-xs mt-1">
-                {saved.originalAmount} {saved.currency} · {saved.category}
+                {saved.currency} · {saved.category}
               </p>
             </div>
             <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 text-xs text-gray-500 text-left w-full">

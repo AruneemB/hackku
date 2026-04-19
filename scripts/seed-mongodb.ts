@@ -89,9 +89,9 @@ async function main() {
   console.log("✅ Seeded visa requirements")
 
   // Step 6: Seed demo trip (Lockey → Milan, draft)
-  await db.collection("trips").deleteMany({ userId: lockeyId })
+  await db.collection("trips").deleteMany({ userId: LockeyId })
   await db.collection("trips").insertOne({
-    userId: lockeyId,
+    userId: LockeyId,
     status: "draft",
     destination: { city: "Milan", country: "IT", officeLat: 45.4654, officeLng: 9.1866 },
     dates: { departure: new Date("2025-09-14"), return: new Date("2025-09-19") },

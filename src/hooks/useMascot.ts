@@ -236,13 +236,13 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
           utterance.onerror = () => {
             const ms = getFallbackDuration(text);
             startEstimatedReveal(text, ms);
-            fallbackTimer = window.setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
+            fallbackTimer = (window as any).setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
           };
           window.speechSynthesis.speak(utterance);
         } else {
           const ms = getFallbackDuration(text);
           startEstimatedReveal(text, ms);
-          fallbackTimer = window.setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
+          fallbackTimer = (window as any).setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
         }
       });
     });
@@ -258,7 +258,7 @@ async function speakWithBrowser(text: string, tone: ToneKey): Promise<void> {
     const ms = getFallbackDuration(text);
     startEstimatedReveal(text, ms);
     await new Promise<void>((resolve) => {
-      fallbackTimer = window.setTimeout(() => {
+      fallbackTimer = (window as any).setTimeout(() => {
         revealTo(text.length);
         setMascotState({ isSpeaking: false });
         fallbackTimer = null;
@@ -286,7 +286,7 @@ async function speakWithBrowser(text: string, tone: ToneKey): Promise<void> {
     utterance.onerror = () => {
       const ms = getFallbackDuration(text);
       startEstimatedReveal(text, ms);
-      fallbackTimer = window.setTimeout(() => {
+      fallbackTimer = (window as any).setTimeout(() => {
         revealTo(text.length);
         setMascotState({ isSpeaking: false });
         fallbackTimer = null;

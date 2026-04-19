@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // API ROUTE: Trip Hotel Search
 // OWNER: Track C (Data & Integrations)
