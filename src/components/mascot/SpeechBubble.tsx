@@ -56,12 +56,14 @@ export function SpeechBubble({
           lineHeight,
           letterSpacing: "-0.03em",
           fontWeight: 600,
+          transition: "font-size 240ms ease, line-height 240ms ease",
         }
       : {
           fontSize,
           lineHeight,
           letterSpacing: "0",
           fontWeight: 500,
+          transition: "font-size 240ms ease, line-height 240ms ease",
         };
 
   const bubbleHeight = size === "lg" ? 108 : 86;
@@ -102,37 +104,21 @@ export function SpeechBubble({
           <span />
         </div>
       ) : (
-        <div
+        <p
           style={{
-            position: "relative",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
+            margin: 0,
+            color: "var(--cc-text-primary)",
+            textAlign: "center",
+            ...textStyle,
           }}
         >
-          <p
-            style={{
-              margin: 0,
-              color: "var(--cc-text-primary)",
-              textAlign: "center",
-              ...textStyle,
-            }}
-          >
-            {displayed}
-          </p>
+          {displayed}
           {afterTextSlot ? (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                left: "50%",
-                transform: "translateX(-50%)",
-              }}
-            >
+            <span style={{ display: "inline-flex", alignItems: "center", verticalAlign: "middle", marginLeft: 2 }}>
               {afterTextSlot}
-            </div>
+            </span>
           ) : null}
-        </div>
+        </p>
       )}
     </div>
   );

@@ -6,90 +6,117 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import styles from "../../app/demo/page.module.css";
 
-// Fix leaflet default icons in next.js
-const customIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+type HotelPin = {
+  label: string;
+  name: string;
+  dist: string;
+  price: string;
+  preferred: boolean;
+  lat: number;
+  lng: number;
+};
 
-const officeIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+function createHotelIcon(num: number, selected: boolean) {
+  const size = selected ? 32 : 26;
+  const opacity = selected ? "1" : "0.42";
+  const fontSize = selected ? 13 : 11;
+  return L.divIcon({
+    html: `<div style="position:relative;width:${size}px;height:${size}px;background:#f35b4f;border-radius:50%;opacity:${opacity};"><span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-57.5%);font-size:${fontSize}px;font-weight:700;color:#fff;font-family:-apple-system,system-ui,sans-serif;line-height:1;user-select:none;">${num}</span></div>`,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2 + 4)],
+  });
+}
 
-// A component to automatically fit the map bounds to all markers
+function createOfficeIcon() {
+  return L.divIcon({
+    html: `<div style="position:relative;width:30px;height:30px;background:#1a2530;border-radius:8px;"><span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);line-height:0;"><svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white' width='13' height='13'><path d='M6 2v20h12V2H6zm4 16H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V8h2v2zm6 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V8h2v2z'/></svg></span></div>`,
+    className: "",
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -17],
+  });
+}
+
 function MapBounds({ bounds }: { bounds: L.LatLngBoundsExpression }) {
   const map = useMap();
   useEffect(() => {
-    if (bounds && Array.isArray(bounds) && bounds.length > 0) {
-      map.fitBounds(bounds, { padding: [20, 20], maxZoom: 15 });
+    if (bounds && Array.isArray(bounds) && (bounds as L.LatLngTuple[]).length > 0) {
+      map.fitBounds(bounds, { padding: [28, 28], maxZoom: 14 });
     }
   }, [map, bounds]);
   return null;
 }
 
-export default function LeafletHotelMap({ hotels, officeLat = 45.4654, officeLng = 9.1866, value, onChange }: { hotels: any[], officeLat?: number, officeLng?: number, value?: number, onChange?: (i: number) => void }) {
+export default function LeafletHotelMap({
+  hotels,
+  officeLat = 45.4654,
+  officeLng = 9.1866,
+  value,
+  onChange,
+}: {
+  hotels: any[];
+  officeLat?: number;
+  officeLng?: number;
+  value?: number;
+  onChange?: (i: number) => void;
+}) {
   const [localSel, setLocalSel] = useState(0);
   const sel = value ?? localSel;
   const setSel = onChange ?? setLocalSel;
 
-  const defaultHotels = [
-    { label: "H1", name: "Marriott Scala", dist: "0.4 km", price: "$247/n", preferred: true, lat: officeLat, lng: officeLng + 0.005 },
-    { label: "H2", name: "AC Hotel Milan", dist: "1.2 km", price: "$189/n", preferred: true, lat: officeLat + 0.0108, lng: officeLng },
-    { label: "H3", name: "NH Collection", dist: "2.1 km", price: "$165/n", preferred: false, lat: officeLat - 0.015, lng: officeLng - 0.01 },
+  const defaultHotels: HotelPin[] = [
+    { label: "1", name: "Marriott Scala", dist: "0.4 km", price: "$247", preferred: true, lat: officeLat, lng: officeLng + 0.005 },
+    { label: "2", name: "AC Hotel Milan", dist: "1.2 km", price: "$189", preferred: true, lat: officeLat + 0.0108, lng: officeLng },
+    { label: "3", name: "NH Collection", dist: "2.1 km", price: "$165", preferred: false, lat: officeLat - 0.015, lng: officeLng - 0.01 },
   ];
 
-  const displayHotels = hotels?.length
+  const displayHotels: HotelPin[] = hotels?.length
     ? hotels.map((h, i) => ({
-        label: `H${i + 1}`,
+        label: `${i + 1}`,
         name: h.name,
         dist: `${h.distanceFromOfficeKm.toFixed(1)} km`,
-        price: `$${h.nightlyRateUsd}/n`,
+        price: `$${h.nightlyRateUsd}`,
         preferred: !!h.preferred,
         lat: h.location?.coordinates ? h.location.coordinates[1] : defaultHotels[i % defaultHotels.length].lat,
         lng: h.location?.coordinates ? h.location.coordinates[0] : defaultHotels[i % defaultHotels.length].lng,
       }))
     : defaultHotels;
 
-  // Build bounds matching the office and all hotels
   const bounds: L.LatLngTuple[] = [
     [officeLat, officeLng],
-    ...displayHotels.map(h => [h.lat, h.lng] as L.LatLngTuple)
+    ...displayHotels.map((h) => [h.lat, h.lng] as L.LatLngTuple),
   ];
+
+  const officeIcon = createOfficeIcon();
 
   return (
     <div className={styles.mapWrap}>
-      <div style={{ height: 240, width: "100%", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(159, 171, 183, 0.25)", position: "relative", zIndex: 1 }}>
+      <div className={styles.hotelMapContainer}>
         <MapContainer
           center={[officeLat, officeLng]}
           zoom={13}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl={true}
+          style={{ height: 220, width: "100%" }}
+          zoomControl={false}
           attributionControl={false}
           dragging={true}
           touchZoom={true}
-          scrollWheelZoom={true}
+          scrollWheelZoom={false}
         >
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
           <Marker position={[officeLat, officeLng]} icon={officeIcon}>
             <Popup><strong>Client Office</strong></Popup>
           </Marker>
           {displayHotels.map((h, i) => (
-            <Marker key={i} position={[h.lat, h.lng]} icon={customIcon}>
+            <Marker
+              key={`hotel-${i}-${sel === i}`}
+              position={[h.lat, h.lng]}
+              icon={createHotelIcon(i + 1, sel === i)}
+              eventHandlers={{ click: () => setSel(i) }}
+            >
               <Popup>
-                <strong>{h.name}</strong><br />
-                {h.dist} • {h.price}
+                <strong>{h.name}</strong><br />{h.dist} · {h.price}/night
               </Popup>
             </Marker>
           ))}
@@ -98,31 +125,47 @@ export default function LeafletHotelMap({ hotels, officeLat = 45.4654, officeLng
       </div>
 
       <div className={styles.mapLegend}>
-        <div className={styles.mapLegendItem}><span className={styles.mapDotDark} />Client office</div>
-        <div className={styles.mapLegendItem}><span className={styles.mapDotAccent} />Hotels</div>
+        <div className={styles.mapLegendItem}>
+          <span className={styles.mapDotOffice} />
+          Client office
+        </div>
+        <div className={styles.mapLegendItem}>
+          <span className={styles.mapDotAccent} />
+          Hotels (tap to select)
+        </div>
       </div>
 
-      <div className={styles.cards}>
-        {displayHotels.map((h, i) => (
-          <button
-            className={[styles.card, sel === i ? styles.cardSelected : ""].join(" ")}
-            key={h.label}
-            onClick={() => setSel(i)}
-            type="button"
-          >
-            <div className={styles.cardRow}>
-              <span className={styles.cardMain}>
-                <span className={styles.hotelBadge} style={{ marginRight: 8, transform: 'scale(0.85)' }}>{h.label}</span>
-                {h.name}
-              </span>
-              <span className={styles.cardPrice}>{h.price}</span>
-            </div>
-            <div className={styles.cardRow}>
-              <span className={styles.cardMeta}>{h.dist} from office</span>
-              {h.preferred && <span className={styles.cardMeta}>⭐ Preferred</span>}
-            </div>
-          </button>
-        ))}
+      <div className={styles.fpCards}>
+        {displayHotels.map((h, i) => {
+          const isSelected = sel === i;
+          return (
+            <button
+              key={h.label}
+              className={[styles.fpCard, isSelected ? styles.fpCardSelected : ""].join(" ")}
+              onClick={() => setSel(i)}
+              type="button"
+            >
+              <div className={styles.fpCardTop}>
+                <span className={styles.fpAirline}>
+                  {h.preferred ? "Preferred vendor" : "3rd party"}
+                </span>
+                {h.preferred && (
+                  <span className={[styles.cardTag, isSelected ? styles.cardTagSelected : ""].join(" ")}>
+                    Preferred
+                  </span>
+                )}
+              </div>
+              <div className={styles.hotelCardName}>
+                <span className={styles.hotelBadge}>{h.label}</span>
+                <span className={styles.hotelCardNameText}>{h.name}</span>
+              </div>
+              <div className={styles.fpCardBottom}>
+                <span className={styles.fpStopsMeta}>{h.dist} from office</span>
+                <span className={styles.hotelCardPrice}>{h.price}/night</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
