@@ -1,0 +1,168 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 14px 18px;
+  background: #fffdfb;
+  color: #1a2530;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 14px;
+}
+
+.headerCopy {
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #1a2530;
+}
+
+.utilityButton,
+.secondaryAction,
+.captureButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 14px;
+  border-radius: 18px;
+  cursor: pointer;
+  transition:
+    transform 110ms ease,
+    border-bottom-width 110ms ease,
+    filter 150ms ease,
+    opacity 150ms ease;
+}
+
+.utilityButton {
+  width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(90, 102, 114, 0.88);
+  transition: color 150ms ease;
+}
+
+.utilityButton:hover,
+.secondaryAction:hover:not(:disabled),
+.captureButton:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+.utilityButton:active,
+.secondaryAction:active:not(:disabled),
+.captureButton:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+.utilityButton:hover {
+  color: #1a2530;
+  filter: none;
+}
+
+.stage {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.cameraWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(159, 171, 183, 0.22);
+  background: #101417;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hiddenVideo {
+  visibility: hidden;
+}
+
+.fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px;
+  color: rgba(255, 255, 255, 0.88);
+  text-align: center;
+}
+
+.fallbackTitle {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.fallbackBody {
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  padding-top: 14px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+}
+
+.secondaryAction,
+.captureButton {
+  width: 100%;
+  padding: 0 18px;
+  border: 1px solid rgba(192, 72, 62, 0.24);
+  border-bottom-width: 5px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.secondaryAction {
+  background: rgba(159, 171, 183, 0.15);
+  color: #1a2530;
+  border-color: rgba(159, 171, 183, 0.3);
+}
+
+.captureButton {
+  background: #f35b4f;
+  color: #ffffff;
+}
+
+.captureButton:disabled {
+  background: rgba(159, 171, 183, 0.22);
+  border-color: rgba(159, 171, 183, 0.28);
+  color: rgba(45, 59, 69, 0.56);
+  cursor: not-allowed;
+  filter: saturate(0.35);
+}
