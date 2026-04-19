@@ -42,6 +42,10 @@ const VisaRequirementSchema = new Schema(
       type: String,
       default: null,
     },
+    minApplicationLeadDays: {
+      type: Number,
+      default: null,
+    },
   },
   { timestamps: true }
 );
