@@ -9,7 +9,7 @@
 //   POST /api/auth/signout    → clear session
 //
 //   The Google provider is configured in lib/google/oauth.ts
-//   with Gmail compose+readonly scopes so Kelli can authorize
+//   with Gmail compose+readonly scopes so Lockey can authorize
 //   travel email drafting in a single OAuth flow.
 //
 // ENV REQUIRED:

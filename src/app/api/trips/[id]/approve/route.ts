@@ -3,7 +3,7 @@
 // OWNER: Track C (Data & Integrations)
 // ROUTE: POST /api/trips/[id]/approve
 // DESCRIPTION: Drafts and sends the manager approval email
-//   from Kelli's Gmail using the Google OAuth access token.
+//   from Lockey's Gmail using the Google OAuth access token.
 //   Updates trip status to "pending_approval" and stores the
 //   Gmail thread ID for the Atlas Trigger to watch.
 //
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, context: ApproveRouteContext) {
     }
 
     const fromEmail = session.user?.email ?? "me"
-    const userName  = session.user?.name ?? "Lockey"
+    const userName = session.user?.name ?? "Lockey"
 
     const threadId = await sendApprovalRequest(
       session.accessToken!,

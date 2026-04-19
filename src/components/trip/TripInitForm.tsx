@@ -2,7 +2,7 @@
 // COMPONENT: TripInitForm
 // OWNER: Track A (Frontend & UX)
 // FRAME: 1 — Identity and Intent Initialization
-// DESCRIPTION: The first form Kelli sees. She enters:
+// DESCRIPTION: The first form Lockey sees. She enters:
 //   - Destination city/country (dropdown of 6 demo countries)
 //   - Departure date
 //   - Return date

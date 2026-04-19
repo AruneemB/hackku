@@ -29,8 +29,8 @@ export interface User {
 // EXAMPLE document returned from MongoDB:
 // {
 //   "_id": "664f1a2b3c4d5e6f7a8b9c0d",
-//   "name": "Kelli Thompson",
-//   "email": "kelli.thompson@lockton.com",
+//   "name": "Lockey Thompson",
+//   "email": "lockey.thompson@lockton.com",
 //   "citizenship": "US",
 //   "passport": {
 //     "number": "XXXXXXXXX",
