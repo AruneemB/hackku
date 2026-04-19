@@ -16,6 +16,16 @@ const DynamicHotelMap = dynamic(() => import("@/components/map/LeafletHotelMap")
 
 type Tone = "neutral" | "excited" | "empathetic" | "urgent";
 
+type ManagerPollResult = {
+  found: boolean;
+  noAuth?: boolean;
+  status?: "approved" | "rejected";
+  reason?: string;
+  flaggedItems?: string[];
+  changes?: { hotel?: string; flight?: string; dates?: string; budget?: string };
+  snippet?: string;
+};
+
 type TripData = {
   city: string;
   country: string;
@@ -24,6 +34,11 @@ type TripData = {
   returnDate: string;
   passportExpiry: string;
   purpose: string;
+  approvalThread?: {
+    status: string;
+    reason: string | null;
+    flaggedItems?: string[];
+  };
 };
 
 type ConversationMessage = { role: "user" | "assistant"; content: string; frameIndex?: number };
@@ -34,9 +49,9 @@ type DemoFrame = {
   message: string;
   sheetTitle: string;
   options: [string, string];
-  Visual: React.ComponentType;
+  Visual: React.ComponentType<any>;
   actionTitle: string;
-  ActionVisual: React.ComponentType;
+  ActionVisual: React.ComponentType<any>;
 };
 
 type DemoProgressSnapshot = {
@@ -60,7 +75,7 @@ type DemoProgressSnapshot = {
 const DEMO_DEFAULTS: TripData = {
   city: "Milan",
   country: "IT",
-  originCity: "Chicago",
+  originCity: "",
   departure: "2026-06-14",
   returnDate: "2026-06-21",
   passportExpiry: "2028-12-01",
@@ -111,7 +126,7 @@ const DEMO_FLIGHT_GROUPS: DisplayFlightGroup[] = [
 const CITY_TO_AIRPORT: Record<string, string> = {
   // North America — origin cities
   "kansas city": "MCI", "st. louis": "STL", "saint louis": "STL",
-  chicago: "ORD", milwaukee: "MKE",
+  chicago: "ORD", milwaukee: "MKE", omaha: "OMA",
   "new york": "JFK", "new york city": "JFK", nyc: "JFK",
   boston: "BOS",
   washington: "DCA", "washington dc": "IAD", "washington d.c.": "IAD",
@@ -136,6 +151,26 @@ const CITY_TO_AIRPORT: Record<string, string> = {
   // Asia / Pacific / Middle East — destination cities
   tokyo: "NRT", dubai: "DXB", singapore: "SIN", sydney: "SYD",
 };
+
+const COUNTRY_CODES: Record<string, string> = {
+  IT: "Italy", FR: "France", DE: "Germany", ES: "Spain", GB: "United Kingdom",
+  NL: "Netherlands", PT: "Portugal", CH: "Switzerland", JP: "Japan",
+  AE: "UAE", SG: "Singapore", AU: "Australia", CA: "Canada", MX: "Mexico",
+  US: "United States",
+};
+
+function expandCountry(code: string): string {
+  return COUNTRY_CODES[code.toUpperCase()] ?? code;
+}
+
+function fmtDateRange(departure: string, returnDate: string): string {
+  const dep = new Date(departure);
+  const ret = new Date(returnDate);
+  const depStr = dep.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const retDay = ret.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
+  const year = ret.getUTCFullYear();
+  return `${depStr}–${retDay}, ${year}`;
+}
 
 function fmtTime(d: Date | string) {
   const dt = typeof d === "string" ? new Date(d) : d;
@@ -220,7 +255,7 @@ async function patchTrip(tripId: string, data: Record<string, unknown>) {
 async function executeFrameAction(
   frameIdx: number,
   tripId: string,
-  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveHotels?: Hotel[] | null }
+  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveDisplayFlights?: DisplayFlightGroup[] | null; liveHotels?: Hotel[] | null; tripData?: TripData | null; skipPatch?: boolean }
 ) {
   const liveGroup = sel.liveFlightGroups?.[sel.flight];
   const flight = liveGroup?.outbound ?? DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
@@ -241,12 +276,61 @@ async function executeFrameAction(
     case 4:
       await patchTrip(tripId, { selectedBundle: bundle });
       break;
-    case 5:
-      await patchTrip(tripId, {
-        status: "pending_approval",
-        approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
-      });
+    case 5: {
+      const td = sel.tripData;
+      const homeCode = td?.originCity ? (CITY_TO_AIRPORT[td.originCity.toLowerCase()] ?? td.originCity.substring(0, 3).toUpperCase()) : "ORD";
+      const destCode = td?.city ? (CITY_TO_AIRPORT[td.city.toLowerCase()] ?? td.city.substring(0, 3).toUpperCase()) : "MXP";
+      const destCity = td?.city ?? "Milan";
+      const destCountry = expandCountry(td?.country ?? "Italy");
+      const dateRange = td?.departure && td?.returnDate ? fmtDateRange(td.departure, td.returnDate) : "Sep 14–19, 2025";
+      const flightNum = sel.liveDisplayFlights?.[sel.flight]?.flightNumber ?? liveGroup?.outbound?.outbound?.flightNumber ?? DEMO_FLIGHT_GROUPS[sel.flight]?.flightNumber ?? "LH 8904";
+      const flightPrice = liveGroup?.outbound?.priceUsd ?? 687;
+      const hotelData = (sel.liveHotels?.[sel.hotel] as any) ?? DEMO_HOTELS[sel.hotel] ?? DEMO_HOTELS[0];
+      const hotelName: string = hotelData?.name ?? "not selected";
+      const hotelRate: number = (hotelData as Hotel)?.nightlyRateUsd ?? (hotelData as any)?.pricePerNightUsd ?? 0;
+      const nights = td?.departure && td?.returnDate
+        ? Math.round((new Date(td.returnDate).getTime() - new Date(td.departure).getTime()) / 86400000)
+        : 5;
+      const hotelTotal = hotelRate * nights;
+      const overCap = hotelRate > 200;
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const hotelLine = hotelRate > 0
+          ? `Hotel: ${hotelName} · $${hotelRate}/night x ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.` : ""}`
+          : "Hotel: not selected";
+        const emailBody = [
+          "Hi,",
+          "",
+          `I'm requesting approval for a business trip to ${destCity}, ${destCountry}, ${dateRange} for an on-site client meeting.`,
+          "",
+          `Flight: ${flightNum}, ${homeCode} to ${destCode} · $${flightPrice} (nonstop)`,
+          hotelLine,
+          "",
+          `Total estimated: $${flightPrice + hotelTotal}. Please let me know if you have any questions.`,
+          "",
+          "Thanks,",
+          "Lockey",
+        ].join("\n");
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: managerEmail, subject: `Travel Approval - ${destCity}, ${dateRange}`, body: emailBody }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          console.error("[slide6] gmail-send failed", gmailRes.status, gmailErr);
+          throw new Error(gmailErr.error ?? `gmail-send ${gmailRes.status}`);
+        }
+        console.log("[slide6] email sent to", managerEmail);
+      }
+      if (!sel.skipPatch) {
+        await patchTrip(tripId, {
+          status: "pending_approval",
+          approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
+        });
+      }
       break;
+    }
     case 6: {
       const altHotel = sel.liveHotels?.find((h) => !h.overPolicyCap) ?? sel.liveHotels?.[1] ?? DEMO_HOTELS[1];
       await patchTrip(tripId, {
@@ -395,7 +479,7 @@ function FlightPicker({
                 {g.returns.map((r, ri) => (
                   <button
                     className={[styles.returnCard, retSel === ri ? styles.returnCardSelected : ""].join(" ")}
-                    key={r.id}
+                    key={`${r.id}-${ri}`}
                     onClick={() => selectReturn(ri)}
                     type="button"
                   >
@@ -456,8 +540,14 @@ function FlightPickerV2({
   const [localRetSel, setLocalRetSel] = useState(0);
   const sel = value ?? localSel;
   const retSel = returnValue ?? localRetSel;
-  const list = groups?.length ? groups : DEMO_FLIGHT_GROUPS;
   const activeTrip = tripData ?? DEMO_DEFAULTS;
+  const list = (groups?.length ? groups : DEMO_FLIGHT_GROUPS).map(g => {
+    const homeAirport = activeTrip.originCity ? (CITY_TO_AIRPORT[activeTrip.originCity.toLowerCase()] ?? activeTrip.originCity.substring(0, 3).toUpperCase()) : "ORD";
+    if (g.route.startsWith("ORD") && homeAirport !== "ORD") {
+      return { ...g, route: g.route.replace("ORD", homeAirport) };
+    }
+    return g;
+  });
   const tripLengthDays = getTripLengthDays(activeTrip.departure, activeTrip.returnDate);
 
   function selectOutbound(i: number) {
@@ -541,7 +631,7 @@ function FlightPickerV2({
                       const isRetSel = retSel === ri;
                       return (
                         <button
-                          key={r.id}
+                          key={`${r.id}-${ri}`}
                           className={[styles.fpReturnRow, isRetSel ? styles.fpReturnRowSelected : ""].join(" ")}
                           onClick={() => selectReturn(ri)}
                           type="button"
@@ -600,7 +690,17 @@ function FlightSearchState({
   );
 }
 
-function ComplianceReport() {
+function ComplianceReport({ selectedHotel, liveHotels, selectedFlight, liveFlights, tripData }: { selectedHotel?: number; liveHotels?: Hotel[] | null; selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null; tripData?: TripData | null }) {
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "Marriott Scala";
+  const hotelRate: number = (hotelData as Hotel)?.nightlyRateUsd ?? (hotelData as any)?.pricePerNightUsd ?? 247;
+  const overCap = hotelRate > 200;
+  const flightNum: string = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000)
+    : 5;
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
+  const destCity = tripData?.city ?? "Milan";
   return (
     <div className={styles.complianceList}>
       <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
@@ -610,79 +710,154 @@ function ComplianceReport() {
           <div className={styles.complianceBody}>US citizens must apply ≥ 15 days before departure</div>
         </div>
       </div>
-      <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
-        <span className={styles.complianceIcon}>⚠️</span>
-        <div>
-          <div className={styles.complianceTitle}>Hotel Exception Needed</div>
-          <div className={styles.complianceBody}>Marriott Scala at $247/night exceeds the $200 Milan cap</div>
+      {overCap && (
+        <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+          <span className={styles.complianceIcon}>⚠️</span>
+          <div>
+            <div className={styles.complianceTitle}>Hotel Exception Needed</div>
+            <div className={styles.complianceBody}>{hotelName} at ${hotelRate}/night exceeds the $200 {destCity} cap</div>
+          </div>
         </div>
-      </div>
+      )}
       <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
         <span className={styles.complianceIcon}>✓</span>
         <div>
           <div className={styles.complianceTitle}>Flight within budget</div>
-          <div className={styles.complianceBody}>LH 8904 at $687 · approved cap is $800</div>
+          <div className={styles.complianceBody}>{flightNum} · approved cap is $800</div>
         </div>
       </div>
       <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
         <span className={styles.complianceIcon}>✓</span>
         <div>
           <div className={styles.complianceTitle}>Travel dates policy-compliant</div>
-          <div className={styles.complianceBody}>Sep 14 to 19 · 5-night stay · within 10-day maximum</div>
+          <div className={styles.complianceBody}>{dateRange} · {nights}-night stay · within 10-day maximum</div>
         </div>
       </div>
     </div>
   );
 }
 
-function ApprovalEmail() {
+function ApprovalEmail({ tripData, selectedHotel, liveHotels, selectedFlight }: { tripData?: TripData | null; selectedHotel?: number; liveHotels?: Hotel[] | null; selectedFlight?: number }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const destCode = tripData?.city ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? tripData.city.substring(0, 3).toUpperCase()) : "MXP";
+  const destCity = tripData?.city ?? "Milan";
+  const destCountry = expandCountry(tripData?.country ?? "Italy");
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "PLACEHOLDER";
+
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "not selected";
+  const hotelRate: number = (hotelData as Hotel)?.nightlyRateUsd ?? (hotelData as any)?.pricePerNightUsd ?? 0;
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000)
+    : 5;
+  const hotelTotal = hotelRate * nights;
+  const overCap = hotelRate > 200;
+
+  const flightGroup = DEMO_FLIGHT_GROUPS[selectedFlight ?? 0] ?? DEMO_FLIGHT_GROUPS[0];
+  const flightNum = flightGroup.flightNumber;
+
   return (
     <div className={styles.emailDraft}>
-      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Travel Approval - Milan, Sep 14-19</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{managerEmail}</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Travel Approval - {destCity}, {dateRange}</span></div>
       <div className={styles.emailBody}>
-        <p>Hi Sarah,</p>
-        <p>I&#39;m requesting approval for a business trip to <strong>Milan, Italy, Sep 14-19, 2025</strong> for an on-site client meeting.</p>
-        <p><strong>Flight:</strong> LH 8904, ORD to MXP · $687 (nonstop)<br />
-        <strong>Hotel:</strong> Marriott Scala · $247/night x 5 = $1,235<br />
-        <strong>Note:</strong> Hotel is $47 over the $200 cap - closest preferred vendor to client office.</p>
-        <p>Total estimated: $2,010. Please let me know if you have any questions.</p>
+        <p>Hi,</p>
+        <p>I&#39;m requesting approval for a business trip to <strong>{destCity}, {destCountry}, {dateRange}</strong> for an on-site client meeting.</p>
+        <p>
+          <strong>Flight:</strong> {flightNum}, {homeCode} to {destCode} (nonstop)<br />
+          {hotelRate > 0 ? (
+            <><strong>Hotel:</strong> {hotelName} · ${hotelRate}/night x {nights} = ${hotelTotal}<br /></>
+          ) : (
+            <><strong>Hotel:</strong> not selected<br /></>
+          )}
+          {overCap && <><strong>Note:</strong> Hotel is ${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.</>}
+        </p>
+        <p>Total estimated: ${hotelRate > 0 ? hotelTotal : 0}. Please let me know if you have any questions.</p>
         <p>Thanks,<br />Lockey</p>
       </div>
     </div>
   );
 }
 
-function HotelComparison() {
+function HotelComparison({ selectedHotel, liveHotels }: { selectedHotel?: number; liveHotels?: Hotel[] | null }) {
+  const rejIdx = selectedHotel ?? 0;
+  const rejData = (liveHotels?.[rejIdx] as any) ?? DEMO_HOTELS[rejIdx] ?? DEMO_HOTELS[0];
+  const rejName: string = rejData?.name ?? "Marriott Scala";
+  const rejRate: number = (rejData as Hotel)?.nightlyRateUsd ?? (rejData as any)?.pricePerNightUsd ?? 247;
+  const rejDist: number = (rejData as Hotel)?.distanceFromOfficeKm ?? (rejData as any)?.distanceKm ?? 0.4;
+  const altIdx = liveHotels
+    ? (liveHotels.findIndex((h, i) => i !== rejIdx && !h.overPolicyCap) ?? 1)
+    : rejIdx === 0 ? 1 : 0;
+  const altData = (liveHotels?.[altIdx < 0 ? 1 : altIdx] as any) ?? DEMO_HOTELS[altIdx < 0 ? 1 : altIdx] ?? DEMO_HOTELS[1];
+  const altName: string = altData?.name ?? "AC Hotel Milan";
+  const altRate: number = (altData as Hotel)?.nightlyRateUsd ?? (altData as any)?.pricePerNightUsd ?? 189;
+  const altDist: number = (altData as Hotel)?.distanceFromOfficeKm ?? (altData as any)?.distanceKm ?? 1.2;
   return (
     <div className={styles.compareGrid}>
       <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
         <div className={styles.compareBadge}>Rejected ✗</div>
-        <div className={styles.compareName}>Marriott Scala</div>
-        <div className={styles.comparePrice}>$247 / night</div>
+        <div className={styles.compareName}>{rejName}</div>
+        <div className={styles.comparePrice}>${rejRate} / night</div>
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
-        <div className={styles.compareMeta}>0.4 km from office</div>
-        <div className={styles.compareReason}>$47 over the $200 cap</div>
+        <div className={styles.compareMeta}>{rejDist} km from office</div>
+        <div className={styles.compareReason}>${rejRate - 200} over the $200 cap</div>
       </div>
       <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
         <div className={styles.compareBadge}>Alternative ✓</div>
-        <div className={styles.compareName}>AC Hotel Milan</div>
-        <div className={styles.comparePrice}>$189 / night</div>
+        <div className={styles.compareName}>{altName}</div>
+        <div className={styles.comparePrice}>${altRate} / night</div>
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
-        <div className={styles.compareMeta}>1.2 km from office</div>
-        <div className={styles.compareReason}>Saves $290 total · fully compliant</div>
+        <div className={styles.compareMeta}>{altDist} km from office</div>
+        <div className={styles.compareReason}>Saves ${(rejRate - altRate) * 5} total · fully compliant</div>
       </div>
     </div>
   );
 }
 
-function PrepChecklist() {
+function FlightComparison({ tripData, liveFlights, onChange }: { tripData?: TripData | null, liveFlights?: DisplayFlightGroup[] | null, onChange?: (i: number) => void }) {
+  // Find a cheaper flight than the current "Best pick"
+  const baselineCost = liveFlights?.[0]?.returns?.[0]?.totalPriceUsd ?? 687;
+  const compliantFlight = liveFlights?.find(f => (f.returns?.[0]?.totalPriceUsd ?? Infinity) < baselineCost) || liveFlights?.[1] || DEMO_FLIGHT_GROUPS[2];
+
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareBadge}>Rejected ✗</div>
+        <div className={styles.compareName}>{liveFlights?.[0]?.flightNumber ?? "LH 8904"}</div>
+        <div className={styles.comparePrice}>${baselineCost} total</div>
+        <div className={styles.compareMeta}>⭐ Best flight times</div>
+        <div className={styles.compareMeta}>Nonstop</div>
+        <div className={styles.compareReason}>{tripData?.approvalThread?.reason || "Flight over budget"}</div>
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareBadge}>Alternative ✓</div>
+        <div className={styles.compareName}>{compliantFlight.flightNumber}</div>
+        <div className={styles.comparePrice}>${compliantFlight.returns?.[0]?.totalPriceUsd ?? 607} total</div>
+        <div className={styles.compareMeta}>Alternative carrier</div>
+        <div className={styles.compareMeta}>1 Stop</div>
+        <div className={styles.compareReason}>Saves $${baselineCost - (compliantFlight.returns?.[0]?.totalPriceUsd ?? 607)} · fully compliant</div>
+      </div>
+    </div>
+  );
+}
+
+function PrepChecklist({ selectedHotel, liveHotels, tripData }: { selectedHotel?: number; liveHotels?: Hotel[] | null; tripData?: TripData | null }) {
   const [done, setDone] = useState<Set<number>>(new Set());
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "Marriott Scala";
+  const hotelAddress: string = (hotelData as Hotel)?.address ?? (hotelData as any)?.address ?? "Via della Spiga 31";
+  const checkIn = tripData?.departure
+    ? new Date(tripData.departure).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+    : "Sep 14";
+  const passportExpiry = tripData?.passportExpiry
+    ? new Date(tripData.passportExpiry).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })
+    : "Jan 2025";
   const items = [
     { text: "Apply for Type-C Visa at italyvisa.com", urgent: true },
-    { text: "Renew passport after trip (expires Jan 2025)", urgent: true },
+    { text: `Renew passport after trip (expires ${passportExpiry})`, urgent: true },
     { text: "Pack for 24°C, light rain expected on days 2 to 4" },
-    { text: "Marriott Scala · Via della Spiga 31 · Check-in Sep 14 at 3:00 PM" },
+    { text: `${hotelName} · ${hotelAddress} · Check-in ${checkIn} at 3:00 PM` },
     { text: "Confirm travel insurance coverage" },
   ];
   function toggle(i: number) {
@@ -709,14 +884,20 @@ function PrepChecklist() {
   );
 }
 
-function LiveDashboard() {
+function LiveDashboard({ selectedFlight, liveFlights, selectedHotel, liveHotels, tripData }: { selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null; selectedHotel?: number; liveHotels?: Hotel[] | null; tripData?: TripData | null }) {
+  const flightNum = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
+  const depTime = liveFlights?.[selectedFlight ?? 0]?.dep ?? "8:45 AM";
+  const destCity = tripData?.city ?? "Milan";
+  const destCode = tripData?.city ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? "MXP") : "MXP";
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "Marriott Scala";
   return (
     <div className={styles.dashboard}>
       {[
-        { icon: "✈️", title: "LH 8904 · Gate B22", sub: "Boards 8:15 AM · Departs 8:45 AM", badge: "On time" },
-        { icon: "🌤️", title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight", badge: "" },
-        { icon: "🏨", title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM", badge: "Ready" },
-        { icon: "🚗", title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM to make your gate", badge: "" },
+        { icon: "✈️", title: `${flightNum} · Gate B22`, sub: `Boards ${depTime} · Departs ${depTime}`, badge: "On time" },
+        { icon: "🌤️", title: `${destCity} · 24 °C`, sub: "Partly cloudy · Low 18 °C tonight", badge: "" },
+        { icon: "🏨", title: `${hotelName} · Room 412`, sub: "Check-in ready from 3:00 PM", badge: "Ready" },
+        { icon: "🚗", title: `Traffic to ${destCode} · 32 min`, sub: "Leave by 7:00 AM to make your gate", badge: "" },
       ].map(item => (
         <div className={styles.dashCard} key={item.title}>
           <span className={styles.dashIcon}>{item.icon}</span>
@@ -731,19 +912,23 @@ function LiveDashboard() {
   );
 }
 
-function FlightRebooking() {
+function FlightRebooking({ tripData, selectedFlight, liveFlights }: { tripData?: TripData | null; selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const destCode = tripData?.city ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? "MXP") : "MXP";
+  const flightNum = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
+  const depTime = liveFlights?.[selectedFlight ?? 0]?.dep ?? "8:45 AM";
   return (
     <div className={styles.rebooking}>
       <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
         <div className={styles.rebookBadge}>Original · Cancelled ✗</div>
-        <div className={styles.rebookFlight}>LH 8904 &nbsp;·&nbsp; ORD → MXP</div>
-        <div className={styles.rebookTime}>Departs 8:45 AM</div>
-        <div className={styles.rebookMeta}>Thunderstorm at ORD · missed connection</div>
+        <div className={styles.rebookFlight}>{flightNum} &nbsp;·&nbsp; {homeCode} → {destCode}</div>
+        <div className={styles.rebookTime}>Departs {depTime}</div>
+        <div className={styles.rebookMeta}>Thunderstorm at {homeCode} · missed connection</div>
       </div>
       <div className={styles.rebookArrow}>↓ rebooked automatically</div>
       <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
         <div className={styles.rebookBadge}>New booking · Confirmed ✓</div>
-        <div className={styles.rebookFlight}>LH 9012 &nbsp;·&nbsp; ORD → MXP</div>
+        <div className={styles.rebookFlight}>LH 9012 &nbsp;·&nbsp; {homeCode} → MXP</div>
         <div className={styles.rebookTime}>Departs 9:00 PM</div>
         <div className={styles.rebookMeta}>Same carrier · No change fee · Seat 14A · Hotel notified ✓</div>
       </div>
@@ -751,15 +936,20 @@ function FlightRebooking() {
   );
 }
 
-function ExceptionEmail() {
+function ExceptionEmail({ tripData, selectedFlight, liveFlights }: { tripData?: TripData | null; selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null }) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL ?? "mgr.sarah@lockton.com";
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const homeCity = tripData?.originCity ?? "Chicago";
+  const destCity = tripData?.city ?? "Milan";
+  const flightNum = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
   return (
     <div className={styles.emailDraft}>
-      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{managerEmail}</span></div>
       <div className={styles.emailField}><span className={styles.emailKey}>Priority</span><span className={[styles.emailVal, styles.emailUrgent].join(" ")}>HIGH - Action required</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - Milan Rebooking</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - {destCity} Rebooking</span></div>
       <div className={styles.emailBody}>
-        <p>Hi Sarah,</p>
-        <p><strong>LH 8904 was cancelled due to a thunderstorm</strong> at O&#39;Hare. The only available rebooking is LH 9012 at <strong>$1,067</strong>, which is $380 over the approved $687 budget.</p>
+        <p>Hi,</p>
+        <p><strong>{flightNum} was cancelled due to a thunderstorm</strong> at {homeCity}. The only available rebooking is LH 9012 at <strong>$1,067</strong>, which is $380 over the approved budget.</p>
         <p>Force majeure - requesting emergency exception. Hotel hold expires in 2 hours.</p>
         <p>Lockey</p>
       </div>
@@ -860,10 +1050,13 @@ function ContactCards() {
   );
 }
 
-function SpendSummary() {
+function SpendSummary({ tripData }: { tripData?: TripData | null }) {
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000)
+    : 5;
   const cats = [
     { name: "Flights", spent: 687, budget: 800 },
-    { name: "Hotel (5 nights)", spent: 945, budget: 1000 },
+    { name: `Hotel (${nights} nights)`, spent: 945, budget: 1000 },
     { name: "Meals", spent: 312, budget: 375 },
     { name: "Transport", spent: 243, budget: 165 },
   ];
@@ -889,11 +1082,12 @@ function SpendSummary() {
   );
 }
 
-function PrivacySummary() {
+function PrivacySummary({ tripData }: { tripData?: TripData | null }) {
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
   return (
     <div className={styles.privacyList}>
       {[
-        { icon: "📍", label: "Location tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
+        { icon: "📍", label: "Location tracking", detail: `Active ${dateRange} only`, status: "Stopped" },
         { icon: "💳", label: "Financial data", detail: "Card numbers sanitized before storage", status: "Done" },
         { icon: "🔑", label: "OAuth tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
         { icon: "📅", label: "Data retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
@@ -941,28 +1135,32 @@ function BundlePicker({ value, onChange }: { value?: number | null; onChange?: (
 
 // ── Action visual components ────────────────────────────────────
 
-function TripConfirmed() {
+function TripConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const city = tripData?.city ?? "Milan";
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
         <span className={styles.confirmEmoji}>✅</span>
         <div className={styles.confirmTitle}>Trip Draft Saved</div>
-        <div className={styles.confirmBody}>Milan · Sep 14 to 19 · Trip #TRP-20250914 is now active in your travel dashboard.</div>
+        <div className={styles.confirmBody}>{city} · {dateRange} · Trip is now active in your travel dashboard.</div>
       </div>
     </div>
   );
 }
 
-function FlightConfirmed() {
+function FlightConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const homeCity = tripData?.originCity || "Chicago";
   return (
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
-        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>{homeCode}</div><div className={styles.eticketCity}>{homeCity}</div></div>
         <div className={styles.eticketPlane}>✈</div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
-        {[["Flight","LH 8904"],["Date","Sep 14, 2025"],["Departs","8:45 AM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Class","Economy"]].map(([k,v]) => (
+        {[["Flight", "LH 8904"], ["Date", "Sep 14, 2025"], ["Departs", "8:45 AM"], ["Seat", "14A (Window)"], ["PNR", "XKMR74"], ["Class", "Economy"]].map(([k, v]) => (
           <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
         ))}
       </div>
@@ -1017,7 +1215,8 @@ function VisaGuide() {
   );
 }
 
-function BundleConfirmed() {
+function BundleConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
   return (
     <div className={styles.itinerary}>
       <div className={styles.itineraryHeader}>
@@ -1025,7 +1224,7 @@ function BundleConfirmed() {
         <div className={styles.itineraryTotal}>$2,010</div>
       </div>
       {[
-        { icon: "✈️", label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
+        { icon: "✈️", label: "Flight", val: `LH 8904 · ${homeCode} → MXP`, sub: "Sep 14 · 8:45 AM · $687" },
         { icon: "🏨", label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
         { icon: "📋", label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
       ].map(item => (
@@ -1041,18 +1240,131 @@ function BundleConfirmed() {
   );
 }
 
-function ApprovalWatching() {
+function ApprovalWatching({ managerEmail }: { managerEmail?: string }) {
+  const email = managerEmail || process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
         <span className={styles.confirmEmoji}>📬</span>
         <div className={styles.confirmTitle}>Watching for Reply</div>
-        <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds.</div>
+        <div className={styles.confirmBody}>Email sent to {email}. I&#39;ll notify you the moment they respond.</div>
       </div>
       <div className={styles.watchStatus}>
         <div className={styles.watchDot} />
         <span>Monitoring inbox · Last checked just now</span>
       </div>
+    </div>
+  );
+}
+
+function ApprovalPolling({ pollResult, selectedHotel, liveHotels, tripData }: {
+  pollResult: ManagerPollResult | null;
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  tripData?: TripData | null;
+}) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
+
+  if (!pollResult || !pollResult.found) {
+    const isNoAuth = pollResult?.noAuth;
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>📡</span>
+          <div className={styles.confirmTitle}>Scanning Manager&#39;s Inbox</div>
+          <div className={styles.confirmBody}>
+            {isNoAuth
+              ? "Sign in with Google to enable real inbox scanning. Polling will resume once authenticated."
+              : `Checking for a reply from ${managerEmail} every 5 seconds…`}
+          </div>
+        </div>
+        <div className={styles.watchStatus}>
+          <div className={styles.watchDot} />
+          <span style={{ opacity: 0.85 }}>Monitoring inbox · Polling every 5 s</span>
+        </div>
+        {/* Static hotel comparison while waiting */}
+        <HotelComparison selectedHotel={selectedHotel} liveHotels={liveHotels} />
+      </div>
+    );
+  }
+
+  if (pollResult.status === "approved") {
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>✅</span>
+          <div className={styles.confirmTitle}>Manager Approved!</div>
+          <div className={styles.confirmBody}>{pollResult.reason || "Your itinerary has been approved. Moving to the next step…"}</div>
+        </div>
+        {pollResult.snippet && (
+          <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+            <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+            <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 120)}{pollResult.snippet.length > 120 ? "…" : ""}&#34;</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Rejected — show what changes are needed
+  const { changes, reason, flaggedItems } = pollResult;
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🔄</span>
+        <div className={styles.confirmTitle}>Revision Requested</div>
+        <div className={styles.confirmBody}>{reason || "Manager requested changes to the itinerary."}</div>
+      </div>
+      {pollResult.snippet && (
+        <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+          <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 160)}{pollResult.snippet.length > 160 ? "…" : ""}&#34;</span>
+        </div>
+      )}
+      {(changes?.hotel || changes?.flight || changes?.dates || changes?.budget) && (
+        <div className={styles.complianceList} style={{ marginTop: 8 }}>
+          {changes.hotel && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>🏨</span>
+              <div>
+                <div className={styles.complianceTitle}>Hotel Change</div>
+                <div className={styles.complianceBody}>{changes.hotel}</div>
+              </div>
+            </div>
+          )}
+          {changes.flight && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>✈️</span>
+              <div>
+                <div className={styles.complianceTitle}>Flight Change</div>
+                <div className={styles.complianceBody}>{changes.flight}</div>
+              </div>
+            </div>
+          )}
+          {changes.dates && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>📅</span>
+              <div>
+                <div className={styles.complianceTitle}>Date Change</div>
+                <div className={styles.complianceBody}>{changes.dates}</div>
+              </div>
+            </div>
+          )}
+          {changes.budget && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>💰</span>
+              <div>
+                <div className={styles.complianceTitle}>Budget Guidance</div>
+                <div className={styles.complianceBody}>{changes.budget}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {/* Show hotel comparison if hotel was flagged */}
+      {(flaggedItems?.includes("hotel") || !changes?.flight) && (
+        <HotelComparison selectedHotel={selectedHotel} liveHotels={liveHotels} />
+      )}
     </div>
   );
 }
@@ -1114,16 +1426,18 @@ function LiveConfirmed() {
   );
 }
 
-function RebookingConfirmed() {
+function RebookingConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const homeCity = tripData?.originCity || "Chicago";
   return (
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
-        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>{homeCode}</div><div className={styles.eticketCity}>{homeCity}</div></div>
         <div className={styles.eticketPlane}>✈</div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
-        {[["Flight","LH 9012"],["Date","Sep 14, 2025"],["Departs","9:00 PM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Change fee","None"]].map(([k,v]) => (
+        {[["Flight", "LH 9012"], ["Date", "Sep 14, 2025"], ["Departs", "9:00 PM"], ["Seat", "14A (Window)"], ["PNR", "XKMR74"], ["Change fee", "None"]].map(([k, v]) => (
           <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
         ))}
       </div>
@@ -1205,7 +1519,7 @@ function TripArchived() {
         <div className={styles.confirmBody}>Expense report drafted and sent to mgr.sarah@lockton.com for final sign-off.</div>
       </div>
       <div className={styles.archiveSummary}>
-        {[["Total spent","$2,187"],["Under budget by","$153"],["Receipts logged","7"],["Days on trip","5"]].map(([k,v]) => (
+        {[["Total spent", "$2,187"], ["Under budget by", "$153"], ["Receipts logged", "7"], ["Days on trip", "5"]].map(([k, v]) => (
           <div className={styles.archiveRow} key={k}>
             <span className={styles.archiveKey}>{k}</span>
             <span className={styles.archiveVal}>{v}</span>
@@ -1231,13 +1545,13 @@ function DataCleared() {
 // ── Frame definitions ──────────────────────────────────────────
 
 const FRAMES: DemoFrame[] = [
-  { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
+  { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're departing from, where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
   { frameNumber: 2, tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
   { frameNumber: 3, tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
   { frameNumber: 4, tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
   { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
   { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
-  { frameNumber: 7, tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { frameNumber: 7, tone: "empathetic", message: "I'm scanning your manager's inbox every few seconds. If they flag the hotel cost, I already have a compliant lower-cost option ready so we can resubmit fast.", sheetTitle: "Waiting for Manager Reply", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
   { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
   { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
   { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
@@ -1593,7 +1907,7 @@ function PhoneShell({
               <div className={styles.chatMessages} ref={chatScrollRef}>
                 {chatMessages.length === 0 ? (
                   <div className={styles.chatEmpty}>
-                    <span>Start a conversation with Kelli</span>
+                    <span>Start a conversation with Lockey</span>
                   </div>
                 ) : (
                   chatMessages.map((msg, i) => (
@@ -1605,7 +1919,7 @@ function PhoneShell({
                         <div className={styles.chatAvatarWrap}>
                           <div className={styles.chatAvatar}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                            <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                           </div>
                         </div>
                       )}
@@ -1626,7 +1940,7 @@ function PhoneShell({
                     <div className={styles.chatAvatarWrap}>
                       <div className={styles.chatAvatar}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                        <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                       </div>
                     </div>
                     <div className={styles.chatBubble}>
@@ -1649,7 +1963,7 @@ function PhoneShell({
                         onChatSend();
                       }
                     }}
-                    placeholder="Message Kelli…"
+                    placeholder="Message Lockey…"
                     type="text"
                     value={chatInput}
                   />
@@ -1702,7 +2016,7 @@ function PhoneShell({
                 <Pencil size={22} />
               </button>
               <button
-                aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
                 className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
                 disabled={isProcessing}
                 onClick={onMicClick}
@@ -1759,10 +2073,10 @@ function PhoneShell({
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
-      <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
-      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z" />
     </svg>
   );
 }
@@ -1836,6 +2150,7 @@ export default function DemoPage() {
   const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
   const [liveHotels, setLiveHotels] = useState<Hotel[] | null>(null);
   const [isProgressHydrated, setIsProgressHydrated] = useState(false);
+  const [approvalPollResult, setApprovalPollResult] = useState<ManagerPollResult | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: session, status } = useSession();
@@ -1845,7 +2160,7 @@ export default function DemoPage() {
     fetch("/api/users/me")
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((data: { name: string }) => setUserProfile(data))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const travelerName = userProfile?.name ?? session?.user?.name ?? undefined;
@@ -1970,7 +2285,7 @@ export default function DemoPage() {
 
     void run();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated, status]);
 
   // Fetch real flights when entering frame 1 (flight picker)
@@ -1978,7 +2293,7 @@ export default function DemoPage() {
     if (!isProgressHydrated) return;
     if (currentIndex !== 1) return;
     const trip = tripData ?? DEMO_DEFAULTS;
-    const homeAirport = CITY_TO_AIRPORT[trip.originCity?.toLowerCase() ?? ""] ?? "ORD";
+    const homeAirport = trip.originCity ? (CITY_TO_AIRPORT[trip.originCity.toLowerCase()] ?? trip.originCity.substring(0, 3).toUpperCase()) : "ORD";
     const destAirport = CITY_TO_AIRPORT[trip.city.toLowerCase()] ?? "MXP";
     let cancelled = false;
     queueMicrotask(() => {
@@ -2047,7 +2362,7 @@ export default function DemoPage() {
       });
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
 
   // Fetch real hotels when entering frame 2 (hotel picker)
@@ -2071,11 +2386,149 @@ export default function DemoPage() {
       .then((data: { hotels: Hotel[] }) => {
         if (!cancelled && data.hotels?.length) setLiveHotels(data.hotels.slice(0, 6));
       })
-      .catch(() => {}); // silently fall back to DEMO_HOTELS
+      .catch(() => { }); // silently fall back to DEMO_HOTELS
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
+
+  // ── Frames 6–7 (index 5–6): Poll Gmail every 5 seconds for manager reply ──────────
+  useEffect(() => {
+    // Polling is active on both Frame 6 (index 5) and Frame 7 (index 6)
+    if (currentIndex !== 5 && currentIndex !== 6) {
+      // Reset result when leaving this section so it starts fresh next time
+      if (approvalPollResult !== null) setApprovalPollResult(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function poll() {
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/gmail/poll-approval");
+        if (cancelled) return;
+        if (res.ok) {
+          const data: ManagerPollResult = await res.json();
+          if (!cancelled) {
+            setApprovalPollResult(data);
+            if (data.found && data.status === "approved") {
+              // Auto-advance to Frame 8 (index 7, travel checklist)
+              stopSpeaking();
+              setOverlayReady(false);
+              setOverlayDismissed(false);
+              setFrameCompleted((prev) => ({ ...prev, [currentIndex]: true }));
+              setCurrentIndex(7);
+              return; // stop polling
+            }
+            if (data.found && data.status === "rejected") {
+              // Persist flaggedItems and reason into tripData for downstream frames
+              setTripData((prev) => prev ? {
+                ...prev,
+                approvalThread: {
+                  status: "rejected",
+                  reason: data.reason ?? null,
+                  flaggedItems: data.flaggedItems ?? [],
+                },
+              } : prev);
+              // If on Frame 7 (index 6), send back to Frame 6 (index 5) to show rejection
+              // and keep polling there for the next reply (after the user resubmits)
+              if (currentIndex === 6) {
+                stopSpeaking();
+                setOverlayReady(false);
+                setOverlayDismissed(false);
+                setCurrentIndex(5);
+                return; // polling will restart via the new currentIndex trigger
+              }
+              // Already on index 5 — keep polling for the next email
+            }
+          }
+        }
+      } catch {
+        // silently ignore poll errors
+      }
+      // Schedule next poll in 5 seconds
+      if (!cancelled) {
+        setTimeout(poll, 5000);
+      }
+    }
+
+    // Kick off first poll immediately
+    void poll();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
+
+  // Register Web Push Service Worker
+  useEffect(() => {
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      navigator.serviceWorker.register("/sw.js").then((swReg) => {
+        console.log("✨ Service Worker registered:", swReg);
+
+        // Helper block so dev can grab the push subscription easily from dev tools
+        swReg.pushManager.getSubscription().then(sub => {
+          if (!sub) {
+            console.log("🔔 No push subscription found. Run `subscribeToPush()` in this console to generate your token for testing.");
+            // @ts-ignore
+            window.subscribeToPush = async () => {
+              const permission = await Notification.requestPermission();
+              if (permission === "granted") {
+                const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                if (!vapidKey) return console.error("NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set in .env.local!");
+                const newSub = await swReg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: vapidKey
+                });
+                console.log("✅ Push Subscription Object (COPY THIS AND PASTE IN WEBHOOK SIMULATION JSON):", JSON.stringify(newSub));
+              } else {
+                console.error("Push permission denied");
+              }
+            }
+          } else {
+            console.log("✅ Push Subscription Object (COPY THIS AND PASTE IN WEBHOOK SIMULATION JSON):", JSON.stringify(sub));
+            // @ts-ignore
+            window.subscribeToPush = () => console.log(JSON.stringify(sub));
+          }
+        });
+      }).catch(err => console.error("Service Worker registration failed:", err));
+    }
+  }, []);
+
+  // Expose an auto-simulator for testing
+  useEffect(() => {
+    // @ts-ignore
+    window.simulateWebhook = async () => {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") return console.error("Push permission denied");
+
+        const swReg = await navigator.serviceWorker.ready;
+        let sub = await swReg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await swReg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+          });
+        }
+
+        console.log("🚀 Firing simulated webhook to backend...");
+        const res = await fetch("/api/webhooks/gmail-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tripId: tripId || "609cabc12345678901234567", // Mock or use active trip
+            managerReplyText: "I'm rejecting this trip. The flight LH 8904 is way too expensive.",
+            pushSubscription: sub
+          })
+        });
+        const data = await res.json();
+        console.log("✅ Webhook processed! Response:", data);
+      } catch (e) {
+        console.error("Test failed:", e);
+      }
+    };
+  }, [tripId]);
 
   // ── Voice input (Gemini STT) ─────────────────────────────────
 
@@ -2139,8 +2592,8 @@ export default function DemoPage() {
       // detects audio above SPEECH_THRESHOLD, and the silence timer
       // only triggers when levels drop below SILENCE_THRESHOLD.
       const SILENCE_THRESHOLD = 30;   // fan noise sits ~5-20
-      const SPEECH_THRESHOLD  = 35;   // must exceed this to arm
-      const SILENCE_MS        = 2200; // ms of quiet before auto-stop
+      const SPEECH_THRESHOLD = 35;   // must exceed this to arm
+      const SILENCE_MS = 2200; // ms of quiet before auto-stop
       let silenceStart: number | null = null;
       let speechDetected = false;
 
@@ -2297,6 +2750,19 @@ export default function DemoPage() {
           const trip = (await res.json()) as { _id: string };
           setTripId(trip._id);
         }
+      } else if (currentIndex === 5) {
+        // Email send doesn't need a DB trip — run it unconditionally, patch if we have a tripId
+        await executeFrameAction(5, tripId ?? "_no_trip_", {
+          flight: selectedFlight,
+          hotel: selectedHotel,
+          selectedReturn,
+          bundle: selectedBundle,
+          liveFlightGroups: liveFlightResults,
+          liveDisplayFlights: liveFlights,
+          liveHotels,
+          tripData,
+          skipPatch: !tripId,
+        });
       } else if (tripId) {
         await executeFrameAction(currentIndex, tripId, {
           flight: selectedFlight,
@@ -2304,7 +2770,9 @@ export default function DemoPage() {
           selectedReturn,
           bundle: selectedBundle,
           liveFlightGroups: liveFlightResults,
+          liveDisplayFlights: liveFlights,
           liveHotels,
+          tripData,
         });
       }
 
@@ -2396,7 +2864,17 @@ export default function DemoPage() {
         );
       case 2: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
       case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
-      default: { const V = frame.Visual; return <V />; }
+      case 5: return <ApprovalEmail tripData={tripData} selectedHotel={selectedHotel} liveHotels={liveHotels} selectedFlight={selectedFlight} />;
+      case 6:
+        return (
+          <ApprovalPolling
+            pollResult={approvalPollResult}
+            selectedHotel={selectedHotel}
+            liveHotels={liveHotels}
+            tripData={tripData}
+          />
+        );
+      default: { const V = frame.Visual as React.ComponentType<any>; return <V tripData={tripData} selectedFlight={selectedFlight} selectedHotel={selectedHotel} selectedBundle={selectedBundle} liveHotels={liveHotels} liveFlights={liveFlights} liveFlightResults={liveFlightResults} />; }
     }
   }
 

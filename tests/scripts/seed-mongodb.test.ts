@@ -148,22 +148,22 @@ describe("users", () => {
     expect(users).toHaveLength(2)
   })
 
-  it("seeds Kelli Thompson with required fields", async () => {
+  it("seeds Lockey Thompson with required fields", async () => {
     await main()
     const [users] = COLS.users.insertMany.mock.calls[0] as [Array<Record<string, unknown>>]
-    const kelli = users.find((u) => u.name === "Kelli Thompson")
-    expect(kelli).toBeDefined()
-    expect(kelli!.email).toBe("kelli.thompson@lockton.com")
-    expect(kelli!.citizenship).toBe("US")
-    expect(kelli!.department).toBe("Risk Management")
-    expect(kelli!.homeAirports).toEqual(["MCI"])
+    const lockey = users.find((u) => u.name === "Lockey Thompson")
+    expect(lockey).toBeDefined()
+    expect(lockey!.email).toBe("lockey.thompson@lockton.com")
+    expect(lockey!.citizenship).toBe("US")
+    expect(lockey!.department).toBe("Risk Management")
+    expect(lockey!.homeAirports).toEqual(["MCI"])
   })
 
-  it("sets Kelli's passport expiry to 2026-03-15 (intentionally expiring soon)", async () => {
+  it("sets Lockey's passport expiry to 2026-03-15 (intentionally expiring soon)", async () => {
     await main()
     const [users] = COLS.users.insertMany.mock.calls[0] as [Array<Record<string, unknown>>]
-    const kelli = users.find((u) => u.name === "Kelli Thompson")!
-    expect((kelli.passport as { expiry: Date }).expiry).toEqual(new Date("2026-03-15"))
+    const lockey = users.find((u) => u.name === "Lockey Thompson")!
+    expect((lockey.passport as { expiry: Date }).expiry).toEqual(new Date("2026-03-15"))
   })
 
   it("seeds James Walker as the manager with null managerId", async () => {
@@ -175,12 +175,12 @@ describe("users", () => {
     expect(manager!.managerId).toBeNull()
   })
 
-  it("links Kelli's managerId to James Walker's _id", async () => {
+  it("links Lockey's managerId to James Walker's _id", async () => {
     await main()
     const [users] = COLS.users.insertMany.mock.calls[0] as [Array<Record<string, unknown>>]
-    const kelli = users.find((u) => u.name === "Kelli Thompson")!
+    const lockey = users.find((u) => u.name === "Lockey Thompson")!
     const manager = users.find((u) => u.name === "James Walker")!
-    expect(String(kelli.managerId)).toBe(String(manager._id))
+    expect(String(lockey.managerId)).toBe(String(manager._id))
   })
 })
 
@@ -286,7 +286,7 @@ describe("visa requirements", () => {
 // ---------------------------------------------------------------------------
 
 describe("demo trip", () => {
-  it("deletes Kelli's existing trips before inserting", async () => {
+  it("deletes Lockey's existing trips before inserting", async () => {
     await main()
     // deleteMany is called with the userId ObjectId — just verify it was called
     expect(COLS.trips.deleteMany).toHaveBeenCalledOnce()
@@ -353,11 +353,11 @@ describe("demo trip", () => {
     expect(thread.status).toBeNull()
   })
 
-  it("links the trip to Kelli's userId", async () => {
+  it("links the trip to Lockey's userId", async () => {
     await main()
     const [users] = COLS.users.insertMany.mock.calls[0] as [Array<Record<string, unknown>>]
-    const kelli = users.find((u) => u.name === "Kelli Thompson")!
+    const lockey = users.find((u) => u.name === "Lockey Thompson")!
     const [trip] = COLS.trips.insertOne.mock.calls[0] as [Record<string, unknown>]
-    expect(String(trip.userId)).toBe(String(kelli._id))
+    expect(String(trip.userId)).toBe(String(lockey._id))
   })
 })

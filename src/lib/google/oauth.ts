@@ -3,7 +3,7 @@
 // OWNER: Track C (Data & Integrations)
 // DESCRIPTION: Exports the NextAuth Google provider config and
 //   helper to retrieve a fresh access token from the session.
-//   The Gmail scope is requested here so Kelli can authorize
+//   The Gmail scope is requested here so Lockey can authorize
 //   both login and email sending in a single OAuth flow.
 //
 // ENV REQUIRED:
