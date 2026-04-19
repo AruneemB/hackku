@@ -1,0 +1,159 @@
+.cardTag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(243, 91, 79, 0.1);
+  color: var(--cc-accent);
+  letter-spacing: 0.02em;
+}
+
+.cardTagSelected {
+  background: var(--cc-accent);
+  color: #fff;
+}
+
+.mapWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mapLegend {
+  display: flex;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--cc-body, #5a6672);
+}
+
+.mapLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mapDotAccent {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cc-accent);
+  flex-shrink: 0;
+}
+
+.mapDotOffice {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #1a2530;
+  flex-shrink: 0;
+}
+
+.hotelMapContainer {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border: 1px solid rgba(159, 171, 183, 0.14);
+  border-radius: 14px;
+  box-shadow: 0 4px 20px rgba(45, 59, 69, 0.1);
+}
+
+.hotelCardName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  padding: 4px 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--cc-text-primary);
+  text-align: left;
+}
+
+.hotelCardNameText {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hotelCardPrice {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cc-text-primary);
+}
+
+.hotelBadge {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--cc-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.fpCards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fpCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid rgba(159, 171, 183, 0.3);
+  border-radius: 14px;
+  background: rgba(159, 171, 183, 0.06);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.fpCard:hover {
+  border-color: rgba(243, 91, 79, 0.3);
+  background: rgba(243, 91, 79, 0.04);
+}
+
+.fpCardSelected {
+  border-color: var(--cc-accent);
+  background: rgba(243, 91, 79, 0.07);
+}
+
+.fpCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.fpAirline {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cc-body, #5a6672);
+}
+
+.fpCardBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(159, 171, 183, 0.18);
+}
+
+.fpStopsMeta {
+  font-size: 13px;
+  color: var(--cc-body, #5a6672);
+}
