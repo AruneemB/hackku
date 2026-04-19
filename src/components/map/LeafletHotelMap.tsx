@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import styles from "../../app/demo/page.module.css";
+import styles from "./LeafletHotelMap.module.css";
 
 type HotelPin = {
   label: string;
@@ -14,6 +14,16 @@ type HotelPin = {
   preferred: boolean;
   lat: number;
   lng: number;
+};
+
+type MappableHotel = {
+  name: string;
+  distanceFromOfficeKm: number;
+  nightlyRateUsd: number;
+  preferred?: boolean;
+  location?: {
+    coordinates?: [number, number];
+  };
 };
 
 function createHotelIcon(num: number, selected: boolean) {
@@ -56,18 +66,15 @@ export default function LeafletHotelMap({
   value,
   onChange,
 }: {
-  hotels: any[];
+  hotels: MappableHotel[];
   officeLat?: number;
   officeLng?: number;
   value?: number;
   onChange?: (i: number) => void;
 }) {
-  const [mounted, setMounted] = useState(false);
   const [localSel, setLocalSel] = useState(0);
   const sel = value ?? localSel;
   const setSel = onChange ?? setLocalSel;
-
-  useEffect(() => { setMounted(true); }, []);
 
   const defaultHotels: HotelPin[] = [
     { label: "1", name: "Marriott Scala", dist: "0.4 km", price: "$247", preferred: true, lat: officeLat, lng: officeLng + 0.005 },
@@ -95,7 +102,7 @@ export default function LeafletHotelMap({
   return (
     <div className={styles.mapWrap}>
       <div className={styles.hotelMapContainer}>
-        {!mounted ? null : <MapContainer
+        <MapContainer
           center={[officeLat, officeLng]}
           zoom={13}
           style={{ height: 220, width: "100%" }}
@@ -122,7 +129,7 @@ export default function LeafletHotelMap({
             </Marker>
           ))}
           <MapBounds bounds={bounds} />
-        </MapContainer>}
+        </MapContainer>
       </div>
 
       <div className={styles.mapLegend}>

@@ -21,7 +21,7 @@ export default function LoginPage() {
           <p className="text-gray-400 text-sm mt-1">AI Travel Concierge · Lockton</p>
         </div>
         <button
-          onClick={() => signIn("google", { callbackUrl: "/demo" })}
+          onClick={() => signIn("google", { callbackUrl: "/scenario" })}
           className="flex items-center gap-3 bg-white text-gray-900 font-semibold px-6 py-3 rounded-xl hover:bg-gray-100 active:scale-95 transition-all"
         >
           <GoogleIcon />
