@@ -20,6 +20,13 @@ const DynamicHotelMap = dynamic(() => import("@/components/map/LeafletHotelMap")
 
 type Tone = "neutral" | "excited" | "empathetic" | "urgent";
 
+type TransportApiResult = {
+  distanceKm: number;
+  taxi: { minutes: string; cost: string; distanceKm: number };
+  metro: { minutes: string; cost: string };
+  walk: { minutes: string; cost: string };
+};
+
 type TripData = {
   city: string;
   country: string;
@@ -1075,25 +1082,72 @@ function ExceptionEmail({ rebooking }: { rebooking: RebookingData }) {
   );
 }
 
-function ArrivalSupport() {
-  const [sel, setSel] = useState<number | null>(null);
+function ArrivalSupport({
+  value,
+  onChange,
+  onDataLoaded,
+}: {
+  value: number;
+  onChange: (i: number) => void;
+  onDataLoaded: (data: TransportApiResult) => void;
+}) {
+  const [liveData, setLiveData] = useState<TransportApiResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/transport/distance?hotel=Via+della+Spiga+31%2C+Milan&airport=MXP")
+      .then((r) => r.json())
+      .then((data: TransportApiResult) => {
+        if (cancelled) return;
+        setLiveData(data);
+        onDataLoaded(data);
+      })
+      .catch(() => { /* fall back to defaults */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [onDataLoaded]);
+
   const options = [
-    { icon: "🚕", name: "Company taxi", time: "18 min", cost: "$14", preferred: true },
-    { icon: "🚇", name: "Metro M1 → M3", time: "35 min", cost: "$2.50", preferred: false },
-    { icon: "🚶", name: "Walk", time: "28 min", cost: "Free", preferred: false },
+    {
+      icon: "🚕",
+      name: "Company taxi",
+      time: loading ? "…" : (liveData?.taxi.minutes ?? "18 min"),
+      cost: loading ? "…" : (liveData?.taxi.cost ?? "$14"),
+      preferred: true,
+    },
+    {
+      icon: "🚇",
+      name: "Metro M1 → M3",
+      time: loading ? "…" : (liveData?.metro.minutes ?? "35 min"),
+      cost: liveData?.metro.cost ?? "$2.50",
+      preferred: false,
+    },
+    {
+      icon: "🚶",
+      name: "Walk",
+      time: loading ? "…" : (liveData?.walk.minutes ?? "28 min"),
+      cost: "Free",
+      preferred: false,
+    },
   ];
+
+  const distLabel = loading
+    ? "loading…"
+    : `${liveData?.distanceKm ?? 2.3} km from MXP`;
+
   return (
     <div className={styles.arrival}>
       <div className={styles.arrivalDest}>
         <span className={styles.arrivalPin}>📍</span>
         <div>
           <div className={styles.arrivalName}>Marriott Scala</div>
-          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan · 2.3 km from MXP</div>
+          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan · {distLabel}</div>
         </div>
       </div>
       <div className={styles.cards}>
         {options.map((o, i) => (
-          <button className={[styles.card, sel === i ? styles.cardSelected : ""].join(" ")} key={o.name} onClick={() => setSel(i)} type="button">
+          <button className={[styles.card, value === i ? styles.cardSelected : ""].join(" ")} key={o.name} onClick={() => onChange(i)} type="button">
             <div className={styles.cardRow}>
               <span className={styles.cardLabel}>{o.icon}  {o.name}</span>
               {o.preferred && <span className={styles.cardTag}>Preferred</span>}
@@ -1588,16 +1642,34 @@ function ExceptionPending() {
   );
 }
 
-function TransportConfirmed() {
+function TransportConfirmed({
+  selectedIndex,
+  liveData,
+}: {
+  selectedIndex: number;
+  liveData: TransportApiResult | null;
+}) {
+  const TRANSPORT_META = [
+    { icon: "🚕", name: "Company taxi", getTime: (d: TransportApiResult) => d.taxi.minutes, getCost: (d: TransportApiResult) => d.taxi.cost },
+    { icon: "🚇", name: "Metro M1 → M3", getTime: (d: TransportApiResult) => d.metro.minutes, getCost: () => "$2.50" },
+    { icon: "🚶", name: "Walk", getTime: (d: TransportApiResult) => d.walk.minutes, getCost: () => "Free" },
+  ];
+  const chosen = TRANSPORT_META[selectedIndex] ?? TRANSPORT_META[0];
+  const eta = liveData
+    ? `${chosen.getTime(liveData)} · ${chosen.getCost(liveData)}`
+    : "18 min · $14";
+
+  const rows = [
+    { icon: chosen.icon, label: "Transport", val: chosen.name },
+    { icon: "📍", label: "Pickup", val: "MXP Arrivals Hall B" },
+    { icon: "🏨", label: "Drop-off", val: "Marriott Scala, Milan" },
+    { icon: "⏱", label: "ETA", val: eta },
+    { icon: "📞", label: "Driver", val: "+39 02 555 0122" },
+  ];
+
   return (
     <div className={styles.confirmList}>
-      {[
-        { icon: "🚕", label: "Transport", val: "Company taxi" },
-        { icon: "📍", label: "Pickup", val: "MXP Arrivals Hall B" },
-        { icon: "🏨", label: "Drop-off", val: "Marriott Scala, Milan" },
-        { icon: "⏱", label: "ETA", val: "18 min · $14" },
-        { icon: "📞", label: "Driver", val: "+39 02 555 0122" },
-      ].map(item => (
+      {rows.map(item => (
         <div className={styles.confirmRow} key={item.label}>
           <span className={styles.confirmIcon}>{item.icon}</span>
           <span className={styles.confirmLabel}>{item.label}</span>
@@ -2614,6 +2686,8 @@ export default function DemoPage() {
   const [selectedHotel, setSelectedHotel] = useState(0);
   const [selectedReturn, setSelectedReturn] = useState(0);
   const [selectedBundle, setSelectedBundle] = useState<number | null>(null);
+  const [selectedTransport, setSelectedTransport] = useState(0);
+  const [liveTransportData, setLiveTransportData] = useState<TransportApiResult | null>(null);
   const [liveFlights, setLiveFlights] = useState<DisplayFlightGroup[] | null>(null);
   const [liveFlightResults, setLiveFlightResults] = useState<FlightGroup[] | null>(null);
   const [isFlightSearchLoading, setIsFlightSearchLoading] = useState(false);
@@ -3348,6 +3422,17 @@ export default function DemoPage() {
         if (currentIndex === 10) return <FlightRebooking rebooking={rebooking} />;
         return <ExceptionEmail rebooking={rebooking} />;
       }
+      case 12:
+        if (frameCompleted[12]) {
+          return <TransportConfirmed selectedIndex={selectedTransport} liveData={liveTransportData} />;
+        }
+        return (
+          <ArrivalSupport
+            value={selectedTransport}
+            onChange={setSelectedTransport}
+            onDataLoaded={setLiveTransportData}
+          />
+        );
       case 14: return <ContactCards city={tripData?.city ?? DEMO_DEFAULTS.city} />;
       case 15: return <SpendSummary tripId={tripId} />;
       default: { const V = frame.Visual; return <V />; }
