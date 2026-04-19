@@ -16,6 +16,16 @@ const DynamicHotelMap = dynamic(() => import("@/components/map/LeafletHotelMap")
 
 type Tone = "neutral" | "excited" | "empathetic" | "urgent";
 
+type ManagerPollResult = {
+  found: boolean;
+  noAuth?: boolean;
+  status?: "approved" | "rejected";
+  reason?: string;
+  flaggedItems?: string[];
+  changes?: { hotel?: string; flight?: string; dates?: string; budget?: string };
+  snippet?: string;
+};
+
 type TripData = {
   city: string;
   country: string;
@@ -1230,18 +1240,131 @@ function BundleConfirmed({ tripData }: { tripData?: TripData | null }) {
   );
 }
 
-function ApprovalWatching() {
+function ApprovalWatching({ managerEmail }: { managerEmail?: string }) {
+  const email = managerEmail || process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
         <span className={styles.confirmEmoji}>📬</span>
         <div className={styles.confirmTitle}>Watching for Reply</div>
-        <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds.</div>
+        <div className={styles.confirmBody}>Email sent to {email}. I&#39;ll notify you the moment they respond.</div>
       </div>
       <div className={styles.watchStatus}>
         <div className={styles.watchDot} />
         <span>Monitoring inbox · Last checked just now</span>
       </div>
+    </div>
+  );
+}
+
+function ApprovalPolling({ pollResult, selectedHotel, liveHotels, tripData }: {
+  pollResult: ManagerPollResult | null;
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  tripData?: TripData | null;
+}) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
+
+  if (!pollResult || !pollResult.found) {
+    const isNoAuth = pollResult?.noAuth;
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>📡</span>
+          <div className={styles.confirmTitle}>Scanning Manager&#39;s Inbox</div>
+          <div className={styles.confirmBody}>
+            {isNoAuth
+              ? "Sign in with Google to enable real inbox scanning. Polling will resume once authenticated."
+              : `Checking for a reply from ${managerEmail} every 5 seconds…`}
+          </div>
+        </div>
+        <div className={styles.watchStatus}>
+          <div className={styles.watchDot} />
+          <span style={{ opacity: 0.85 }}>Monitoring inbox · Polling every 5 s</span>
+        </div>
+        {/* Static hotel comparison while waiting */}
+        <HotelComparison selectedHotel={selectedHotel} liveHotels={liveHotels} />
+      </div>
+    );
+  }
+
+  if (pollResult.status === "approved") {
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>✅</span>
+          <div className={styles.confirmTitle}>Manager Approved!</div>
+          <div className={styles.confirmBody}>{pollResult.reason || "Your itinerary has been approved. Moving to the next step…"}</div>
+        </div>
+        {pollResult.snippet && (
+          <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+            <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+            <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 120)}{pollResult.snippet.length > 120 ? "…" : ""}&#34;</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Rejected — show what changes are needed
+  const { changes, reason, flaggedItems } = pollResult;
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🔄</span>
+        <div className={styles.confirmTitle}>Revision Requested</div>
+        <div className={styles.confirmBody}>{reason || "Manager requested changes to the itinerary."}</div>
+      </div>
+      {pollResult.snippet && (
+        <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+          <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 160)}{pollResult.snippet.length > 160 ? "…" : ""}&#34;</span>
+        </div>
+      )}
+      {(changes?.hotel || changes?.flight || changes?.dates || changes?.budget) && (
+        <div className={styles.complianceList} style={{ marginTop: 8 }}>
+          {changes.hotel && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>🏨</span>
+              <div>
+                <div className={styles.complianceTitle}>Hotel Change</div>
+                <div className={styles.complianceBody}>{changes.hotel}</div>
+              </div>
+            </div>
+          )}
+          {changes.flight && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>✈️</span>
+              <div>
+                <div className={styles.complianceTitle}>Flight Change</div>
+                <div className={styles.complianceBody}>{changes.flight}</div>
+              </div>
+            </div>
+          )}
+          {changes.dates && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>📅</span>
+              <div>
+                <div className={styles.complianceTitle}>Date Change</div>
+                <div className={styles.complianceBody}>{changes.dates}</div>
+              </div>
+            </div>
+          )}
+          {changes.budget && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>💰</span>
+              <div>
+                <div className={styles.complianceTitle}>Budget Guidance</div>
+                <div className={styles.complianceBody}>{changes.budget}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {/* Show hotel comparison if hotel was flagged */}
+      {(flaggedItems?.includes("hotel") || !changes?.flight) && (
+        <HotelComparison selectedHotel={selectedHotel} liveHotels={liveHotels} />
+      )}
     </div>
   );
 }
@@ -1428,7 +1551,7 @@ const FRAMES: DemoFrame[] = [
   { frameNumber: 4, tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
   { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
   { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
-  { frameNumber: 7, tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { frameNumber: 7, tone: "empathetic", message: "I'm scanning your manager's inbox every few seconds. Once I see a reply, I'll tell you exactly what changes are needed so we can move fast.", sheetTitle: "Waiting for Manager Reply", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
   { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
   { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
   { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
@@ -2027,6 +2150,7 @@ export default function DemoPage() {
   const [flightSearchMessage, setFlightSearchMessage] = useState<string | null>(null);
   const [liveHotels, setLiveHotels] = useState<Hotel[] | null>(null);
   const [isProgressHydrated, setIsProgressHydrated] = useState(false);
+  const [approvalPollResult, setApprovalPollResult] = useState<ManagerPollResult | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: session, status } = useSession();
@@ -2267,6 +2391,74 @@ export default function DemoPage() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
+
+  // ── Frames 6–7 (index 5–6): Poll Gmail every 5 seconds for manager reply ──────────
+  useEffect(() => {
+    // Polling is active on both Frame 6 (index 5) and Frame 7 (index 6)
+    if (currentIndex !== 5 && currentIndex !== 6) {
+      // Reset result when leaving this section so it starts fresh next time
+      if (approvalPollResult !== null) setApprovalPollResult(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function poll() {
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/gmail/poll-approval");
+        if (cancelled) return;
+        if (res.ok) {
+          const data: ManagerPollResult = await res.json();
+          if (!cancelled) {
+            setApprovalPollResult(data);
+            if (data.found && data.status === "approved") {
+              // Auto-advance to Frame 8 (index 7, travel checklist)
+              stopSpeaking();
+              setOverlayReady(false);
+              setOverlayDismissed(false);
+              setFrameCompleted((prev) => ({ ...prev, [currentIndex]: true }));
+              setCurrentIndex(7);
+              return; // stop polling
+            }
+            if (data.found && data.status === "rejected") {
+              // Persist flaggedItems and reason into tripData for downstream frames
+              setTripData((prev) => prev ? {
+                ...prev,
+                approvalThread: {
+                  status: "rejected",
+                  reason: data.reason ?? null,
+                  flaggedItems: data.flaggedItems ?? [],
+                },
+              } : prev);
+              // If on Frame 7 (index 6), send back to Frame 6 (index 5) to show rejection
+              // and keep polling there for the next reply (after the user resubmits)
+              if (currentIndex === 6) {
+                stopSpeaking();
+                setOverlayReady(false);
+                setOverlayDismissed(false);
+                setCurrentIndex(5);
+                return; // polling will restart via the new currentIndex trigger
+              }
+              // Already on index 5 — keep polling for the next email
+            }
+          }
+        }
+      } catch {
+        // silently ignore poll errors
+      }
+      // Schedule next poll in 5 seconds
+      if (!cancelled) {
+        setTimeout(poll, 5000);
+      }
+    }
+
+    // Kick off first poll immediately
+    void poll();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
 
   // Register Web Push Service Worker
   useEffect(() => {
@@ -2674,10 +2866,14 @@ export default function DemoPage() {
       case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
       case 5: return <ApprovalEmail tripData={tripData} selectedHotel={selectedHotel} liveHotels={liveHotels} selectedFlight={selectedFlight} />;
       case 6:
-        if (tripData?.approvalThread?.flaggedItems?.includes("flight")) {
-          return <FlightComparison tripData={tripData} liveFlights={liveFlights} onChange={setSelectedFlight} />
-        }
-        return <HotelComparison selectedHotel={selectedHotel} liveHotels={liveHotels} />;
+        return (
+          <ApprovalPolling
+            pollResult={approvalPollResult}
+            selectedHotel={selectedHotel}
+            liveHotels={liveHotels}
+            tripData={tripData}
+          />
+        );
       default: { const V = frame.Visual as React.ComponentType<any>; return <V tripData={tripData} selectedFlight={selectedFlight} selectedHotel={selectedHotel} selectedBundle={selectedBundle} liveHotels={liveHotels} liveFlights={liveFlights} liveFlightResults={liveFlightResults} />; }
     }
   }
