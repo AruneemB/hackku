@@ -21,6 +21,11 @@ Built for **HackKU**, Lockey leverages cutting-edge AI (Google Gemini 1.5 Pro), 
 
 ---
 
+## 🧠 Inspiration
+Lockey emerged as an answer to Lockton Companies’ search for a solution to the stressful, often bureaucratic nightmare that business travel can become. Many people have stories about missed flights, confusing expense policies, or the frustration of waiting for a manager to approve a last-minute booking. Lockey is our attempt to turn those feared, disconnected tasks into a single, guided conversation with a companion that anticipates what you need before you even ask.
+
+---
+
 ## ✨ Key Pillars
 
 - **🤖 Proactive AI Concierge**: A 2D mascot with emotional intelligence, powered by ElevenLabs TTS, that shifts its tone (neutral, excited, empathetic, urgent) based on the travel context.
