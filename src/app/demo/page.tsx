@@ -1663,39 +1663,39 @@ function ArrivalSupport({
 
   const options = [
     {
-      icon: "🚕",
+      icon: "",
       name: "Company taxi",
-      time: loading ? "…" : (liveData?.taxi?.minutes ?? DEFAULT_TRANSPORT_DATA.taxi.minutes),
-      cost: loading ? "…" : (liveData?.taxi?.cost ?? DEFAULT_TRANSPORT_DATA.taxi.cost),
+      time: loading ? "..." : (liveData?.taxi?.minutes ?? DEFAULT_TRANSPORT_DATA.taxi.minutes),
+      cost: loading ? "..." : (liveData?.taxi?.cost ?? DEFAULT_TRANSPORT_DATA.taxi.cost),
       preferred: true,
     },
     {
-      icon: "🚇",
-      name: "Metro M1 → M3",
-      time: loading ? "…" : (liveData?.metro?.minutes ?? DEFAULT_TRANSPORT_DATA.metro.minutes),
+      icon: "",
+      name: "Metro M1 -> M3",
+      time: loading ? "..." : (liveData?.metro?.minutes ?? DEFAULT_TRANSPORT_DATA.metro.minutes),
       cost: liveData?.metro?.cost ?? DEFAULT_TRANSPORT_DATA.metro.cost,
       preferred: false,
     },
     {
-      icon: "🚶",
+      icon: "",
       name: "Walk",
-      time: loading ? "…" : (liveData?.walk?.minutes ?? DEFAULT_TRANSPORT_DATA.walk.minutes),
+      time: loading ? "..." : (liveData?.walk?.minutes ?? DEFAULT_TRANSPORT_DATA.walk.minutes),
       cost: DEFAULT_TRANSPORT_DATA.walk.cost,
       preferred: false,
     },
   ];
 
   const distLabel = loading
-    ? "loading…"
+    ? "loading..."
     : `${liveData?.distanceKm ?? DEFAULT_TRANSPORT_DATA.distanceKm} km from MXP`;
 
   return (
     <div className={styles.arrival}>
       <div className={styles.arrivalDest}>
-        <span className={styles.arrivalPin}>📍</span>
+        <span className={styles.arrivalPin}></span>
         <div>
           <div className={styles.arrivalName}>Marriott Scala</div>
-          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan · {distLabel}</div>
+          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan � {distLabel}</div>
         </div>
       </div>
       <div className={styles.cards}>
@@ -1713,12 +1713,13 @@ function ArrivalSupport({
         ))}
       </div>
       <div className={styles.allowanceRow}>
-        <span>💰 Meal allowance today</span>
+        <span> Meal allowance today</span>
         <strong>$75 remaining</strong>
       </div>
     </div>
   );
 }
+
 
 function ReceiptCapture() {
   return (
