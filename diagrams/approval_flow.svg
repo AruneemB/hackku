@@ -1,0 +1,51 @@
+<svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="1080" fill="#fcfdfe"/>
+
+  <rect x="50" y="470" width="250" height="140" rx="20" fill="#007bff" />
+  <text x="175" y="550" font-family="Segoe UI, Arial" font-size="28" text-anchor="middle" fill="white" font-weight="600">Start Trip</text>
+
+  <rect x="350" y="470" width="280" height="140" rx="20" fill="white" stroke="#13aa52" stroke-width="2"/>
+  <text x="490" y="530" font-family="Segoe UI, Arial" font-size="26" text-anchor="middle" fill="#13aa52" font-weight="700">MongoDB Update</text>
+  <text x="490" y="565" font-family="Segoe UI, Arial" font-size="18" text-anchor="middle" fill="#666">status: "pending"</text>
+
+  <rect x="680" y="470" width="280" height="140" rx="20" fill="white" stroke="#dc3545" stroke-width="1.5"/>
+  <text x="820" y="530" font-family="Segoe UI, Arial" font-size="28" text-anchor="middle" fill="#dc3545" font-weight="600">Send Email</text>
+  <text x="820" y="565" font-family="Segoe UI, Arial" font-size="20" text-anchor="middle" fill="#666">Gmail API Request</text>
+
+  <rect x="1010" y="470" width="280" height="140" rx="20" fill="white" stroke="#ffc107" stroke-width="1.5"/>
+  <text x="1150" y="550" font-family="Segoe UI, Arial" font-size="28" text-anchor="middle" fill="#ffc107" font-weight="600">Poll Inbox</text>
+
+  <rect x="1340" y="470" width="300" height="140" rx="20" fill="#6f42c1" />
+  <text x="1490" y="530" font-family="Segoe UI, Arial" font-size="28" text-anchor="middle" fill="white" font-weight="700">Gemini Parser</text>
+  <text x="1490" y="565" font-family="Segoe UI, Arial" font-size="20" text-anchor="middle" fill="#d1d1d1">Analyze Response</text>
+
+  <rect x="1690" y="470" width="220" height="140" rx="20" fill="white" stroke="#13aa52" stroke-width="2"/>
+  <text x="1800" y="530" font-family="Segoe UI, Arial" font-size="26" text-anchor="middle" fill="#13aa52" font-weight="700">MongoDB Final</text>
+  <text x="1800" y="565" font-family="Segoe UI, Arial" font-size="18" text-anchor="middle" fill="#666">status: "approved"</text>
+
+  <!-- Clean loop: found: false -->
+  <path d="M1290 520 C 1340 520, 1340 320, 1150 320 C 960 320, 960 520, 1010 520" stroke="#ffc107" stroke-width="1" fill="none" marker-end="url(#arrowhead_loop)"/>
+  <text x="1150" y="295" font-family="Segoe UI, Arial" font-size="18" text-anchor="middle" fill="#ffc107">found: false (Retry 5s)</text>
+
+  <!-- Clean loop: Revision -->
+  <path d="M1490 610 L1490 780 L490 780 L490 610" stroke="#dc3545" stroke-width="1" fill="none" marker-end="url(#arrowhead_red)"/>
+  <text x="990" y="760" font-family="Segoe UI, Arial" font-size="18" text-anchor="middle" fill="#dc3545">REVISED: Auto-Update Trip DB &amp; Re-Send Request</text>
+
+  <path d="M300 540 L350 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M630 540 L680 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M960 540 L1010 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M1290 540 L1340 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M1640 540 L1690 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ccc" />
+    </marker>
+    <marker id="arrowhead_loop" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ffc107" />
+    </marker>
+    <marker id="arrowhead_red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#dc3545" />
+    </marker>
+  </defs>
+</svg>

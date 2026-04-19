@@ -6,19 +6,19 @@ import Trip from "@/lib/mongodb/models/Trip";
 type SummaryRouteContext = { params: Promise<{ id: string }> };
 
 function extractFlightCost(flights: unknown[]): { amountUsd: number; meta: string } {
-  if (!flights.length) return { amountUsd: 0, meta: "" };
+  if (!flights || !flights.length) return { amountUsd: 0, meta: "" };
   const f = flights[0] as Record<string, unknown>;
   let amountUsd = 0;
   let meta = "";
 
-  // Live Flight shape: { priceUsd, outbound: { flightNumber, origin, destination } }
-  if (typeof f.priceUsd === "number") {
+  // 1. Live Flight shape: { priceUsd, outbound: { flightNumber, origin, destination } }
+  if (typeof f.priceUsd === "number" && f.priceUsd > 0) {
     amountUsd = f.priceUsd;
     const ob = f.outbound as Record<string, string> | undefined;
     if (ob?.flightNumber) meta = `${ob.flightNumber} · ${ob.origin} → ${ob.destination}`;
   }
 
-  // Demo DisplayFlightGroup shape: { returns: [{ totalPriceUsd }] }
+  // 2. Demo DisplayFlightGroup shape: { returns: [{ totalPriceUsd }] }
   if (amountUsd === 0 && Array.isArray(f.returns) && f.returns.length > 0) {
     const r = f.returns[0] as Record<string, unknown>;
     amountUsd = typeof r.totalPriceUsd === "number" ? r.totalPriceUsd : 0;
@@ -27,8 +27,8 @@ function extractFlightCost(flights: unknown[]): { amountUsd: number; meta: strin
     }
   }
 
-  // Rebooked flight shape: { priceUsd }
-  if (amountUsd === 0 && typeof f.priceUsd === "number") amountUsd = f.priceUsd;
+  // 3. Simple fallback
+  if (amountUsd === 0 && typeof f.totalPriceUsd === "number") amountUsd = f.totalPriceUsd;
 
   return { amountUsd, meta };
 }
@@ -37,15 +37,15 @@ function extractHotelCost(
   hotels: unknown[],
   nights: number
 ): { amountUsd: number; meta: string } {
-  if (!hotels.length) return { amountUsd: 0, meta: "" };
+  if (!hotels || !hotels.length) return { amountUsd: 0, meta: "" };
   const h = hotels[0] as Record<string, unknown>;
 
-  // Live Hotel shape: { totalCostUsd, name, nightlyRateUsd }
-  if (typeof h.totalCostUsd === "number") {
+  // 1. Live Hotel shape: { totalCostUsd, name }
+  if (typeof h.totalCostUsd === "number" && h.totalCostUsd > 0) {
     return { amountUsd: h.totalCostUsd, meta: typeof h.name === "string" ? h.name : "" };
   }
 
-  // Demo hotel shape: { pricePerNightUsd, name }
+  // 2. Demo hotel shape: { nightlyRateUsd, name }
   const nightly = (h.nightlyRateUsd ?? h.pricePerNightUsd) as number | undefined;
   if (typeof nightly === "number") {
     return {
@@ -95,12 +95,9 @@ export async function GET(_req: NextRequest, context: SummaryRouteContext) {
       .filter(([k]) => k !== "meal" && k !== "transport")
       .reduce((s, [, v]) => s + v, 0);
 
-    const computed = flightData.amountUsd + hotelData.amountUsd + mealTotal + transportTotal + otherTotal;
-    const totalSpendUsd = typeof trip.totalSpendUsd === "number" && trip.totalSpendUsd > 0
-      ? trip.totalSpendUsd
-      : computed;
-
-    const budgetCapUsd = typeof trip.budgetCapUsd === "number" ? trip.budgetCapUsd : 2340;
+    // ALWAYS compute live instead of relying on potentially stale trip.totalSpendUsd
+    const totalSpendUsd = flightData.amountUsd + hotelData.amountUsd + mealTotal + transportTotal + otherTotal;
+    const budgetCapUsd = typeof trip.budgetCapUsd === "number" && trip.budgetCapUsd > 0 ? trip.budgetCapUsd : 7500;
 
     const categories = [
       { name: "Flights", icon: "✈️", amountUsd: flightData.amountUsd, meta: flightData.meta },

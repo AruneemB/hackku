@@ -145,7 +145,7 @@ export async function GET(req: Request) {
     const session = await getServerSession(authOptions)
     const accessToken = await getAccessToken(session)
 
-    const managerEmail = process.env.MANAGER_EMAIL
+    const managerEmail = process.env.MANAGER_EMAIL ?? process.env.NEXT_PUBLIC_MANAGER_EMAIL
     if (!managerEmail) {
       return NextResponse.json({ error: "MANAGER_EMAIL not configured" }, { status: 500 })
     }

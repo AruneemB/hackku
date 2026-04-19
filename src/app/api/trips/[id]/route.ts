@@ -33,6 +33,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb/client";
 import Trip from "@/lib/mongodb/models/Trip";
+import { Types } from "mongoose";
 
 type TripRouteContext = { params: Promise<{ id: string }> };
 
@@ -62,8 +63,26 @@ export async function PATCH(req: NextRequest, context: TripRouteContext) {
     const { id } = await context.params;
     await connectToDatabase();
     const body = await req.json();
-    
-    const trip = await Trip.findByIdAndUpdate(id, { $set: body }, { new: true, runValidators: true });
+
+    // Support atomic receipt push without overwriting the array
+    const pushReceipt = body.$pushReceipt as Record<string, unknown> | undefined;
+    delete body.$pushReceipt;
+
+    const setOps = Object.keys(body).length > 0 ? { $set: body } : {};
+
+    let trip;
+    if (pushReceipt) {
+      const receiptDoc = { ...pushReceipt, _id: new Types.ObjectId() };
+      const costNum = typeof pushReceipt.total === "number" ? pushReceipt.total : 0;
+      trip = await Trip.findByIdAndUpdate(
+        id,
+        { ...setOps, $push: { receipts: receiptDoc }, $inc: { totalSpendUsd: costNum } },
+        { new: true, runValidators: false }
+      );
+    } else {
+      trip = await Trip.findByIdAndUpdate(id, { $set: body }, { new: true, runValidators: true });
+    }
+
     if (!trip) {
       return NextResponse.json({ message: "Trip not found" }, { status: 404 });
     }

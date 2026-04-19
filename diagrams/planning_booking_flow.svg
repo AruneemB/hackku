@@ -1,0 +1,38 @@
+<svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="1080" fill="#fcfdfe"/>
+  
+  <rect x="50" y="470" width="280" height="140" rx="20" fill="#007bff" />
+  <text x="190" y="530" font-family="Segoe UI, Arial" font-size="28" text-anchor="middle" fill="white" font-weight="600">User Input</text>
+  <text x="190" y="565" font-family="Segoe UI, Arial" font-size="20" text-anchor="middle" fill="#e0e0e0">Dest, Dates, Budget</text>
+
+  <rect x="380" y="470" width="300" height="140" rx="20" fill="white" stroke="#13aa52" stroke-width="2"/>
+  <text x="530" y="530" font-family="Segoe UI, Arial" font-size="26" text-anchor="middle" fill="#13aa52" font-weight="700">MongoDB Storage</text>
+  <text x="530" y="565" font-family="Segoe UI, Arial" font-size="18" text-anchor="middle" fill="#666">Initialize Trip Document</text>
+
+  <rect x="730" y="300" width="320" height="160" rx="20" fill="white" stroke="#007bff" stroke-width="1.5"/>
+  <text x="890" y="370" font-family="Segoe UI, Arial" font-size="28" text-anchor="middle" fill="#007bff" font-weight="600">Search APIs</text>
+  <text x="890" y="405" font-family="Segoe UI, Arial" font-size="20" text-anchor="middle" fill="#666">SerpAPI (Google Flights)</text>
+
+  <rect x="1100" y="470" width="350" height="140" rx="20" fill="#6f42c1" />
+  <text x="1275" y="530" font-family="Segoe UI, Arial" font-size="28" text-anchor="middle" fill="white" font-weight="700">Gemini Intelligence</text>
+  <text x="1275" y="565" font-family="Segoe UI, Arial" font-size="20" text-anchor="middle" fill="#d1d1d1">Policy Vector &amp; Ranking</text>
+
+  <rect x="1500" y="470" width="300" height="140" rx="20" fill="white" stroke="#13aa52" stroke-width="2"/>
+  <text x="1650" y="530" font-family="Segoe UI, Arial" font-size="26" text-anchor="middle" fill="#13aa52" font-weight="700">MongoDB Update</text>
+  <text x="1650" y="565" font-family="Segoe UI, Arial" font-size="18" text-anchor="middle" fill="#666">Persist Ranked Bundles</text>
+
+  <rect x="1840" y="470" width="60" height="140" rx="20" fill="#343a40" />
+  <text x="1870" y="550" font-family="Segoe UI, Arial" font-size="24" text-anchor="middle" fill="white" font-weight="600">UI</text>
+
+  <path d="M330 540 L380 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M680 540 L705 540 L705 380 L730 380" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M1050 380 L1075 380 L1075 540 L1100 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M1450 540 L1500 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M1800 540 L1840 540" stroke="#ccc" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>
+
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ccc" />
+    </marker>
+  </defs>
+</svg>

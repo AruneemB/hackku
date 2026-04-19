@@ -177,7 +177,7 @@ function buildFrameSystem(frameIndex: number): string {
   const ctx: Record<number, string> = {
     2: "The traveler is picking from flight options. Help them choose fast and highlight the best value or speed.",
     3: "The traveler is picking a hotel near the client office. Help them decide quickly.",
-    4: "The traveler is reviewing a compliance report flagging a visa requirement and a hotel budget exception. Keep it clear.",
+    4: "The traveler is reviewing a compliance report. Mention only the issues found (like a visa requirement or a hotel budget exception). If no visa is required, do not mention it.",
     5: "The traveler is choosing a travel bundle. A is fully compliant, B saves money, C is strategic. Be decisive and helpful.",
     6: "The traveler is reviewing the approval email draft. Offer any last tweaks.",
     7: "The manager rejected the hotel. A compliant lower-cost alternative is on screen. Make the pivot feel easy.",

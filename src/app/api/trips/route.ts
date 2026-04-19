@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
         return: new Date(body.dates.return),
       },
       status: "draft",
-      budgetCapUsd: 2800,
+      budgetCapUsd: 7500,
     });
 
     return NextResponse.json(trip, { status: 201 });
