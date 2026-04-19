@@ -92,9 +92,9 @@ type DemoFrame = {
   message: string;
   sheetTitle: string;
   options: [string, string];
-  Visual: React.ComponentType;
+  Visual: React.ComponentType<any>;
   actionTitle: string;
-  ActionVisual: React.ComponentType;
+  ActionVisual: React.ComponentType<any>;
 };
 
 type DemoProgressSnapshot = {
