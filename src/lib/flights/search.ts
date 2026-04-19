@@ -17,7 +17,12 @@
 // ============================================================
 
 import { getJson } from "serpapi";
-import type { Flight, FlightLeg, FlightSearchParams } from "@/types/flight";
+import {
+  DEFAULT_SERP_TRAVEL_CLASS,
+  type Flight,
+  type FlightLeg,
+  type FlightSearchParams,
+} from "@/types/flight";
 import { withFlightCache } from "./cache";
 
 type SerpFlightsQuery = Record<string, string | number | undefined>; // type: 1=round-trip, 2=one-way
@@ -72,6 +77,8 @@ async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight
     if (params.adults) {
       query.adults = params.adults;
     }
+
+    query.travel_class = params.travelClass ?? DEFAULT_SERP_TRAVEL_CLASS;
 
     const results = (await getJson(query)) as Record<string, unknown>;
     const bestFlights = Array.isArray(results.best_flights) ? results.best_flights : [];

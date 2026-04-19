@@ -69,10 +69,18 @@ export interface FlightStatusUpdate {
   destination: string;
 }
 
+/** SerpAPI Google Flights `travel_class` (see https://serpapi.com/google-flights-api). */
+export type SerpTravelClass = 1 | 2 | 3 | 4;
+
+/** Default cabin for live flight pricing: business. */
+export const DEFAULT_SERP_TRAVEL_CLASS: SerpTravelClass = 3;
+
 export interface FlightSearchParams {
   origin: string;       // IATA airport code
   destination: string;
   date: string;         // YYYY-MM-DD
   returnDate?: string;
   adults?: number;
+  /** 1=Economy, 2=Premium economy, 3=Business, 4=First. Defaults to business (3). */
+  travelClass?: SerpTravelClass;
 }

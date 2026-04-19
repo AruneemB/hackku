@@ -48,11 +48,26 @@ describe("searchFlights", () => {
       arrival_id: "MXP",
       outbound_date: "2025-09-14",
       return_date: "2025-09-19",
+      type: 1,
       adults: 1,
       currency: "USD",
       hl: "en",
       api_key: "test_key",
+      travel_class: 3,
     });
+  });
+
+  it("should pass travel_class 1 when travelClass is economy", async () => {
+    (getJson as any).mockResolvedValue({
+      best_flights: [],
+      other_flights: [],
+    });
+
+    await searchFlights({ ...mockParams, travelClass: 1 });
+
+    expect(getJson).toHaveBeenCalledWith(
+      expect.objectContaining({ travel_class: 1 })
+    );
   });
 
   it("should correctly map SerpAPI results to Flight type", async () => {
