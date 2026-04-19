@@ -3,17 +3,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 20px;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(243, 91, 79, 0.07), transparent 26%),
-    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+  padding: 20px 24px 40px;
+  background: var(--cc-bg);
 }
 
 .phoneGrid {
   width: min(100%, 1120px);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px;
+  gap: 40px;
   align-items: center;
   justify-items: center;
 }
@@ -25,30 +23,23 @@
   width: 100%;
 }
 
-.phoneStageRaised {
-  transform: none;
-}
-
-.phoneStageLowered {
-  transform: none;
-}
-
 .phoneChrome {
   width: min(100%, 370px) !important;
-  height: 700px;
-  padding: 10px !important;
-  border: 1px solid rgba(45, 59, 69, 0.08) !important;
-  border-radius: 34px !important;
-  background:
-    linear-gradient(180deg, #20292f 0%, #151b20 100%) !important;
+  height: 760px;
+  padding: 12px !important;
+  border: 1px solid rgba(45, 59, 69, 0.12) !important;
+  border-radius: 44px !important;
+  background: #111417 !important;
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
 .shellViewport {
   height: 100% !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
-  border-radius: 26px !important;
-  background:
-    linear-gradient(180deg, #fffefd 0%, #fbf8f4 100%) !important;
+  border-radius: 32px !important;
+  overflow: hidden !important;
+  background: #fffdfb !important;
 }
 
 .sheetSurface {
@@ -60,14 +51,6 @@
   font-size: 13px;
   line-height: 1.5;
   color: var(--cc-body, #5a6672);
-}
-
-.topPill {
-  width: 44px;
-  height: 6px;
-  margin-right: 14px;
-  border-radius: 999px;
-  background: rgba(159, 171, 183, 0.18);
 }
 
 .timelineWrap {
@@ -124,61 +107,17 @@
   color: var(--cc-body, #5a6672);
 }
 
-.simpleCardStack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.simpleCard {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
-  border: 1px solid rgba(159, 171, 183, 0.2);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.simpleCardLabel {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--cc-body, #5a6672);
-}
-
-.simpleCardTitle {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--cc-text-primary);
-}
-
-.simpleCardBody {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--cc-body, #5a6672);
-}
-
-.simpleCardMeta {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--cc-body, #5a6672);
-}
-
 @media (max-width: 920px) {
   .page {
-    padding: 14px 12px 20px;
+    padding: 12px 16px 24px;
   }
 
   .phoneGrid {
     grid-template-columns: 1fr;
-    gap: 18px;
+    gap: 32px;
   }
-
-  .phoneStageRaised,
-  .phoneStageLowered {
-    transform: none;
+  
+  .phoneChrome {
+    height: 720px;
   }
 }

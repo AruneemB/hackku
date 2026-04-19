@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import {
-  Building2,
   CalendarClock,
+  Hotel as HotelIcon,
+  MessageCircleMore as MessageCircleMoreIcon,
   MessageSquareText,
   PlaneTakeoff,
   ShieldAlert,
@@ -13,6 +14,8 @@ import {
 } from "lucide-react";
 import mainStyles from "@/app/page.module.css";
 import pageStyles from "./page.module.css";
+
+// ── Types ──────────────────────────────────────────────────────
 
 type DemoVisaInfo = {
   visaRequired: boolean;
@@ -29,6 +32,8 @@ type EmbassyInfo = {
   hours: string;
 };
 
+// ── Demo data ──────────────────────────────────────────────────
+
 const VISA_INFO: DemoVisaInfo = {
   visaRequired: true,
   visaType: "Type-C Business Visa",
@@ -44,16 +49,23 @@ const MILAN_EMBASSY: EmbassyInfo = {
   hours: "Mon - Fri, 8:00 AM - 5:00 PM",
 };
 
+// ── Components ─────────────────────────────────────────────────
+
 export function ScenarioPhones() {
   return (
     <main className={pageStyles.page}>
       <div className={pageStyles.phoneGrid}>
-        <div className={[pageStyles.phoneStage, pageStyles.phoneStageRaised].join(" ")}>
+        <div className={pageStyles.phoneStage}>
           <ScenarioPhone
-            bubbleTone="urgent"
+            tone="urgent"
             footer={
               <div className={mainStyles.sheetActions}>
-                <a className={[mainStyles.actionButton].join(" ")} href={VISA_INFO.applicationUrl ?? "#"} rel="noreferrer" target="_blank">
+                <a
+                  className={mainStyles.actionButton}
+                  href={VISA_INFO.applicationUrl ?? "#"}
+                  rel="noreferrer"
+                  target="_blank"
+                >
                   Apply Now
                 </a>
                 <button className={[mainStyles.actionButton, mainStyles.secondaryAction].join(" ")} type="button">
@@ -66,12 +78,12 @@ export function ScenarioPhones() {
           />
         </div>
 
-        <div className={[pageStyles.phoneStage, pageStyles.phoneStageLowered].join(" ")}>
+        <div className={pageStyles.phoneStage}>
           <ScenarioPhone
-            bubbleTone="empathetic"
+            tone="empathetic"
             footer={
               <div className={mainStyles.sheetActions}>
-                <button className={[mainStyles.actionButton].join(" ")} type="button">
+                <button className={mainStyles.actionButton} type="button">
                   Got It
                 </button>
                 <button className={[mainStyles.actionButton, mainStyles.secondaryAction].join(" ")} type="button">
@@ -89,16 +101,19 @@ export function ScenarioPhones() {
 }
 
 function ScenarioPhone({
-  bubbleTone,
+  tone,
   footer,
   sheetContent,
   sheetTitle,
 }: {
-  bubbleTone: "urgent" | "empathetic";
+  tone: "urgent" | "empathetic" | "neutral";
   footer: ReactNode;
   sheetContent: ReactNode;
   sheetTitle: string;
 }) {
+  const isUrgent = tone === "urgent";
+  const mascotSrc = isUrgent || tone === "empathetic" ? "/mascot/confused.png" : "/mascot/greeting.png";
+
   return (
     <div className={[mainStyles.phone, pageStyles.phoneChrome].join(" ")}>
       <section className={[mainStyles.shell, pageStyles.shellViewport].join(" ")}>
@@ -112,12 +127,12 @@ function ScenarioPhone({
 
           <div className={mainStyles.stage}>
             <div className={mainStyles.mascot}>
-              <div className={mainStyles.figure} data-speaking="false">
+              <div className={mainStyles.figure} data-speaking="true">
                 <Image
                   alt="Lockey mascot"
                   height={280}
                   priority
-                  src={bubbleTone === "urgent" ? "/mascot/confused.png" : "/mascot/greeting.png"}
+                  src={mascotSrc}
                   style={{ width: "min(280px, 60vw)", height: "auto", position: "relative", zIndex: 1 }}
                   width={280}
                 />
@@ -126,14 +141,22 @@ function ScenarioPhone({
           </div>
 
           <div className={mainStyles.controls}>
-            <button aria-label="Roadmap" className={[mainStyles.iconButton, mainStyles.sideButton, mainStyles.leftButton].join(" ")} type="button">
+            <button
+              aria-label="Roadmap"
+              className={[mainStyles.iconButton, mainStyles.sideButton, mainStyles.leftButton].join(" ")}
+              type="button"
+            >
               <MessageSquareText size={22} />
             </button>
             <button aria-label="Voice" className={[mainStyles.iconButton, mainStyles.primaryButton].join(" ")} type="button">
               <MicIcon />
             </button>
-            <button aria-label="Chat" className={[mainStyles.iconButton, mainStyles.sideButton, mainStyles.rightButton].join(" ")} type="button">
-              <MessageCircleMoreIcon />
+            <button
+              aria-label="Chat"
+              className={[mainStyles.iconButton, mainStyles.sideButton, mainStyles.rightButton].join(" ")}
+              type="button"
+            >
+              <MessageCircleMoreIcon size={26} />
             </button>
           </div>
         </div>
@@ -146,9 +169,9 @@ function ScenarioPhone({
           <div className={mainStyles.sheetScroll}>
             <div className={mainStyles.sheetContent}>
               <h2 className={mainStyles.sheetTitle}>{sheetTitle}</h2>
-              {sheetTitle === "Embassy Communication" ? (
+              {sheetTitle === "Embassy Communication" && (
                 <p className={pageStyles.sheetIntro}>Contact details and support brief, kept in the same in-app card style.</p>
-              ) : null}
+              )}
               {sheetContent}
             </div>
           </div>
@@ -218,6 +241,7 @@ function ComplianceReportRefined({
     key: string;
     tone: "warn" | "ok";
     icon: ReactNode;
+    label: string;
     title: string;
     body: string;
     detail?: string;
@@ -228,6 +252,7 @@ function ComplianceReportRefined({
       key: "visa",
       tone: visaRequired ? "warn" : "ok",
       icon: visaRequired ? <ShieldAlert size={18} strokeWidth={2.1} /> : <ShieldCheck size={18} strokeWidth={2.1} />,
+      label: "Visa",
       title: visaRequired ? `${visaType} required` : "No visa blocker",
       body: leadDays != null ? `Apply at least ${leadDays} days before departure.` : visa?.notes ?? "Entry requirements are clear.",
       detail: visaRequired ? visa?.notes ?? "Check current consular processing times." : undefined,
@@ -237,17 +262,19 @@ function ComplianceReportRefined({
     {
       key: "hotel",
       tone: hotelOverCap ? "warn" : "ok",
-      icon: <Building2 size={18} strokeWidth={2.1} />,
+      icon: <HotelIcon size={18} strokeWidth={2.1} />,
+      label: "Hotel",
       title: hotelOverCap ? "Over nightly policy" : "Within nightly policy",
-      body: `${hotelName ?? "Selected hotel"} - $${hotelNightlyRateUsd ?? hotelCapUsd}/night`,
+      body: `${hotelName ?? "Selected hotel"} · $${hotelNightlyRateUsd ?? hotelCapUsd}/night`,
       detail: hotelOverCap ? `$${hotelExcess} over the $${hotelCapUsd}/night cap.` : `Aligned with the $${hotelCapUsd}/night cap.`,
     },
     {
       key: "flight",
       tone: flightOverCap ? "warn" : "ok",
       icon: <PlaneTakeoff size={18} strokeWidth={2.1} />,
+      label: "Flight",
       title: flightOverCap ? "Price needs review" : "Flight approved",
-      body: flightTotalUsd != null ? `${flightNumber ?? "Selected flight"} - $${flightTotalUsd}` : `Flight cap - $${flightCapUsd}`,
+      body: flightTotalUsd != null ? `${flightNumber ?? "Selected flight"} · $${flightTotalUsd}` : `Flight cap · $${flightCapUsd}`,
       detail: flightTotalUsd != null ? (flightOverCap ? `$${Math.round(flightTotalUsd - flightCapUsd)} above the approved cap.` : `Still within the $${flightCapUsd} cap.`) : undefined,
     },
     ...(nights > 0
@@ -256,62 +283,40 @@ function ComplianceReportRefined({
             key: "stay",
             tone: (stayOverLimit ? "warn" : "ok") as "warn" | "ok",
             icon: <CalendarClock size={18} strokeWidth={2.1} />,
+            label: "Dates",
             title: stayOverLimit ? "Stay limit exceeded" : "Dates look compliant",
-            body: `${nights} night trip${tripWindow ? ` - ${tripWindow}` : ""}`,
+            body: `${nights} night trip${tripWindow ? ` · ${tripWindow}` : ""}`,
             detail: stayLimit != null ? (stayOverLimit ? `Over the ${stayLimit}-day entry window.` : `Within the ${stayLimit}-day entry window.`) : "No stay limit issue found.",
           },
         ]
       : []),
   ];
 
-  const incomplete = checks.filter((item) => item.tone === "warn");
-  const complete = checks.filter((item) => item.tone === "ok");
-
   return (
-    <div className={mainStyles.cvList}>
-      {incomplete.length > 0 ? (
-        <div className={mainStyles.cvSection}>
-          <div className={mainStyles.cvSectionLabel}>Needs Attention</div>
-          {incomplete.map((item) => (
-            <div className={mainStyles.cvRow} key={item.key}>
-              <div className={[mainStyles.cvDot, mainStyles.cvDotWarn].join(" ")}>{item.icon}</div>
-              <div>
-                <div className={mainStyles.cvRowTitle}>{item.title}</div>
-                <div className={mainStyles.cvRowSub}>
-                  {item.body}
-                  {item.detail ? ` - ${item.detail}` : ""}
-                  {item.ctaHref && item.ctaLabel ? (
-                    <>
-                      {" "}
-                      <Link className={mainStyles.applyLink} href={item.ctaHref} rel="noreferrer" target="_blank">
-                        {item.ctaLabel}
-                      </Link>
-                    </>
-                  ) : null}
-                </div>
-                {item.key === "visa" && visa?.visaRequired ? <VisaApplicationTimeline visa={visa} /> : null}
-              </div>
+    <div className={mainStyles.cvList} style={{ gap: 28 }}>
+      {checks.map((item) => (
+        <div className={mainStyles.cvRow} key={item.key} style={{ gap: 14 }}>
+          <div className={[mainStyles.cvDot, item.tone === "warn" ? mainStyles.cvDotWarn : mainStyles.cvDotOk].join(" ")} style={{ width: 32, height: 32 }}>
+            {React.cloneElement(item.icon as React.ReactElement, { size: 16 })}
+          </div>
+          <div>
+            <div className={mainStyles.cvRowTitle} style={{ fontSize: 14, fontWeight: 600 }}>{item.title}</div>
+            <div className={mainStyles.cvRowSub} style={{ fontSize: 12, marginTop: 2 }}>
+              {item.body}
+              {item.detail ? `${item.body.endsWith('.') ? ' ' : ' · '}${item.detail}` : ""}
+              {item.ctaHref && item.ctaLabel && (
+                <>
+                  {" "}
+                  <Link className={mainStyles.applyLink} href={item.ctaHref} rel="noreferrer" target="_blank" style={{ fontSize: 12 }}>
+                    {item.ctaLabel}
+                  </Link>
+                </>
+              )}
             </div>
-          ))}
+            {item.key === "visa" && visa?.visaRequired && <VisaApplicationTimeline visa={visa} />}
+          </div>
         </div>
-      ) : null}
-      {complete.length > 0 ? (
-        <div className={mainStyles.cvSection}>
-          <div className={mainStyles.cvSectionLabel}>Complete</div>
-          {complete.map((item) => (
-            <div className={mainStyles.cvRow} key={item.key}>
-              <div className={[mainStyles.cvDot, mainStyles.cvDotOk].join(" ")}>{item.icon}</div>
-              <div>
-                <div className={mainStyles.cvRowTitle}>{item.title}</div>
-                <div className={mainStyles.cvRowSub}>
-                  {item.body}
-                  {item.detail ? ` - ${item.detail}` : ""}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      ))}
     </div>
   );
 }
@@ -323,39 +328,31 @@ function VisaApplicationTimeline({ visa }: { visa: DemoVisaInfo }) {
 
   const steps = [
     {
-      title: "Complete online application",
-      body: applyUrl ? `Apply for your ${visaType} at the official portal.` : `Contact the destination consulate to apply for your ${visaType}.`,
+      title: "Complete application",
+      body: applyUrl ? `Apply for your ${visaType} online.` : `Contact consulate.`,
     },
     {
-      title: "Gather required documents",
-      body: "Bring a valid passport, invitation letter, hotel booking, flight itinerary, and employer support letter.",
+      title: "Gather documents",
+      body: "Passport, invitation, and employer letters.",
     },
     {
-      title: "Submit and await processing",
-      body: leadDays != null ? `Allow at least ${leadDays} days for processing before departure.` : "Check with the consulate for current processing times.",
+      title: "Submit",
+      body: leadDays != null ? `Allow ${leadDays} days.` : "Check processing times.",
     },
   ];
 
   return (
-    <div className={pageStyles.timelineWrap}>
+    <div className={pageStyles.timelineWrap} style={{ marginTop: 10 }}>
       {steps.map((step, index) => (
         <div className={pageStyles.timelineItem} key={step.title}>
           <div className={pageStyles.timelineRail}>
-            <span className={pageStyles.timelineDot} />
-            {index < steps.length - 1 ? <span className={pageStyles.timelineLine} /> : null}
+            <span className={pageStyles.timelineDot} style={{ width: 8, height: 8 }} />
+            {index < steps.length - 1 && <span className={pageStyles.timelineLine} style={{ minHeight: 28 }} />}
           </div>
-          <div className={pageStyles.timelineContent}>
-            <div className={pageStyles.timelineTitle}>{step.title}</div>
-            <div className={pageStyles.timelineBody}>
+          <div className={pageStyles.timelineContent} style={{ paddingBottom: 10 }}>
+            <div className={pageStyles.timelineTitle} style={{ fontSize: 12, fontWeight: 600 }}>{step.title}</div>
+            <div className={pageStyles.timelineBody} style={{ fontSize: 11, marginTop: 2 }}>
               {step.body}
-              {index === 0 && applyUrl ? (
-                <>
-                  {" "}
-                  <Link className={mainStyles.applyLink} href={applyUrl} rel="noreferrer" target="_blank">
-                    Apply here
-                  </Link>
-                </>
-              ) : null}
             </div>
           </div>
         </div>
@@ -369,22 +366,27 @@ function EmbassyScenarioSheet({ city }: { city: string }) {
 
   return (
     <div className={mainStyles.refinedSheet}>
-      <div className={pageStyles.simpleCardStack}>
-        <div className={pageStyles.simpleCard}>
-          <div className={pageStyles.simpleCardLabel}>Nearest Embassy</div>
-          <div className={pageStyles.simpleCardTitle}>{embassy.name}</div>
-          <div className={pageStyles.simpleCardBody}>{embassy.address}</div>
-          <div className={pageStyles.simpleCardMeta}>{embassy.hours}</div>
+      <div className={mainStyles.refinedGrid} style={{ gap: 14 }}>
+        <div className={[mainStyles.refinedCard, mainStyles.refinedCardNeutral].join(" ")}>
+          <div className={mainStyles.refinedCardTop}>
+            <div className={mainStyles.refinedCardHeading}>
+              <div className={mainStyles.refinedCardTitle} style={{ fontSize: 17, fontWeight: 700 }}>{embassy.name}</div>
+            </div>
+          </div>
+          <div className={mainStyles.refinedCardBody} style={{ fontSize: 14 }}>{embassy.address}</div>
+          <div className={mainStyles.refinedCardDetail} style={{ fontSize: 13 }}>{embassy.hours}</div>
         </div>
 
-        <div className={pageStyles.simpleCard}>
-          <div className={pageStyles.simpleCardLabel}>Outbound Support Brief</div>
-          <div className={pageStyles.simpleCardTitle}>Traveler support request: Lockey Thompson in Milan</div>
-          <div className={pageStyles.simpleCardBody}>
-            Lockey Thompson is traveling June 14 to June 21, 2026. The visa packet, hotel confirmation, and client
-            invitation letter are attached and ready to share with support teams.
+        <div className={[mainStyles.refinedCard, mainStyles.refinedCardNeutral].join(" ")}>
+          <div className={mainStyles.refinedCardTop}>
+            <div className={mainStyles.refinedCardHeading}>
+              <div className={mainStyles.refinedCardTitle} style={{ fontSize: 17, fontWeight: 700 }}>Traveler support request</div>
+            </div>
           </div>
-          <div className={pageStyles.simpleCardMeta}>Travel desk escalation remains available 24 / 7.</div>
+          <div className={mainStyles.refinedCardBody} style={{ fontSize: 14 }}>
+            Lockey Thompson in Milan (June 14-21). Visa packet, hotel booking, and client invitation letter ready.
+          </div>
+          <div className={mainStyles.refinedCardDetail} style={{ fontSize: 13 }}>Travel desk escalation available 24/7.</div>
         </div>
       </div>
     </div>
@@ -421,17 +423,6 @@ function MicIcon() {
       <rect height="13" rx="3" stroke="currentColor" strokeWidth="2" width="6" x="9" y="2" />
       <path d="M12 19v3" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
       <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function MessageCircleMoreIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" height="26" viewBox="0 0 24 24" width="26">
-      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <path d="M8 12h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
-      <path d="M12 12h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
-      <path d="M16 12h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
     </svg>
   );
 }
