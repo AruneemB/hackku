@@ -156,13 +156,15 @@ function startTimedReveal(audio: HTMLAudioElement, alignment: SpeechAlignment, t
   syncFrame = window.requestAnimationFrame(tick);
 }
 
-async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean> {
+async function speakWithElevenLabs(text: string, tone: ToneKey, requestId: number): Promise<boolean> {
   try {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, tone }),
     });
+
+    if (requestId !== currentRequestId) return true;
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -175,6 +177,8 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
       alignment?: SpeechAlignment | null;
       voiceId?: string;
     };
+
+    if (requestId !== currentRequestId) return true;
 
     if (!data.audioBase64) {
       console.warn("[mascot] ElevenLabs returned no audio — falling back to browser TTS");
@@ -200,14 +204,20 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
           window.cancelAnimationFrame(syncFrame);
           syncFrame = null;
         }
-        revealTo(text.length);
-        setMascotState({ isSpeaking: false });
+        if (requestId === currentRequestId) {
+          revealTo(text.length);
+          setMascotState({ isSpeaking: false });
+        }
         resolve();
       };
 
       audio.onended = cleanup;
       audio.onerror = cleanup;
       audio.onplay = () => {
+        if (requestId !== currentRequestId) {
+          audio.pause();
+          return;
+        }
         if (data.alignment) {
           startTimedReveal(audio, data.alignment, text);
         } else {
@@ -216,6 +226,7 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
       };
 
       audio.play().catch((err) => {
+        if (requestId !== currentRequestId) return;
         console.warn("[mascot] audio.play() rejected — falling back to browser TTS:", err);
         // Autoplay blocked — release the audio resources but keep isSpeaking:true
         // so the speech bubble stays visible while browser TTS runs.
@@ -231,12 +242,24 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
           utterance.rate = tone === "urgent" ? 1.08 : tone === "excited" ? 1.02 : 0.98;
           utterance.pitch = tone === "excited" ? 1.1 : tone === "empathetic" ? 0.95 : 1;
           revealTo(0);
-          utterance.onboundary = (event) => revealTo(event.charIndex);
-          utterance.onend = () => { revealTo(text.length); setMascotState({ isSpeaking: false }); resolve(); };
+          utterance.onboundary = (event) => {
+            if (requestId === currentRequestId) revealTo(event.charIndex);
+          };
+          utterance.onend = () => {
+            if (requestId === currentRequestId) {
+              revealTo(text.length);
+              setMascotState({ isSpeaking: false });
+            }
+            resolve();
+          };
           utterance.onerror = () => {
-            const ms = getFallbackDuration(text);
-            startEstimatedReveal(text, ms);
-            fallbackTimer = (window as any).setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
+            if (requestId === currentRequestId) {
+              const ms = getFallbackDuration(text);
+              startEstimatedReveal(text, ms);
+              fallbackTimer = (window as any).setTimeout(() => { fallbackTimer = null; setMascotState({ isSpeaking: false }); resolve(); }, ms);
+            } else {
+              resolve();
+            }
           };
           window.speechSynthesis.speak(utterance);
         } else {
@@ -253,14 +276,18 @@ async function speakWithElevenLabs(text: string, tone: ToneKey): Promise<boolean
   }
 }
 
-async function speakWithBrowser(text: string, tone: ToneKey): Promise<void> {
+async function speakWithBrowser(text: string, tone: ToneKey, requestId: number): Promise<void> {
+  if (requestId !== currentRequestId) return;
+
   if (!("speechSynthesis" in window)) {
     const ms = getFallbackDuration(text);
     startEstimatedReveal(text, ms);
     await new Promise<void>((resolve) => {
       fallbackTimer = (window as any).setTimeout(() => {
-        revealTo(text.length);
-        setMascotState({ isSpeaking: false });
+        if (requestId === currentRequestId) {
+          revealTo(text.length);
+          setMascotState({ isSpeaking: false });
+        }
         fallbackTimer = null;
         resolve();
       }, ms);
@@ -273,40 +300,55 @@ async function speakWithBrowser(text: string, tone: ToneKey): Promise<void> {
     utterance.rate = tone === "urgent" ? 1.08 : tone === "excited" ? 1.02 : 0.98;
     utterance.pitch = tone === "excited" ? 1.1 : tone === "empathetic" ? 0.95 : 1;
     utterance.onstart = () => {
-      revealTo(0);
+      if (requestId === currentRequestId) revealTo(0);
+      else window.speechSynthesis.cancel();
     };
     utterance.onboundary = (event) => {
-      revealTo(event.charIndex);
+      if (requestId === currentRequestId) revealTo(event.charIndex);
     };
     utterance.onend = () => {
-      revealTo(text.length);
-      setMascotState({ isSpeaking: false });
+      if (requestId === currentRequestId) {
+        revealTo(text.length);
+        setMascotState({ isSpeaking: false });
+      }
       resolve();
     };
     utterance.onerror = () => {
-      const ms = getFallbackDuration(text);
-      startEstimatedReveal(text, ms);
-      fallbackTimer = (window as any).setTimeout(() => {
-        revealTo(text.length);
-        setMascotState({ isSpeaking: false });
-        fallbackTimer = null;
+      if (requestId === currentRequestId) {
+        const ms = getFallbackDuration(text);
+        startEstimatedReveal(text, ms);
+        fallbackTimer = (window as any).setTimeout(() => {
+          revealTo(text.length);
+          setMascotState({ isSpeaking: false });
+          fallbackTimer = null;
+          resolve();
+        }, ms);
+      } else {
         resolve();
-      }, ms);
+      }
     };
     window.speechSynthesis.speak(utterance);
   });
 }
 
+let currentRequestId = 0;
+
 async function say(text: string, newTone?: ToneKey) {
   if (typeof window === "undefined") return;
 
+  const requestId = ++currentRequestId;
   clearSpeechWork();
 
   const tone = newTone ?? mascotState.tone;
   setMascotState({ speech: text, visibleLength: 0, tone, isSpeaking: true, isThinking: false });
 
-  const ok = await speakWithElevenLabs(text, tone);
-  if (!ok) await speakWithBrowser(text, tone);
+  const ok = await speakWithElevenLabs(text, tone, requestId);
+  if (requestId !== currentRequestId) return;
+
+  if (!ok) await speakWithBrowser(text, tone, requestId);
+  
+  // Wait for the speech to actually finish if it hasn't already.
+  // speakWithElevenLabs and speakWithBrowser return when the audio ends.
 }
 
 function setTone(tone: ToneKey) {

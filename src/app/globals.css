@@ -86,34 +86,6 @@ textarea {
   40% { opacity: 1; transform: scale(1); }
 }
 
-@keyframes mascot-ring-spin {
-  from { transform: translateX(-50%) rotate(0deg); }
-  to   { transform: translateX(-50%) rotate(360deg); }
-}
-
-.mascot-thinking-ring {
-  position: absolute;
-  top: 48px;
-  left: 50%;
-  width: 193px;
-  height: 193px;
-  transform: translateX(-50%);
-  transform-origin: 50% 50%;
-  animation: mascot-ring-spin 1.1s linear infinite;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 0;
-}
-
-@media (max-width: 360px) {
-  .mascot-thinking-ring {
-    width: 175px;
-    height: 175px;
-  }
-}
-
-
-
 .thinking-dots {
   display: inline-flex;
   align-items: center;

@@ -11,10 +11,10 @@ function getCountryName(code: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const { city, country, visaRequired, visaType, hotelOverCap } = await req.json();
+    const { city, country, visaRequired, visaType, hotelOverCap, flightOverCap, stayOverLimit } = await req.json();
     const countryName = getCountryName(country);
 
-    const hasIssues = visaRequired || hotelOverCap;
+    const hasIssues = visaRequired || hotelOverCap || flightOverCap || stayOverLimit;
 
     const prompt = `
       You are Lockey, an AI travel concierge for Lockton. 
@@ -23,9 +23,11 @@ export async function POST(req: NextRequest) {
       Status:
       - Visa Required: ${visaRequired ? `Yes (${visaType || "Required"})` : "No"}
       - Hotel Over Budget: ${hotelOverCap ? "Yes" : "No"}
+      - Flight Over Budget: ${flightOverCap ? "Yes" : "No"}
+      - Stay Duration Over Limit: ${stayOverLimit ? "Yes" : "No"}
       
       ${hasIssues 
-        ? "There ARE compliance issues. Briefly acknowledge them and say 'here's what needs attention'."
+        ? "There ARE compliance issues. Briefly acknowledge that there are items needing attention or exceptions."
         : "Everything is PERFECTLY compliant. Congratulate them on a policy-perfect trip and say something like 'everything looks great' or 'you're all set from a policy perspective'."}
       
       Requirements:

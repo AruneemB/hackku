@@ -134,10 +134,10 @@ async function searchFlightsInternal(params: FlightSearchParams): Promise<Flight
           }
         : outbound;
 
-      // Generate a consistent ID: serp_flightNumber_origin_destination_MMDD
+      // Generate a unique ID: serp_flightNumber_origin_destination_MMDD_price_duration
       const flightNumberNorm = outbound.flightNumber.toLowerCase().replace(/\s+/g, "");
       const dateNorm = params.date.replace(/-/g, "").slice(4, 8); // Extract MMDD from YYYY-MM-DD
-      const id = `serp_${flightNumberNorm}_${outbound.origin.toLowerCase()}_${outbound.destination.toLowerCase()}_${dateNorm}`;
+      const id = `serp_${flightNumberNorm}_${outbound.origin.toLowerCase()}_${outbound.destination.toLowerCase()}_${dateNorm}_${option.price}_${option.total_duration}`;
 
       return {
         id,

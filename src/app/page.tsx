@@ -300,48 +300,53 @@ function buildApprovalEmail(input: {
 
   const homeCode = tripData?.originCity
     ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase())
-    : "—";
+    : "ORD";
   const destCode = tripData?.city
     ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? tripData.city.substring(0, 3).toUpperCase())
-    : "—";
-  const destCity = tripData?.city ?? "your destination";
-  const destCountryCode = tripData?.country ?? "";
-  const destCountry = destCountryCode ? expandCountry(destCountryCode) : "";
+    : "MXP";
+  const destCity = tripData?.city ?? "Milan";
+  const destCountryCode = tripData?.country ?? "it";
+  const destCountry = destCountryCode ? expandCountry(destCountryCode) : "Italy";
   const dateRange = tripData?.departure && tripData?.returnDate
     ? fmtDateRange(tripData.departure, tripData.returnDate)
-    : "dates TBD";
+    : "Sep 14 – Sep 19, 2026";
   const purpose = tripData?.purpose?.trim() || "an on-site client meeting";
 
-  const liveGroup = input.liveFlightGroups?.[selectedFlight];
-  const flightNum = liveGroup?.outbound.outbound.flightNumber ?? null;
-  const flightPrice = liveGroup
-    ? liveGroup.outbound.priceUsd + (liveGroup.returns[selectedReturn]?.priceUsd ?? 0)
-    : 0;
+  const rawGroup = (input.liveFlightGroups?.[selectedFlight]) || (DEMO_FLIGHT_GROUPS[selectedFlight] as any);
+  
+  // Support both FlightGroup (live) and DisplayFlightGroup (demo)
+  const flightNum = rawGroup?.outbound?.outbound?.flightNumber ?? rawGroup?.flightNumber ?? "LH 8904";
+  
+  let flightPrice = 0;
+  if (rawGroup?.outbound?.priceUsd !== undefined) {
+    // Live FlightGroup structure
+    flightPrice = (rawGroup.outbound.priceUsd ?? 0) + (rawGroup.returns?.[selectedReturn]?.priceUsd ?? 0);
+  } else {
+    // Demo DisplayFlightGroup structure
+    flightPrice = rawGroup?.returns?.[selectedReturn]?.totalPriceUsd ?? rawGroup?.returns?.[0]?.totalPriceUsd ?? 687;
+  }
 
-  const hotelData = input.liveHotels?.[selectedHotel];
-  const hotelName = hotelData?.name ?? null;
-  const hotelRate = hotelData?.nightlyRateUsd ?? 0;
+  const hotelData = (input.liveHotels?.[selectedHotel]) || (DEMO_HOTELS[selectedHotel] as any);
+  const hotelName = hotelData?.name ?? "Marriott Scala";
+  const hotelRate = hotelData?.nightlyRateUsd ?? hotelData?.pricePerNightUsd ?? 247;
 
-  const nights = tripData?.departure && tripData?.returnDate
-    ? Math.max(0, Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000))
-    : 0;
+  const nights = (tripData?.departure && tripData?.returnDate)
+    ? Math.max(1, Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000))
+    : 5;
   const hotelTotal = hotelRate * nights;
-  const overCap = hotelRate > 350;
+  const hotelCap = 350;
+  const overCap = hotelRate > hotelCap;
   const totalEstimated = flightPrice + hotelTotal;
 
-  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "manager@example.com";
+  const managerEmail = "mgr.sarah@lockton.com";
   const locationLabel = [destCity, destCountry].filter(Boolean).join(", ");
   const subject = `Travel Approval - ${destCity}, ${dateRange}`;
 
-  const flightLine = flightNum
-    ? `Flight: ${flightNum}, ${homeCode} to ${destCode} · $${flightPrice}`
-    : "Flight: not selected";
-  const hotelLine = hotelName
-    ? `Hotel: ${hotelName} · $${hotelRate}/night × ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.` : ""}`
-    : "Hotel: not selected";
+  const flightLine = `Flight: ${flightNum}, ${homeCode} to ${destCode} · $${flightPrice}`;
+  const hotelLine = `Hotel: ${hotelName} · $${hotelRate}/night × ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - hotelCap} over the $${hotelCap} cap - closest preferred vendor to client office.` : ""}`;
 
   const bodyText = [
-    "Hi,",
+    "Hi Sarah,",
     "",
     `I'm requesting approval for a business trip to ${locationLabel}, ${dateRange} for ${purpose}.`,
     "",
@@ -359,8 +364,8 @@ function buildApprovalEmail(input: {
     destCity, destCountry, destCountryCode, dateRange,
     homeCode, destCode,
     flightNum, flightPrice,
-    hotelName, hotelRate, nights, hotelTotal, overCap, totalEstimated,
-    purpose,
+    hotelName, hotelRate, nights, hotelTotal,
+    overCap, totalEstimated, purpose,
   };
 }
 
@@ -394,7 +399,7 @@ function buildDemoPolicy(country: string, visa: DemoVisaInfo) {
       updatedAt: new Date(),
     },
     hotelNightlyCapUsd: 350,
-    flightCapUsd: 5000,
+    flightCapUsd: 7500,
     mealAllowancePerDayUsd: 75,
     requiresManagerApproval: true,
     approvalReason: "Trip requires manager approval before booking",
@@ -1042,9 +1047,10 @@ function FlightPickerV2({
                   <div className={styles.fpReturnRows}>
                     {g.returns.map((r, ri) => {
                       const isRetSel = retSel === ri;
+                      const returnKey = `ret_${ri}_${r.id}_${r.priceUsd ?? (r as any).totalPriceUsd}`;
                       return (
                         <button
-                          key={r.id}
+                          key={returnKey}
                           className={[styles.fpReturnRow, isRetSel ? styles.fpReturnRowSelected : ""].join(" ")}
                           onClick={() => selectReturn(ri)}
                           type="button"
@@ -1105,7 +1111,7 @@ function ComplianceReport({
   hotelCapUsd = 350,
   flightNumber,
   flightTotalUsd,
-  flightCapUsd = 5000,
+  flightCapUsd = 7500,
   departure,
   returnDate,
 }: {
@@ -1371,7 +1377,7 @@ function HotelComparisonPanel({
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
         <div className={styles.compareMeta}>{rejectedDistance} km from office</div>
         {rejectedHotel.overPolicyCap && (
-          <div className={styles.compareReason}>${rejectedHotel.excessAboveCapUsd || Math.max(0, rejectedRate - 200)} over the $200 cap</div>
+          <div className={styles.compareReason}>${rejectedHotel.excessAboveCapUsd || Math.max(0, rejectedRate - 350)} over the $350 cap</div>
         )}
       </div>
       <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
@@ -1907,7 +1913,7 @@ function ComplianceReportRefined({
   hotelCapUsd = 350,
   flightNumber,
   flightTotalUsd,
-  flightCapUsd = 5000,
+  flightCapUsd = 7500,
   departure,
   returnDate,
 }: {
@@ -3911,6 +3917,7 @@ export default function DemoPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSpeechRequestId = useRef(0);
 
   // Selection state (lifted from sub-components)
   const [selectedFlight, setSelectedFlight] = useState(0);
@@ -3953,6 +3960,8 @@ export default function DemoPage() {
   const [chatMode, setChatMode] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const greetedFrames = useRef<Set<number>>(new Set());
+  const lastGreetedFrameRef = useRef<number>(-1);
+  const lastSpokenMessageRef = useRef<string>("");
 
   const { say, setThinking, stopSpeaking, speech, visibleLength } = useMascot();
   const frame = FRAMES[currentIndex];
@@ -4053,9 +4062,11 @@ export default function DemoPage() {
     let cancelled = false;
 
     async function run() {
+      // Reset overlay for every frame transition to prevent premature popups
+      setOverlayReady(false);
+      setOverlayDismissed(false);
+
       if (currentIndex === 0) {
-        setOverlayReady(false);
-        setOverlayDismissed(false);
         setThinking(true);
         return;
       }
@@ -4095,6 +4106,27 @@ export default function DemoPage() {
           }
         }
 
+        // Calculate actual compliance flags based on current selection
+        const hotel = liveHotels?.[selectedHotel] ?? DEMO_HOTELS[selectedHotel];
+        const hotelNightlyRateUsd = hotel?.pricePerNightUsd;
+        const hotelCapUsd = 350;
+        const hotelOverCap = hotelNightlyRateUsd != null && hotelNightlyRateUsd > hotelCapUsd;
+
+        const flightGroup = liveFlights?.[selectedFlight] ?? DEMO_FLIGHT_GROUPS[selectedFlight];
+        const flightOption = flightGroup?.returns[selectedReturn];
+        const flightTotalUsd = flightOption?.totalPriceUsd;
+        const flightCapUsd = 7500;
+        const flightOverCap = flightTotalUsd != null && flightTotalUsd > flightCapUsd;
+
+        let nights = 0;
+        if (tripData?.departure && tripData?.returnDate) {
+          const dep = new Date(`${tripData.departure}T12:00:00`);
+          const ret = new Date(`${tripData.returnDate}T12:00:00`);
+          nights = Math.round((ret.getTime() - dep.getTime()) / 86_400_000);
+        }
+        const stayLimit = visaForGreeting?.stayLimitDays ?? null;
+        const stayOverLimit = stayLimit != null && nights > stayLimit;
+
         try {
           const res = await fetch("/api/demo/compliance-greeting", {
             method: "POST",
@@ -4103,7 +4135,10 @@ export default function DemoPage() {
               city,
               country,
               visaRequired: visaForGreeting?.visaRequired ?? false,
-              visaType: visaForGreeting?.visaType ?? null,
+              visaType: visaForGreeting?.visaForGreeting ?? null,
+              hotelOverCap,
+              flightOverCap,
+              stayOverLimit,
             }),
           });
           if (!cancelled && res.ok) {
@@ -4112,6 +4147,12 @@ export default function DemoPage() {
           }
         } catch { /* fall back to static frame message */ }
       }
+
+      // Avoid repeating the exact same message if we already spoke it for this frame.
+      if (lastGreetedFrameRef.current === currentIndex && lastSpokenMessageRef.current === message) {
+        return;
+      }
+
       // Store greeting in chat history (deduplicated)
       if (!greetedFrames.current.has(currentIndex)) {
         greetedFrames.current.add(currentIndex);
@@ -4123,6 +4164,10 @@ export default function DemoPage() {
           return [...prev, { role: "assistant", content: message, frameIndex: currentIndex }];
         });
       }
+
+      lastGreetedFrameRef.current = currentIndex;
+      lastSpokenMessageRef.current = message;
+
       await say(message, frame.tone);
       if (!cancelled && currentIndex !== 1) setOverlayReady(true);
     }
@@ -4540,7 +4585,8 @@ export default function DemoPage() {
     await handleUserSpeech(text);
   }
 
-  function handleOpenSheet() {
+  async function handleOpenSheet() {
+    await say(frame.message, frame.tone);
     setOverlayReady(true);
     setOverlayDismissed(false);
   }
@@ -4858,7 +4904,7 @@ export default function DemoPage() {
             hotelCapUsd={350}
             flightNumber={flightGroup?.flightNumber}
             flightTotalUsd={returnFlight?.totalPriceUsd}
-            flightCapUsd={5000}
+            flightCapUsd={7500}
             departure={tripData?.departure ?? DEMO_DEFAULTS.departure}
             returnDate={tripData?.returnDate ?? DEMO_DEFAULTS.returnDate}
           />

@@ -61,23 +61,6 @@ export function Mascot({
         transition: isThinking ? undefined : "transform 150ms ease",
       }}
     >
-      {isThinking && (
-        <div aria-hidden className="mascot-thinking-ring">
-          <svg className="mascot-thinking-ring-svg" viewBox="0 0 100 100">
-            <circle
-              cx="50"
-              cy="50"
-              fill="none"
-              pathLength="100"
-              r="49"
-              stroke="var(--cc-accent, #f35b4f)"
-              strokeDasharray="22 78"
-              strokeLinecap="round"
-              strokeWidth="2"
-            />
-          </svg>
-        </div>
-      )}
       <Image
         alt={mascotImage.alt}
         height={280}
