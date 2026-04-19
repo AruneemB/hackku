@@ -218,7 +218,72 @@ const DEMO_BUNDLES = [
   { label: "C", description: "Weekend stay strategy · Marriott Scala. Best overall value.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2010, savingsVsStandard: 330, complianceFlags: [] },
 ];
 
-const REBOOKED_FLIGHT = { id: "lh9012", flightNumber: "LH 9012", carrier: "Lufthansa", route: "ORD → MXP", priceUsd: 1067, dep: "9:00 PM", arr: "12:30 PM+1", dur: "9h 30m", stops: "Nonstop" };
+type RebookingData = {
+  cancelled: {
+    flightNumber: string;
+    carrier: string;
+    route: string;
+    dep: string;
+    priceUsd: number;
+    originAirport: string;
+  };
+  rebooked: {
+    flightNumber: string;
+    carrier: string;
+    route: string;
+    dep: string;
+    priceUsd: number;
+    changeFeeUsd: number;
+    overageUsd: number;
+    seat: string;
+  };
+};
+
+const AIRPORT_NAMES: Record<string, string> = {
+  ORD: "O'Hare", JFK: "JFK", LAX: "LAX", MCI: "Kansas City",
+  BOS: "Boston", ATL: "Atlanta", DFW: "Dallas/Fort Worth",
+  DEN: "Denver", PHX: "Phoenix", SFO: "San Francisco",
+  SEA: "Seattle", MSP: "Minneapolis", DTW: "Detroit",
+  PHL: "Philadelphia", CLT: "Charlotte", YYZ: "Toronto",
+};
+
+const REBOOK_CARRIER_ALT: Record<string, { carrier: string; flightNumber: string }> = {
+  "Lufthansa": { carrier: "United Airlines", flightNumber: "UA 986" },
+  "Swiss": { carrier: "United Airlines", flightNumber: "UA 986" },
+  "Air France": { carrier: "United Airlines", flightNumber: "UA 986" },
+  "United Airlines": { carrier: "American Airlines", flightNumber: "AA 742" },
+  "American Airlines": { carrier: "United Airlines", flightNumber: "UA 986" },
+};
+
+function buildRebookingData(group: DisplayFlightGroup, originalPriceUsd: number): RebookingData {
+  const routeParts = group.route.split(" → ");
+  const originAirport = routeParts[0] ?? "ORD";
+  const destAirport = routeParts[routeParts.length - 1] ?? "MXP";
+  const route = `${originAirport} → ${destAirport}`;
+  const alt = REBOOK_CARRIER_ALT[group.carrier] ?? { carrier: "United Airlines", flightNumber: "UA 986" };
+  const changeFeeUsd = 150;
+  const fareOverage = 230;
+  return {
+    cancelled: {
+      flightNumber: group.flightNumber,
+      carrier: group.carrier,
+      route,
+      dep: group.dep,
+      priceUsd: originalPriceUsd,
+      originAirport,
+    },
+    rebooked: {
+      flightNumber: alt.flightNumber,
+      carrier: alt.carrier,
+      route,
+      dep: "9:15 PM",
+      priceUsd: originalPriceUsd + fareOverage + changeFeeUsd,
+      changeFeeUsd,
+      overageUsd: fareOverage + changeFeeUsd,
+      seat: "14A",
+    },
+  };
+}
 
 const DEMO_RECEIPT = {
   merchant: "Ristorante Al Porto",
@@ -287,12 +352,49 @@ async function executeFrameAction(
     case 9:
       await patchTrip(tripId, { status: "active" });
       break;
-    case 10:
-      await patchTrip(tripId, { flights: [REBOOKED_FLIGHT] });
+    case 10: {
+      const liveRaw = sel.liveFlightGroups?.[sel.flight];
+      const demoGroup = DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
+      const origFlightNum = liveRaw?.outbound.outbound.flightNumber ?? demoGroup.flightNumber;
+      const origCarrier = liveRaw?.outbound.outbound.carrier ?? demoGroup.carrier;
+      const originCode = liveRaw?.outbound.outbound.origin ?? demoGroup.route.split(" → ")[0] ?? "ORD";
+      const destCode = liveRaw?.outbound.outbound.destination ?? demoGroup.route.split(" → ").pop() ?? "MXP";
+      const origPrice = liveRaw
+        ? liveRaw.outbound.priceUsd + (liveRaw.returns[sel.selectedReturn ?? 0]?.priceUsd ?? 0)
+        : demoGroup.returns?.[sel.selectedReturn ?? 0]?.totalPriceUsd ?? demoGroup.returns?.[0]?.totalPriceUsd ?? 1067;
+      const altEntry = REBOOK_CARRIER_ALT[origCarrier] ?? { carrier: "United Airlines", flightNumber: "UA 986" };
+      const changeFeeUsd = 150;
+      const newPriceUsd = origPrice + 230 + changeFeeUsd;
+      await patchTrip(tripId, {
+        flights: [{
+          id: altEntry.flightNumber.toLowerCase().replace(/\s+/g, ""),
+          flightNumber: altEntry.flightNumber,
+          carrier: altEntry.carrier,
+          route: `${originCode} → ${destCode}`,
+          priceUsd: newPriceUsd,
+          dep: "9:15 PM",
+          arr: "12:45 PM+1",
+          dur: "9h 30m",
+          stops: "Nonstop",
+        }],
+        rebooking: {
+          originalFlightNumber: origFlightNum,
+          originalCarrier: origCarrier,
+          originalPriceUsd: origPrice,
+          newFlightNumber: altEntry.flightNumber,
+          newCarrier: altEntry.carrier,
+          newPriceUsd,
+          changeFeeUsd,
+          overageUsd: newPriceUsd - origPrice,
+          reason: `Thunderstorm at ${originCode} · missed connection`,
+          rebookedAt: new Date().toISOString(),
+        },
+      });
       break;
+    }
     case 11:
       await patchTrip(tripId, {
-        approvalThread: { gmailThreadId: "exception-thread-001", status: "pending", reason: "Emergency rebooking $380 over approved budget" },
+        approvalThread: { gmailThreadId: "exception-thread-001", status: "pending", reason: "Emergency rebooking over approved budget" },
       });
       break;
     case 12:
@@ -931,36 +1033,43 @@ function LiveDashboard() {
   );
 }
 
-function FlightRebooking() {
+function FlightRebooking({ rebooking }: { rebooking: RebookingData }) {
+  const { cancelled, rebooked } = rebooking;
+  const carrierChanged = cancelled.carrier !== rebooked.carrier;
   return (
     <div className={styles.rebooking}>
       <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
         <div className={styles.rebookBadge}>Original · Cancelled ✗</div>
-        <div className={styles.rebookFlight}>LH 8904 &nbsp;·&nbsp; ORD → MXP</div>
-        <div className={styles.rebookTime}>Departs 8:45 AM</div>
-        <div className={styles.rebookMeta}>Thunderstorm at ORD · missed connection</div>
+        <div className={styles.rebookFlight}>{cancelled.flightNumber} &nbsp;·&nbsp; {cancelled.route}</div>
+        <div className={styles.rebookTime}>Departs {cancelled.dep} · {cancelled.carrier}</div>
+        <div className={styles.rebookMeta}>Thunderstorm at {AIRPORT_NAMES[cancelled.originAirport] ?? cancelled.originAirport} · missed connection</div>
       </div>
       <div className={styles.rebookArrow}>↓ rebooked automatically</div>
       <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
         <div className={styles.rebookBadge}>New booking · Confirmed ✓</div>
-        <div className={styles.rebookFlight}>LH 9012 &nbsp;·&nbsp; ORD → MXP</div>
-        <div className={styles.rebookTime}>Departs 9:00 PM</div>
-        <div className={styles.rebookMeta}>Same carrier · No change fee · Seat 14A · Hotel notified ✓</div>
+        <div className={styles.rebookFlight}>{rebooked.flightNumber} &nbsp;·&nbsp; {rebooked.route}</div>
+        <div className={styles.rebookTime}>Departs {rebooked.dep} · {rebooked.carrier}</div>
+        <div className={styles.rebookMeta}>
+          {carrierChanged ? `${cancelled.carrier} → ${rebooked.carrier}` : "Same carrier"} · Change fee: ${rebooked.changeFeeUsd} · Seat {rebooked.seat} · Hotel notified ✓
+        </div>
       </div>
     </div>
   );
 }
 
-function ExceptionEmail() {
+function ExceptionEmail({ rebooking }: { rebooking: RebookingData }) {
+  const { cancelled, rebooked } = rebooking;
+  const destCity = cancelled.route.split(" → ").pop() ?? "destination";
+  const originName = AIRPORT_NAMES[cancelled.originAirport] ?? cancelled.originAirport;
   return (
     <div className={styles.emailDraft}>
       <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
       <div className={styles.emailField}><span className={styles.emailKey}>Priority</span><span className={[styles.emailVal, styles.emailUrgent].join(" ")}>HIGH - Action required</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - Milan Rebooking</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - {destCity} Rebooking</span></div>
       <div className={styles.emailBody}>
         <p>Hi Sarah,</p>
-        <p><strong>LH 8904 was cancelled due to a thunderstorm</strong> at O&#39;Hare. The only available rebooking is LH 9012 at <strong>$1,067</strong>, which is $380 over the approved $687 budget.</p>
-        <p>Force majeure - requesting emergency exception. Hotel hold expires in 2 hours.</p>
+        <p><strong>{cancelled.flightNumber} was cancelled due to a thunderstorm</strong> at {originName}. The only available rebooking is {rebooked.flightNumber} ({rebooked.carrier}) at <strong>${rebooked.priceUsd.toLocaleString()}</strong>, which is ${rebooked.overageUsd} over the approved ${cancelled.priceUsd.toLocaleString()} budget.</p>
+        <p>A ${rebooked.changeFeeUsd} change fee applies due to carrier switch ({cancelled.carrier} → {rebooked.carrier}). Force majeure — requesting emergency exception. Hotel hold expires in 2 hours.</p>
         <p>Lockey</p>
       </div>
     </div>
@@ -2917,6 +3026,15 @@ export default function DemoPage() {
             checkInDate={fmtDate(departure)}
           />
         );
+      }
+      case 10: case 11: {
+        const flightGroups = liveFlights ?? DEMO_FLIGHT_GROUPS;
+        const group = flightGroups[selectedFlight] ?? flightGroups[0];
+        const returnFlight = group.returns?.[selectedReturn] ?? group.returns?.[0];
+        const origPrice = returnFlight?.totalPriceUsd ?? group.returns?.[0]?.totalPriceUsd ?? 1067;
+        const rebooking = buildRebookingData(group, origPrice);
+        if (currentIndex === 10) return <FlightRebooking rebooking={rebooking} />;
+        return <ExceptionEmail rebooking={rebooking} />;
       }
       case 14: return <ContactCards city={tripData?.city ?? DEMO_DEFAULTS.city} />;
       case 15: return <SpendSummary tripId={tripId} />;
