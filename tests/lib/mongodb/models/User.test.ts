@@ -10,8 +10,8 @@ describe("User Model", () => {
 
   it("should create and save a valid user", async () => {
     const userData = {
-      name: "Kelli Thompson",
-      email: "kelli@lockton.com",
+      name: "Lockey Thompson",
+      email: "lockey@lockton.com",
       citizenship: "US",
       passport: {
         number: "XXXXXXXXX",
@@ -33,7 +33,7 @@ describe("User Model", () => {
 
   it("should fail to save a user without a required field (email)", async () => {
     const userData = {
-      name: "Kelli Thompson",
+      name: "Lockey Thompson",
       citizenship: "US",
       passport: {
         number: "XXXXXXXXX",
@@ -57,8 +57,8 @@ describe("User Model", () => {
 
   it("should fail to save a duplicate email", async () => {
     const userData = {
-      name: "Kelli Thompson",
-      email: "kelli@lockton.com",
+      name: "Lockey Thompson",
+      email: "lockey@lockton.com",
       citizenship: "US",
       passport: {
         number: "XXXXXXXXX",
@@ -69,7 +69,7 @@ describe("User Model", () => {
     };
 
     await new User(userData).save();
-    
+
     // In Mongoose with MongoMemoryServer, we need to ensure indexes are built
     await User.init();
 

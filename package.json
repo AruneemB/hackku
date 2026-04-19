@@ -27,7 +27,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-leaflet": "^5.0.0",
-    "serpapi": "^2.2.1"
+    "serpapi": "^2.2.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

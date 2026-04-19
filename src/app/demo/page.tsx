@@ -46,12 +46,54 @@ const DynamicHotelMap = dynamic(() => import("@/components/map/LeafletHotelMap")
 
 type Tone = "neutral" | "excited" | "empathetic" | "urgent";
 
+type ManagerPollResult = {
+  found: boolean;
+  noAuth?: boolean;
+  status?: "approved" | "rejected";
+  reason?: string;
+  flaggedItems?: string[];
+  changes?: { hotel?: string; flight?: string; dates?: string; budget?: string };
+  snippet?: string;
+};
+
+type TransportLeg = {
+  minutes: string;
+  cost: string;
+  distanceKm?: number;
+};
+
 type TransportApiResult = {
   distanceKm: number;
-  taxi: { minutes: string; cost: string; distanceKm: number };
-  metro: { minutes: string; cost: string };
-  walk: { minutes: string; cost: string };
+  taxi?: TransportLeg;
+  metro?: TransportLeg;
+  walk?: TransportLeg;
 };
+
+const DEFAULT_TRANSPORT_DATA: Required<TransportApiResult> = {
+  distanceKm: 2.3,
+  taxi: { minutes: "18 min", cost: "$14", distanceKm: 2.3 },
+  metro: { minutes: "35 min", cost: "$2.50" },
+  walk: { minutes: "28 min", cost: "Free" },
+};
+
+function normalizeTransportData(data: TransportApiResult | null | undefined): Required<TransportApiResult> {
+  return {
+    distanceKm: data?.distanceKm ?? DEFAULT_TRANSPORT_DATA.distanceKm,
+    taxi: {
+      minutes: data?.taxi?.minutes ?? DEFAULT_TRANSPORT_DATA.taxi.minutes,
+      cost: data?.taxi?.cost ?? DEFAULT_TRANSPORT_DATA.taxi.cost,
+      distanceKm: data?.taxi?.distanceKm ?? data?.distanceKm ?? DEFAULT_TRANSPORT_DATA.taxi.distanceKm,
+    },
+    metro: {
+      minutes: data?.metro?.minutes ?? DEFAULT_TRANSPORT_DATA.metro.minutes,
+      cost: data?.metro?.cost ?? DEFAULT_TRANSPORT_DATA.metro.cost,
+    },
+    walk: {
+      minutes: data?.walk?.minutes ?? DEFAULT_TRANSPORT_DATA.walk.minutes,
+      cost: data?.walk?.cost ?? DEFAULT_TRANSPORT_DATA.walk.cost,
+    },
+  };
+}
 
 type TripData = {
   city: string;
@@ -61,6 +103,11 @@ type TripData = {
   returnDate: string;
   passportExpiry: string;
   purpose: string;
+  approvalThread?: {
+    status: string;
+    reason: string | null;
+    flaggedItems?: string[];
+  };
 };
 
 type ConversationMessage = { role: "user" | "assistant"; content: string; frameIndex?: number };
@@ -176,6 +223,28 @@ const CITY_TO_AIRPORT: Record<string, string> = {
   tokyo: "NRT", dubai: "DXB", singapore: "SIN", sydney: "SYD",
 };
 
+const COUNTRY_CODES: Record<string, string> = {
+  IT: "Italy",
+  FR: "France",
+  DE: "Germany",
+  ES: "Spain",
+  GB: "United Kingdom",
+  NL: "Netherlands",
+  PT: "Portugal",
+  CH: "Switzerland",
+  JP: "Japan",
+  AE: "UAE",
+  SG: "Singapore",
+  AU: "Australia",
+  CA: "Canada",
+  MX: "Mexico",
+  US: "United States",
+};
+
+function expandCountry(code: string): string {
+  return COUNTRY_CODES[code.toUpperCase()] ?? code;
+}
+
 function fmtTime(d: Date | string) {
   const dt = typeof d === "string" ? new Date(d) : d;
   return dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -186,6 +255,115 @@ function fmtDate(d: Date | string) {
 }
 function fmtDur(min: number) {
   return `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+function fmtDateRange(start: Date | string, end: Date | string) {
+  const s = typeof start === "string" ? new Date(start) : start;
+  const e = typeof end === "string" ? new Date(end) : end;
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (s.getFullYear() !== e.getFullYear()) {
+    return `${s.toLocaleDateString("en-US", { ...opts, year: "numeric" })} – ${e.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`;
+  }
+  return `${s.toLocaleDateString("en-US", opts)} – ${e.toLocaleDateString("en-US", opts)}, ${e.getFullYear()}`;
+}
+
+type ApprovalEmailContent = {
+  managerEmail: string;
+  subject: string;
+  bodyText: string;
+  destCity: string;
+  destCountry: string;
+  destCountryCode: string;
+  dateRange: string;
+  homeCode: string;
+  destCode: string;
+  flightNum: string | null;
+  flightPrice: number;
+  hotelName: string | null;
+  hotelRate: number;
+  nights: number;
+  hotelTotal: number;
+  overCap: boolean;
+  totalEstimated: number;
+  purpose: string;
+};
+
+function buildApprovalEmail(input: {
+  tripData?: TripData | null;
+  liveFlightGroups?: FlightGroup[] | null;
+  liveHotels?: Hotel[] | null;
+  selectedFlight?: number;
+  selectedReturn?: number;
+  selectedHotel?: number;
+}): ApprovalEmailContent {
+  const tripData = input.tripData;
+  const selectedFlight = input.selectedFlight ?? 0;
+  const selectedReturn = input.selectedReturn ?? 0;
+  const selectedHotel = input.selectedHotel ?? 0;
+
+  const homeCode = tripData?.originCity
+    ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase())
+    : "—";
+  const destCode = tripData?.city
+    ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? tripData.city.substring(0, 3).toUpperCase())
+    : "—";
+  const destCity = tripData?.city ?? "your destination";
+  const destCountryCode = tripData?.country ?? "";
+  const destCountry = destCountryCode ? expandCountry(destCountryCode) : "";
+  const dateRange = tripData?.departure && tripData?.returnDate
+    ? fmtDateRange(tripData.departure, tripData.returnDate)
+    : "dates TBD";
+  const purpose = tripData?.purpose?.trim() || "an on-site client meeting";
+
+  const liveGroup = input.liveFlightGroups?.[selectedFlight];
+  const flightNum = liveGroup?.outbound.outbound.flightNumber ?? null;
+  const flightPrice = liveGroup
+    ? liveGroup.outbound.priceUsd + (liveGroup.returns[selectedReturn]?.priceUsd ?? 0)
+    : 0;
+
+  const hotelData = input.liveHotels?.[selectedHotel];
+  const hotelName = hotelData?.name ?? null;
+  const hotelRate = hotelData?.nightlyRateUsd ?? 0;
+
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.max(0, Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000))
+    : 0;
+  const hotelTotal = hotelRate * nights;
+  const overCap = hotelRate > 200;
+  const totalEstimated = flightPrice + hotelTotal;
+
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "manager@example.com";
+  const locationLabel = [destCity, destCountry].filter(Boolean).join(", ");
+  const subject = `Travel Approval - ${destCity}, ${dateRange}`;
+
+  const flightLine = flightNum
+    ? `Flight: ${flightNum}, ${homeCode} to ${destCode} · $${flightPrice}`
+    : "Flight: not selected";
+  const hotelLine = hotelName
+    ? `Hotel: ${hotelName} · $${hotelRate}/night × ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.` : ""}`
+    : "Hotel: not selected";
+
+  const bodyText = [
+    "Hi,",
+    "",
+    `I'm requesting approval for a business trip to ${locationLabel}, ${dateRange} for ${purpose}.`,
+    "",
+    flightLine,
+    hotelLine,
+    "",
+    `Total estimated: $${totalEstimated}. Please let me know if you have any questions.`,
+    "",
+    "Thanks,",
+    "Lockey",
+  ].join("\n");
+
+  return {
+    managerEmail, subject, bodyText,
+    destCity, destCountry, destCountryCode, dateRange,
+    homeCode, destCode,
+    flightNum, flightPrice,
+    hotelName, hotelRate, nights, hotelTotal, overCap, totalEstimated,
+    purpose,
+  };
 }
 
 function toTitleCase(value: string) {
@@ -340,11 +518,27 @@ async function patchTrip(tripId: string, data: Record<string, unknown>) {
   if (!res.ok) throw new Error("Trip update failed");
 }
 
+type FrameActionResult = {
+  approvalSentAt?: number;
+  exceptionSentAt?: number;
+};
+
 async function executeFrameAction(
   frameIdx: number,
   tripId: string,
-  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveHotels?: Hotel[] | null; tripCountry?: string; visaInfo?: DemoVisaInfo | null }
-) {
+  sel: {
+    flight: number;
+    hotel: number;
+    selectedReturn?: number;
+    bundle: number | null;
+    liveFlightGroups?: FlightGroup[] | null;
+    liveHotels?: Hotel[] | null;
+    tripCountry?: string;
+    visaInfo?: DemoVisaInfo | null;
+    tripData?: TripData | null;
+  }
+): Promise<FrameActionResult> {
+  const result: FrameActionResult = {};
   const liveGroup = sel.liveFlightGroups?.[sel.flight];
   const flight = liveGroup?.outbound ?? DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
   const bundle = sel.bundle !== null ? DEMO_BUNDLES[sel.bundle] : DEMO_BUNDLES[2];
@@ -367,16 +561,78 @@ async function executeFrameAction(
     case 5:
       await patchTrip(tripId, { selectedBundle: bundle });
       break;
-    case 6:
+    case 6: {
+      const email = buildApprovalEmail({
+        tripData: sel.tripData,
+        liveFlightGroups: sel.liveFlightGroups,
+        liveHotels: sel.liveHotels,
+        selectedFlight: sel.flight,
+        selectedReturn: sel.selectedReturn,
+        selectedHotel: sel.hotel,
+      });
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const sentAt = Date.now();
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: managerEmail,
+            subject: email.subject,
+            body: email.bodyText,
+          }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          throw new Error((gmailErr as { error?: string }).error ?? `gmail-send ${gmailRes.status}`);
+        }
+        result.approvalSentAt = sentAt;
+      }
+
       await patchTrip(tripId, {
         status: "pending_approval",
         approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
       });
       break;
+    }
     case 7: {
-      const altHotel = sel.liveHotels?.find((h) => !h.overPolicyCap) ?? sel.liveHotels?.[1] ?? DEMO_HOTELS[1];
+      // Resubmission: switch to a compliant hotel if one exists, then re-send
+      // the approval email so the manager has a fresh request to act on.
+      const altHotel = sel.liveHotels?.find((h) => !h.overPolicyCap) ?? sel.liveHotels?.[1];
+      const altHotelIndex = altHotel
+        ? sel.liveHotels?.findIndex((h) => h.id === altHotel.id) ?? sel.hotel
+        : sel.hotel;
+      if (altHotel) {
+        await patchTrip(tripId, { hotels: [altHotel] });
+      }
+      const email = buildApprovalEmail({
+        tripData: sel.tripData,
+        liveFlightGroups: sel.liveFlightGroups,
+        liveHotels: sel.liveHotels,
+        selectedFlight: sel.flight,
+        selectedReturn: sel.selectedReturn,
+        selectedHotel: altHotelIndex,
+      });
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const sentAt = Date.now();
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: managerEmail,
+            subject: `[Resubmission] ${email.subject}`,
+            body: email.bodyText,
+          }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          throw new Error((gmailErr as { error?: string }).error ?? `gmail-send ${gmailRes.status}`);
+        }
+        result.approvalSentAt = sentAt;
+      }
       await patchTrip(tripId, {
-        hotels: [altHotel],
         approvalThread: { gmailThreadId: "demo-thread-002", status: "pending", reason: null },
       });
       break;
@@ -427,11 +683,54 @@ async function executeFrameAction(
       });
       break;
     }
-    case 11:
+    case 11: {
+      const flightGroup = sel.liveFlightGroups?.[sel.flight];
+      let rebooking: RebookingData | null = null;
+      if (flightGroup) {
+        const display: DisplayFlightGroup = {
+          id: flightGroup.outbound.id,
+          flightNumber: flightGroup.outbound.outbound.flightNumber,
+          carrier: flightGroup.outbound.outbound.carrier,
+          route: [flightGroup.outbound.outbound.origin, ...(flightGroup.outbound.outbound.layoverAirports ?? []), flightGroup.outbound.outbound.destination].join(" → "),
+          depDate: "",
+          dep: "",
+          arr: "",
+          dur: "",
+          returns: [],
+        };
+        const origPrice = flightGroup.outbound.priceUsd + (flightGroup.returns[sel.selectedReturn ?? 0]?.priceUsd ?? 0);
+        rebooking = buildRebookingData(display, origPrice);
+      } else {
+        const demoGroup = DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
+        const origPrice = demoGroup.returns?.[sel.selectedReturn ?? 0]?.totalPriceUsd ?? demoGroup.returns?.[0]?.totalPriceUsd ?? 0;
+        rebooking = buildRebookingData(demoGroup, origPrice);
+      }
+
+      const email = buildExceptionEmail(rebooking, sel.tripData);
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const sentAt = Date.now();
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: managerEmail,
+            subject: email.subject,
+            body: email.bodyText,
+          }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          throw new Error((gmailErr as { error?: string }).error ?? `gmail-send ${gmailRes.status}`);
+        }
+        result.exceptionSentAt = sentAt;
+      }
+
       await patchTrip(tripId, {
         approvalThread: { gmailThreadId: "exception-thread-001", status: "pending", reason: "Emergency rebooking over approved budget" },
       });
       break;
+    }
     case 12:
     case 14:
       break;
@@ -444,6 +743,7 @@ async function executeFrameAction(
     default:
       break;
   }
+  return result;
 }
 
 function isPassportExpiringSoon(passportExpiry: string, departure: string): boolean {
@@ -921,6 +1221,7 @@ function ApprovalEmail() {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function HotelComparison() {
   return (
     <div className={styles.compareGrid}>
@@ -940,6 +1241,221 @@ function HotelComparison() {
         <div className={styles.compareMeta}>1.2 km from office</div>
         <div className={styles.compareReason}>Saves $290 total · fully compliant</div>
       </div>
+    </div>
+  );
+}
+
+function ApprovalEmailPanel({
+  tripData,
+  selectedHotel,
+  liveHotels,
+  selectedFlight,
+  liveFlightGroups,
+  selectedReturn,
+}: {
+  tripData?: TripData | null;
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  selectedFlight?: number;
+  liveFlightGroups?: FlightGroup[] | null;
+  selectedReturn?: number;
+}) {
+  const email = buildApprovalEmail({
+    tripData, liveFlightGroups, liveHotels,
+    selectedFlight, selectedReturn, selectedHotel,
+  });
+
+  const locationLabel = [email.destCity, email.destCountry].filter(Boolean).join(", ");
+
+  return (
+    <div className={styles.emailDraft}>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{email.managerEmail}</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>{email.subject}</span></div>
+      <div className={styles.emailBody}>
+        <p>Hi,</p>
+        <p>I&#39;m requesting approval for a business trip to <strong>{locationLabel}, {email.dateRange}</strong> for {email.purpose}.</p>
+        <p>
+          <strong>Flight:</strong> {email.flightNum
+            ? <>{email.flightNum}, {email.homeCode} to {email.destCode} · ${email.flightPrice}</>
+            : <em>not selected</em>}<br />
+          <strong>Hotel:</strong> {email.hotelName
+            ? <>{email.hotelName} · ${email.hotelRate}/night × {email.nights} = ${email.hotelTotal}</>
+            : <em>not selected</em>}<br />
+          {email.overCap && <><strong>Note:</strong> Hotel is ${email.hotelRate - 200} over the $200 cap - closest preferred vendor to client office.</>}
+        </p>
+        <p>Total estimated: ${email.totalEstimated}. Please let me know if you have any questions.</p>
+        <p>Thanks,<br />Lockey</p>
+      </div>
+    </div>
+  );
+}
+
+function HotelComparisonPanel({
+  selectedHotel,
+  liveHotels,
+  tripData,
+}: {
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  tripData?: TripData | null;
+}) {
+  if (!liveHotels?.length) return null;
+
+  const rejectedIndex = selectedHotel ?? 0;
+  const rejectedHotel = liveHotels[rejectedIndex] ?? liveHotels[0];
+  const altIdx = liveHotels.findIndex((hotel, index) => index !== rejectedIndex && !hotel.overPolicyCap);
+  const altHotel = altIdx >= 0
+    ? liveHotels[altIdx]
+    : liveHotels.find((_, index) => index !== rejectedIndex);
+
+  if (!rejectedHotel || !altHotel) return null;
+
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.max(1, Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000))
+    : 0;
+
+  const rejectedName = rejectedHotel.name;
+  const rejectedRate = rejectedHotel.nightlyRateUsd;
+  const rejectedDistance = rejectedHotel.distanceFromOfficeKm;
+  const altName = altHotel.name;
+  const altRate = altHotel.nightlyRateUsd;
+  const altDistance = altHotel.distanceFromOfficeKm;
+  const savings = nights > 0 ? Math.max(0, (rejectedRate - altRate) * nights) : 0;
+
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareBadge}>Rejected âœ—</div>
+        <div className={styles.compareName}>{rejectedName}</div>
+        <div className={styles.comparePrice}>${rejectedRate} / night</div>
+        <div className={styles.compareMeta}>â­ Preferred vendor</div>
+        <div className={styles.compareMeta}>{rejectedDistance} km from office</div>
+        {rejectedHotel.overPolicyCap && (
+          <div className={styles.compareReason}>${rejectedHotel.excessAboveCapUsd || Math.max(0, rejectedRate - 200)} over the $200 cap</div>
+        )}
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareBadge}>Alternative âœ“</div>
+        <div className={styles.compareName}>{altName}</div>
+        <div className={styles.comparePrice}>${altRate} / night</div>
+        <div className={styles.compareMeta}>â­ Preferred vendor</div>
+        <div className={styles.compareMeta}>{altDistance} km from office</div>
+        <div className={styles.compareReason}>{savings > 0 ? `Saves $${savings} total · ` : ""}fully compliant</div>
+      </div>
+    </div>
+  );
+}
+
+function ApprovalPolling({
+  pollResult,
+  selectedHotel,
+  liveHotels,
+  tripData,
+}: {
+  pollResult: ManagerPollResult | null;
+  selectedHotel?: number;
+  liveHotels?: Hotel[] | null;
+  tripData?: TripData | null;
+}) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
+
+  if (!pollResult || !pollResult.found) {
+    const isNoAuth = pollResult?.noAuth;
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>📡</span>
+          <div className={styles.confirmTitle}>Scanning Manager&#39;s Inbox</div>
+          <div className={styles.confirmBody}>
+            {isNoAuth
+              ? "Sign in with Google to enable real inbox scanning. Polling resumes once authenticated."
+              : `Checking for a reply from ${managerEmail} every 5 seconds...`}
+          </div>
+        </div>
+        <div className={styles.watchStatus}>
+          <div className={styles.watchDot} />
+          <span style={{ opacity: 0.85 }}>Monitoring inbox · Polling every 5 s</span>
+        </div>
+        <HotelComparisonPanel selectedHotel={selectedHotel} liveHotels={liveHotels} tripData={tripData} />
+      </div>
+    );
+  }
+
+  if (pollResult.status === "approved") {
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>✅</span>
+          <div className={styles.confirmTitle}>Manager Approved</div>
+          <div className={styles.confirmBody}>{pollResult.reason || "Your itinerary has been approved. Moving to the next step..."}</div>
+        </div>
+        {pollResult.snippet && (
+          <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+            <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+            <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 120)}{pollResult.snippet.length > 120 ? "..." : ""}&#34;</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const { changes, reason, flaggedItems } = pollResult;
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🔄</span>
+        <div className={styles.confirmTitle}>Revision Requested</div>
+        <div className={styles.confirmBody}>{reason || "Manager requested changes to the itinerary."}</div>
+      </div>
+      {pollResult.snippet && (
+        <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+          <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 160)}{pollResult.snippet.length > 160 ? "..." : ""}&#34;</span>
+        </div>
+      )}
+      {(changes?.hotel || changes?.flight || changes?.dates || changes?.budget) && (
+        <div className={styles.complianceList} style={{ marginTop: 8 }}>
+          {changes.hotel && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>🏨</span>
+              <div>
+                <div className={styles.complianceTitle}>Hotel Change</div>
+                <div className={styles.complianceBody}>{changes.hotel}</div>
+              </div>
+            </div>
+          )}
+          {changes.flight && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>✈️</span>
+              <div>
+                <div className={styles.complianceTitle}>Flight Change</div>
+                <div className={styles.complianceBody}>{changes.flight}</div>
+              </div>
+            </div>
+          )}
+          {changes.dates && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>📅</span>
+              <div>
+                <div className={styles.complianceTitle}>Date Change</div>
+                <div className={styles.complianceBody}>{changes.dates}</div>
+              </div>
+            </div>
+          )}
+          {changes.budget && (
+            <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+              <span className={styles.complianceIcon}>💰</span>
+              <div>
+                <div className={styles.complianceTitle}>Budget Guidance</div>
+                <div className={styles.complianceBody}>{changes.budget}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {(flaggedItems?.includes("hotel") || !changes?.flight) && (
+        <HotelComparisonPanel selectedHotel={selectedHotel} liveHotels={liveHotels} tripData={tripData} />
+      )}
     </div>
   );
 }
@@ -1092,24 +1608,147 @@ function FlightRebooking({ rebooking }: { rebooking: RebookingData }) {
   );
 }
 
-function ExceptionEmail({ rebooking }: { rebooking: RebookingData }) {
+type ExceptionEmailContent = {
+  managerEmail: string;
+  subject: string;
+  bodyText: string;
+  destCity: string;
+  originName: string;
+};
+
+function buildExceptionEmail(rebooking: RebookingData, tripData?: TripData | null): ExceptionEmailContent {
   const { cancelled, rebooked } = rebooking;
-  const destCity = cancelled.route.split(" → ").pop() ?? "destination";
-  const originName = AIRPORT_NAMES[cancelled.originAirport] ?? cancelled.originAirport;
+  const destCity = tripData?.city
+    ?? cancelled.route.split(" → ").pop()
+    ?? "destination";
+  const originName = AIRPORT_NAMES[cancelled.originAirport]
+    ?? (tripData?.originCity ? toTitleCase(tripData.originCity) : cancelled.originAirport);
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "manager@example.com";
+  const subject = `[URGENT] Emergency Exception - ${destCity} Rebooking`;
+  const bodyText = [
+    "Hi,",
+    "",
+    `${cancelled.flightNumber} was cancelled due to a thunderstorm at ${originName}.`,
+    `The only available rebooking is ${rebooked.flightNumber} (${rebooked.carrier}) at $${rebooked.priceUsd.toLocaleString()}, which is $${rebooked.overageUsd} over the approved $${cancelled.priceUsd.toLocaleString()} budget.`,
+    "",
+    `A $${rebooked.changeFeeUsd} change fee applies due to carrier switch (${cancelled.carrier} → ${rebooked.carrier}). Force majeure — requesting emergency exception. Hotel hold expires in 2 hours.`,
+    "",
+    "Thanks,",
+    "Lockey",
+  ].join("\n");
+  return { managerEmail, subject, bodyText, destCity, originName };
+}
+
+function ExceptionEmail({
+  rebooking,
+  tripData,
+}: {
+  rebooking: RebookingData;
+  tripData?: TripData | null;
+}) {
+  const { cancelled, rebooked } = rebooking;
+  const email = buildExceptionEmail(rebooking, tripData);
   return (
     <div className={styles.emailDraft}>
-      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{email.managerEmail}</span></div>
       <div className={styles.emailField}><span className={styles.emailKey}>Priority</span><span className={[styles.emailVal, styles.emailUrgent].join(" ")}>HIGH - Action required</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - {destCity} Rebooking</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>{email.subject}</span></div>
       <div className={styles.emailBody}>
-        <p>Hi Sarah,</p>
-        <p><strong>{cancelled.flightNumber} was cancelled due to a thunderstorm</strong> at {originName}. The only available rebooking is {rebooked.flightNumber} ({rebooked.carrier}) at <strong>${rebooked.priceUsd.toLocaleString()}</strong>, which is ${rebooked.overageUsd} over the approved ${cancelled.priceUsd.toLocaleString()} budget.</p>
+        <p>Hi,</p>
+        <p><strong>{cancelled.flightNumber} was cancelled due to a thunderstorm</strong> at {email.originName}. The only available rebooking is {rebooked.flightNumber} ({rebooked.carrier}) at <strong>${rebooked.priceUsd.toLocaleString()}</strong>, which is ${rebooked.overageUsd} over the approved ${cancelled.priceUsd.toLocaleString()} budget.</p>
         <p>A ${rebooked.changeFeeUsd} change fee applies due to carrier switch ({cancelled.carrier} → {rebooked.carrier}). Force majeure — requesting emergency exception. Hotel hold expires in 2 hours.</p>
-        <p>Lockey</p>
+        <p>Thanks,<br />Lockey</p>
       </div>
     </div>
   );
 }
+
+function ArrivalSupport({
+  value,
+  onChange,
+  onDataLoaded,
+}: {
+  value: number;
+  onChange: (i: number) => void;
+  onDataLoaded: (data: TransportApiResult) => void;
+}) {
+  const [liveData, setLiveData] = useState<TransportApiResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/transport/distance?hotel=Via+della+Spiga+31%2C+Milan&airport=MXP")
+      .then((r) => r.json())
+      .then((data: TransportApiResult) => {
+        if (cancelled) return;
+        const normalizedData = normalizeTransportData(data);
+        setLiveData(normalizedData);
+        onDataLoaded(normalizedData);
+      })
+      .catch(() => { /* fall back to defaults */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [onDataLoaded]);
+
+  const options = [
+    {
+      icon: "",
+      name: "Company taxi",
+      time: loading ? "..." : (liveData?.taxi?.minutes ?? DEFAULT_TRANSPORT_DATA.taxi.minutes),
+      cost: loading ? "..." : (liveData?.taxi?.cost ?? DEFAULT_TRANSPORT_DATA.taxi.cost),
+      preferred: true,
+    },
+    {
+      icon: "",
+      name: "Metro M1 -> M3",
+      time: loading ? "..." : (liveData?.metro?.minutes ?? DEFAULT_TRANSPORT_DATA.metro.minutes),
+      cost: liveData?.metro?.cost ?? DEFAULT_TRANSPORT_DATA.metro.cost,
+      preferred: false,
+    },
+    {
+      icon: "",
+      name: "Walk",
+      time: loading ? "..." : (liveData?.walk?.minutes ?? DEFAULT_TRANSPORT_DATA.walk.minutes),
+      cost: DEFAULT_TRANSPORT_DATA.walk.cost,
+      preferred: false,
+    },
+  ];
+
+  const distLabel = loading
+    ? "loading..."
+    : `${liveData?.distanceKm ?? DEFAULT_TRANSPORT_DATA.distanceKm} km from MXP`;
+
+  return (
+    <div className={styles.arrival}>
+      <div className={styles.arrivalDest}>
+        <span className={styles.arrivalPin}></span>
+        <div>
+          <div className={styles.arrivalName}>Marriott Scala</div>
+          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan � {distLabel}</div>
+        </div>
+      </div>
+      <div className={styles.cards}>
+        {options.map((o, i) => (
+          <button className={[styles.card, value === i ? styles.cardSelected : ""].join(" ")} key={o.name} onClick={() => onChange(i)} type="button">
+            <div className={styles.cardRow}>
+              <span className={styles.cardLabel}>{o.icon}  {o.name}</span>
+              {o.preferred && <span className={styles.cardTag}>Preferred</span>}
+            </div>
+            <div className={styles.cardRow}>
+              <span className={styles.cardMeta}>{o.time}</span>
+              <span className={styles.cardPrice}>{o.cost}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className={styles.allowanceRow}>
+        <span> Meal allowance today</span>
+        <strong>$75 remaining</strong>
+      </div>
+    </div>
+  );
+}
+
 
 function ReceiptCapture() {
   return (
@@ -1960,6 +2599,7 @@ function RebookingConfirmed() {
 }
 
 function ExceptionPending() {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
@@ -1967,12 +2607,81 @@ function ExceptionPending() {
           <ShieldAlert size={38} strokeWidth={1.9} />
         </span>
         <div className={styles.confirmTitle}>Exception Pending</div>
-        <div className={styles.confirmBody}>Urgent request sent. Sarah typically responds within 30 minutes for force majeure cases.</div>
+        <div className={styles.confirmBody}>Urgent request sent to {managerEmail}. Polling for a reply every 5 seconds.</div>
       </div>
       <div className={styles.watchStatus}>
         <div className={styles.watchDotUrgent} />
         <span>Monitoring inbox · Hotel hold expires in 2 hours</span>
       </div>
+    </div>
+  );
+}
+
+function ExceptionPolling({
+  pollResult,
+  rebooking,
+  tripData,
+}: {
+  pollResult: ManagerPollResult | null;
+  rebooking: RebookingData;
+  tripData?: TripData | null;
+}) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "your manager";
+
+  if (!pollResult || !pollResult.found) {
+    const isNoAuth = pollResult?.noAuth;
+    return (
+      <div className={styles.actionStack}>
+        <ExceptionEmail rebooking={rebooking} tripData={tripData} />
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>⏳</span>
+          <div className={styles.confirmTitle}>Awaiting Exception Approval</div>
+          <div className={styles.confirmBody}>
+            {isNoAuth
+              ? "Sign in with Google to enable real inbox scanning. Polling resumes once authenticated."
+              : `Urgent request sent to ${managerEmail}. Checking for a reply every 5 seconds…`}
+          </div>
+        </div>
+        <div className={styles.watchStatus}>
+          <div className={styles.watchDotUrgent} />
+          <span style={{ opacity: 0.85 }}>Monitoring inbox · Hotel hold expires in 2 hours</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (pollResult.status === "approved") {
+    return (
+      <div className={styles.actionStack}>
+        <div className={styles.confirmCard}>
+          <span className={styles.confirmEmoji}>✅</span>
+          <div className={styles.confirmTitle}>Exception Approved</div>
+          <div className={styles.confirmBody}>{pollResult.reason || "Manager approved the emergency rebooking. Proceeding to ground transport…"}</div>
+        </div>
+        {pollResult.snippet && (
+          <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+            <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+            <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 160)}{pollResult.snippet.length > 160 ? "…" : ""}&#34;</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.actionStack}>
+      <div className={styles.confirmCard}>
+        <span className={styles.confirmEmoji}>🔄</span>
+        <div className={styles.confirmTitle}>Exception Denied — Resubmit Required</div>
+        <div className={styles.confirmBody}>{pollResult.reason || "Manager denied the request. Tap Resubmit to send an updated request."}</div>
+      </div>
+      {pollResult.snippet && (
+        <div className={styles.watchStatus} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Manager wrote</span>
+          <span style={{ fontSize: 12, opacity: 0.8, fontStyle: "italic" }}>&#34;{pollResult.snippet.slice(0, 200)}{pollResult.snippet.length > 200 ? "…" : ""}&#34;</span>
+        </div>
+      )}
+      <ExceptionEmail rebooking={rebooking} tripData={tripData} />
     </div>
   );
 }
@@ -1984,13 +2693,17 @@ function TransportConfirmed({
   selectedIndex: number;
   liveData: TransportApiResult | null;
 }) {
-  const transportMeta = [
-    { icon: <CarFront size={18} strokeWidth={2.1} />, name: "Company taxi", getTime: (data: TransportApiResult) => data.taxi.minutes, getCost: (data: TransportApiResult) => data.taxi.cost },
-    { icon: <TrainFront size={18} strokeWidth={2.1} />, name: "Metro M1 → M3", getTime: (data: TransportApiResult) => data.metro.minutes, getCost: () => "$2.50" },
-    { icon: <Footprints size={18} strokeWidth={2.1} />, name: "Walk", getTime: (data: TransportApiResult) => data.walk.minutes, getCost: () => "Free" },
+  const TRANSPORT_META = [
+    { icon: "🚕", name: "Company taxi", getTime: (d: Required<TransportApiResult>) => d.taxi.minutes, getCost: (d: Required<TransportApiResult>) => d.taxi.cost },
+    { icon: "🚇", name: "Metro M1 → M3", getTime: (d: Required<TransportApiResult>) => d.metro.minutes, getCost: () => DEFAULT_TRANSPORT_DATA.metro.cost },
+    { icon: "🚶", name: "Walk", getTime: (d: Required<TransportApiResult>) => d.walk.minutes, getCost: () => DEFAULT_TRANSPORT_DATA.walk.cost },
   ];
-  const chosen = transportMeta[selectedIndex] ?? transportMeta[0];
-  const eta = liveData ? chosen.getTime(liveData) : "18 min";
+  const chosen = TRANSPORT_META[selectedIndex] ?? TRANSPORT_META[0];
+  const normalizedLiveData = liveData ? normalizeTransportData(liveData) : null;
+  const eta = normalizedLiveData
+    ? `${chosen.getTime(normalizedLiveData)} · ${chosen.getCost(normalizedLiveData)}`
+    : `${DEFAULT_TRANSPORT_DATA.taxi.minutes} · ${DEFAULT_TRANSPORT_DATA.taxi.cost}`;
+
   const rows = [
     { icon: chosen.icon, label: "Transport", val: chosen.name },
     { icon: <MapPin size={18} strokeWidth={2.1} />, label: "Pickup", val: "MXP Arrivals Hall B" },
@@ -2133,7 +2846,7 @@ const FRAMES: DemoFrame[] = [
   { frameNumber: 4, tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
   { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
   { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
-  { frameNumber: 7, tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparisonRefined, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { frameNumber: 7, tone: "empathetic", message: "I'm scanning your manager's inbox every few seconds. Once I see a reply, I'll tell you exactly what changes are needed so we can move fast.", sheetTitle: "Waiting for Manager Reply", options: ["Resubmit", "Adjust"], Visual: ApprovalPolling, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
   { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
   { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboardRefined, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
   { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebookingRefined, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
@@ -2685,7 +3398,7 @@ function PhoneShell({
                       {msg.role === "assistant" && (
                         <div className={styles.chatAvatarWrap}>
                           <div className={styles.chatAvatar}>
-                            <img alt="Lockey" src="/mascot/happy.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                            <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                           </div>
                         </div>
                       )}
@@ -2707,7 +3420,7 @@ function PhoneShell({
                   <div className={[styles.chatMsg, styles.chatMsgAssistant].join(" ")}>
                     <div className={styles.chatAvatarWrap}>
                       <div className={styles.chatAvatar}>
-                        <img alt="Lockey" src="/mascot/happy.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                        <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                       </div>
                     </div>
                     <div className={styles.chatBubble}>
@@ -3055,6 +3768,10 @@ export default function DemoPage() {
   const visaFetchedForRef = useRef<string | null>(null);
   const [liveWeather, setLiveWeather] = useState<WeatherForecast | null>(null);
   const weatherFetchedForRef = useRef<string | null>(null);
+  const [approvalPollResult, setApprovalPollResult] = useState<ManagerPollResult | null>(null);
+  const [approvalSentAt, setApprovalSentAt] = useState<number | null>(null);
+  const [exceptionPollResult, setExceptionPollResult] = useState<ManagerPollResult | null>(null);
+  const [exceptionSentAt, setExceptionSentAt] = useState<number | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: session, status } = useSession();
@@ -3399,6 +4116,127 @@ export default function DemoPage() {
 
   // ── Voice input (Gemini STT) ─────────────────────────────────
 
+  useEffect(() => {
+    const pollingActive = frameCompleted[6] && (currentIndex === 6 || currentIndex === 7);
+    if (!pollingActive) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll() {
+      if (cancelled) return;
+
+      try {
+        const url = approvalSentAt
+          ? `/api/gmail/poll-approval?since=${approvalSentAt}`
+          : "/api/gmail/poll-approval";
+        const res = await fetch(url);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = (await res.json()) as ManagerPollResult;
+          if (cancelled) return;
+          setApprovalPollResult(data);
+
+          if (data.found && data.status === "approved") {
+            stopSpeaking();
+            setOverlayReady(false);
+            setOverlayDismissed(false);
+            setFrameCompleted((prev) => ({ ...prev, 6: true, 7: true }));
+            setCurrentIndex(8);
+            return;
+          }
+
+          if (data.found && data.status === "rejected") {
+            setTripData((prev) => prev ? {
+              ...prev,
+              approvalThread: {
+                status: "rejected",
+                reason: data.reason ?? null,
+                flaggedItems: data.flaggedItems ?? [],
+              },
+            } : prev);
+
+            if (currentIndex === 6) {
+              stopSpeaking();
+              setOverlayReady(false);
+              setOverlayDismissed(false);
+              setCurrentIndex(7);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Ignore transient polling errors and keep trying.
+      }
+
+      if (!cancelled) {
+        timer = setTimeout(() => {
+          void poll();
+        }, 5000);
+      }
+    }
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, frameCompleted, approvalSentAt]);
+
+  // Poll for the manager's reply to the emergency exception (frame 11)
+  useEffect(() => {
+    const pollingActive = frameCompleted[11] && currentIndex === 11;
+    if (!pollingActive) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll() {
+      if (cancelled) return;
+
+      try {
+        const url = exceptionSentAt
+          ? `/api/gmail/poll-approval?since=${exceptionSentAt}`
+          : "/api/gmail/poll-approval";
+        const res = await fetch(url);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = (await res.json()) as ManagerPollResult;
+          if (cancelled) return;
+          setExceptionPollResult(data);
+
+          if (data.found && data.status === "approved") {
+            stopSpeaking();
+            setOverlayReady(false);
+            setOverlayDismissed(false);
+            setCurrentIndex(12);
+            return;
+          }
+          // On rejection: stay on frame 11 with denial state visible.
+          // User must click "Resubmit" to send a fresh request.
+        }
+      } catch {
+        // Ignore transient polling errors and keep trying.
+      }
+
+      if (!cancelled) {
+        timer = setTimeout(() => {
+          void poll();
+        }, 5000);
+      }
+    }
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, frameCompleted, exceptionSentAt]);
+
   function stopListening() {
     if (silenceTimerRef.current) {
       clearInterval(silenceTimerRef.current);
@@ -3599,7 +4437,10 @@ export default function DemoPage() {
   // ── Frame actions ────────────────────────────────────────────
 
   async function handlePrimary() {
-    if (isProcessing || frameCompleted[currentIndex]) return;
+    // Allow re-running on frame 7 (resubmit after rejection) and frame 11
+    // (resubmit exception after denial). Otherwise, completed frames are locked.
+    const isResubmittableLoop = currentIndex === 7 || currentIndex === 11;
+    if (isProcessing || (frameCompleted[currentIndex] && !isResubmittableLoop)) return;
 
     setIsProcessing(true);
     try {
@@ -3608,7 +4449,13 @@ export default function DemoPage() {
       } else {
         const ensuredTripId = tripId ?? await ensureDemoTrip();
         if (ensuredTripId) {
-          await executeFrameAction(currentIndex, ensuredTripId, {
+          if (currentIndex === 6 || currentIndex === 7) {
+            setApprovalPollResult(null);
+          }
+          if (currentIndex === 11) {
+            setExceptionPollResult(null);
+          }
+          const actionResult = await executeFrameAction(currentIndex, ensuredTripId, {
             flight: selectedFlight,
             hotel: selectedHotel,
             selectedReturn,
@@ -3617,7 +4464,10 @@ export default function DemoPage() {
             liveHotels,
             tripCountry: tripData?.country ?? DEMO_DEFAULTS.country,
             visaInfo,
+            tripData,
           });
+          if (actionResult.approvalSentAt) setApprovalSentAt(actionResult.approvalSentAt);
+          if (actionResult.exceptionSentAt) setExceptionSentAt(actionResult.exceptionSentAt);
         }
       }
 
@@ -3755,6 +4605,26 @@ export default function DemoPage() {
         );
       }
       case 5: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
+      case 6:
+        return (
+          <ApprovalEmailPanel
+            liveFlightGroups={liveFlightResults}
+            liveHotels={liveHotels}
+            selectedFlight={selectedFlight}
+            selectedHotel={selectedHotel}
+            selectedReturn={selectedReturn}
+            tripData={tripData}
+          />
+        );
+      case 7:
+        return (
+          <ApprovalPolling
+            liveHotels={liveHotels}
+            pollResult={approvalPollResult}
+            selectedHotel={selectedHotel}
+            tripData={tripData}
+          />
+        );
       case 8: {
         const liveHotel = liveHotels?.[selectedHotel] ?? liveHotels?.[0];
         const demoHotel = DEMO_HOTELS[selectedHotel] ?? DEMO_HOTELS[0];
@@ -3779,8 +4649,11 @@ export default function DemoPage() {
         const returnFlight = group.returns?.[selectedReturn] ?? group.returns?.[0];
         const origPrice = returnFlight?.totalPriceUsd ?? group.returns?.[0]?.totalPriceUsd ?? 1067;
         const rebooking = buildRebookingData(group, origPrice);
-        if (currentIndex === 10) return <FlightRebookingRefined rebooking={rebooking} />;
-        return <ExceptionEmail rebooking={rebooking} />;
+        if (currentIndex === 10) return <FlightRebooking rebooking={rebooking} />;
+        if (frameCompleted[11]) {
+          return <ExceptionPolling pollResult={exceptionPollResult} rebooking={rebooking} tripData={tripData} />;
+        }
+        return <ExceptionEmail rebooking={rebooking} tripData={tripData} />;
       }
       case 12:
         if (frameCompleted[12]) {
@@ -3811,15 +4684,44 @@ export default function DemoPage() {
     </div>
   );
 
+  // Frames 7 and 11 are resubmit loops: stay clickable after first send
+  // so the user can re-send when the manager rejects the request.
+  const loopPoll =
+    currentIndex === 7 ? approvalPollResult :
+    currentIndex === 11 && frameCompleted[11] ? exceptionPollResult :
+    null;
+  const isResubmitLoop = currentIndex === 7 || currentIndex === 11;
+  const isAwaitingReply =
+    isResubmitLoop &&
+    frameCompleted[currentIndex] &&
+    (!loopPoll || !loopPoll.found || loopPoll.status !== "rejected");
+  const wasRejected = isResubmitLoop && loopPoll?.found && loopPoll.status === "rejected";
+
+  const primaryDisabled =
+    isProcessing ||
+    !canConfirmCurrentFrame ||
+    isAwaitingReply ||
+    (frameCompleted[currentIndex] && !isResubmitLoop);
+
+  const primaryLabel = isProcessing
+    ? "Saving…"
+    : isAwaitingReply
+    ? "Waiting for Reply…"
+    : wasRejected
+    ? "Resubmit"
+    : frameCompleted[currentIndex]
+    ? "Done"
+    : frame.options[0];
+
   const footerContent = isSheetLoading ? null : (
     <div className={styles.sheetActions}>
       <button
         className={[styles.actionButton, styles.primaryAction].join(" ")}
-        disabled={isProcessing || frameCompleted[currentIndex] || !canConfirmCurrentFrame}
+        disabled={primaryDisabled}
         onClick={() => void handlePrimary()}
         type="button"
       >
-        {isProcessing ? "Saving…" : frameCompleted[currentIndex] ? "Done" : frame.options[0]}
+        {primaryLabel}
       </button>
       <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={handleSecondary} type="button">
         {frame.options[1]}

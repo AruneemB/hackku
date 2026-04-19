@@ -3,7 +3,7 @@
 // OWNER: Track A (Frontend & UX)
 // FRAME: 10-11 — Proactive Crisis Intervention + Exception Logic
 // DESCRIPTION: Full-screen alert shown when a delay/cancellation
-//   threatens Kelli's connection. The mascot interrupts with
+//   threatens Lockey's connection. The mascot interrupts with
 //   an urgent ElevenLabs audio message BEFORE she lands.
 //
 //   Shows:
@@ -26,7 +26,7 @@
 // TODO: import type { Flight } from "@/types"
 
 // TODO: export function CrisisAlert({ delayMinutes, alternativeFlight, isOverBudget, ... }) {
-//   // useEffect → mascot.say("Kelli, I've detected a delay...", "urgent")
+//   // useEffect → mascot.say("Lockey, I've detected a delay...", "urgent")
 //   // If alternativeFlight available: show it with one-click confirm button
 //   // If isOverBudget: show exception request with "Send to Manager" button
 //   // If no alternative: show Frame 14 escalation (human contact info)

@@ -1,7 +1,7 @@
 // ============================================================
 // LIB: Gemini Multimodal (Receipt Vision)
 // OWNER: Track B (AI & Intelligence)
-// DESCRIPTION: Handles Frame 13 — Kelli holds a paper receipt
+// DESCRIPTION: Handles Frame 13 — Lockey holds a paper receipt
 //   to the camera and Gemini extracts the data. The image is
 //   passed as a base64 inline part. PII sanitization runs
 //   BEFORE saving to MongoDB (see lib/utils/pii.ts).

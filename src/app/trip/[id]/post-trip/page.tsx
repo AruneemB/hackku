@@ -2,7 +2,7 @@
 // PAGE: Post-Trip Closure
 // OWNER: Track A (Frontend & UX)
 // ROUTE: /trip/[id]/post-trip
-// DESCRIPTION: Frames 13-15. Shown after Kelli returns.
+// DESCRIPTION: Frames 13-15. Shown after Lockey returns.
 //
 // FRAME 13: ReceiptScanner for any missed paper receipts
 // FRAME 14: Emergency safety net display (if applicable)
@@ -39,7 +39,7 @@ export default function PostTripPage() {
     if (!trip) return
     const name = session?.user?.name?.split(" ")[0] ?? "there"
     void say(`Welcome back, ${name}! Let's wrap up your trip to ${trip.destination.city}. Scan any paper receipts you have.`, "excited")
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip?.destination.city])
 
   // Sync receipts from trip document
@@ -76,10 +76,10 @@ export default function PostTripPage() {
   }
 
   const totalSpend = parseFloat(trip.totalSpendUsd?.toString() ?? "0")
-  const budgetCap  = parseFloat(trip.budgetCapUsd?.toString()  ?? "2800")
-  const remaining  = budgetCap - totalSpend
+  const budgetCap = parseFloat(trip.budgetCapUsd?.toString() ?? "2800")
+  const remaining = budgetCap - totalSpend
   const underBudget = remaining >= 0
-  const userName   = session?.user?.name ?? "Traveler"
+  const userName = session?.user?.name ?? "Traveler"
 
   const byCategory = receipts.reduce<Record<string, number>>((acc, r) => {
     acc[r.category] = (acc[r.category] ?? 0) + parseFloat(r.totalUsd ?? "0")
@@ -103,8 +103,8 @@ export default function PostTripPage() {
           <div className="bg-white border border-gray-100 shadow-sm rounded-2xl p-5">
             <h2 className="text-base font-semibold text-gray-800 mb-4">Expense Summary</h2>
             <div className="grid grid-cols-3 gap-3 text-center mb-4">
-              <SummaryCard label="Total Spent"  value={`$${totalSpend.toFixed(2)}`}  />
-              <SummaryCard label="Budget Cap"   value={`$${budgetCap.toFixed(2)}`}   />
+              <SummaryCard label="Total Spent" value={`$${totalSpend.toFixed(2)}`} />
+              <SummaryCard label="Budget Cap" value={`$${budgetCap.toFixed(2)}`} />
               <SummaryCard
                 label={underBudget ? "Under Budget" : "Over Budget"}
                 value={`$${Math.abs(remaining).toFixed(2)}`}
