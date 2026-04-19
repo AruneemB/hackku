@@ -1,4 +1,8 @@
-import type { Flight, FlightSearchParams } from "@/types/flight";
+import {
+  DEFAULT_SERP_TRAVEL_CLASS,
+  type Flight,
+  type FlightSearchParams,
+} from "@/types/flight";
 
 interface CacheEntry {
   data: Flight[];
@@ -9,10 +13,10 @@ const cache = new Map<string, CacheEntry>();
 const DEFAULT_TTL_MS = 60 * 1000; // 60 seconds
 
 function getCacheKey(params: FlightSearchParams): string {
-  // Keyed on (origin, destination, date, returnDate)
-  // We also include adults to be safe, although not explicitly requested
-  const { origin, destination, date, returnDate, adults } = params;
-  return `${origin}|${destination}|${date}|${returnDate || ""}|${adults || 1}`;
+  // Keyed on (origin, destination, date, returnDate, cabin, adults)
+  const { origin, destination, date, returnDate, adults, travelClass } = params;
+  const cabin = travelClass ?? DEFAULT_SERP_TRAVEL_CLASS;
+  return `${origin}|${destination}|${date}|${returnDate || ""}|${adults || 1}|${cabin}`;
 }
 
 /**
