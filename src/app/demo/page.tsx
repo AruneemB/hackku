@@ -2,10 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { ArrowBigLeft, Ellipsis, Pencil, Send as SendIcon } from "lucide-react";
+import { ArrowBigLeft, Ellipsis, Pencil, Plane, Send as SendIcon } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { useMascot } from "@/hooks/useMascot";
-import type { Flight, FlightGroup } from "@/types/flight";
+import type { FlightGroup } from "@/types/flight";
 import type { Hotel } from "@/types/hotel";
 import styles from "./page.module.css";
 import dynamic from "next/dynamic";
@@ -24,18 +24,24 @@ type TripData = {
   returnDate: string;
   passportExpiry: string;
   purpose: string;
+  approvalThread?: {
+    status: string;
+    reason: string | null;
+    flaggedItems?: string[];
+  };
 };
 
 type ConversationMessage = { role: "user" | "assistant"; content: string; frameIndex?: number };
 
 type DemoFrame = {
+  frameNumber: number;
   tone: Tone;
   message: string;
   sheetTitle: string;
   options: [string, string];
-  Visual: React.ComponentType;
+  Visual: React.ComponentType<any>;
   actionTitle: string;
-  ActionVisual: React.ComponentType;
+  ActionVisual: React.ComponentType<any>;
 };
 
 type DemoProgressSnapshot = {
@@ -59,7 +65,7 @@ type DemoProgressSnapshot = {
 const DEMO_DEFAULTS: TripData = {
   city: "Milan",
   country: "IT",
-  originCity: "Chicago",
+  originCity: "",
   departure: "2026-06-14",
   returnDate: "2026-06-21",
   passportExpiry: "2028-12-01",
@@ -110,7 +116,7 @@ const DEMO_FLIGHT_GROUPS: DisplayFlightGroup[] = [
 const CITY_TO_AIRPORT: Record<string, string> = {
   // North America — origin cities
   "kansas city": "MCI", "st. louis": "STL", "saint louis": "STL",
-  chicago: "ORD", milwaukee: "MKE",
+  chicago: "ORD", milwaukee: "MKE", omaha: "OMA",
   "new york": "JFK", "new york city": "JFK", nyc: "JFK",
   boston: "BOS",
   washington: "DCA", "washington dc": "IAD", "washington d.c.": "IAD",
@@ -135,6 +141,26 @@ const CITY_TO_AIRPORT: Record<string, string> = {
   // Asia / Pacific / Middle East — destination cities
   tokyo: "NRT", dubai: "DXB", singapore: "SIN", sydney: "SYD",
 };
+
+const COUNTRY_CODES: Record<string, string> = {
+  IT: "Italy", FR: "France", DE: "Germany", ES: "Spain", GB: "United Kingdom",
+  NL: "Netherlands", PT: "Portugal", CH: "Switzerland", JP: "Japan",
+  AE: "UAE", SG: "Singapore", AU: "Australia", CA: "Canada", MX: "Mexico",
+  US: "United States",
+};
+
+function expandCountry(code: string): string {
+  return COUNTRY_CODES[code.toUpperCase()] ?? code;
+}
+
+function fmtDateRange(departure: string, returnDate: string): string {
+  const dep = new Date(departure);
+  const ret = new Date(returnDate);
+  const depStr = dep.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const retDay = ret.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
+  const year = ret.getUTCFullYear();
+  return `${depStr}–${retDay}, ${year}`;
+}
 
 function fmtTime(d: Date | string) {
   const dt = typeof d === "string" ? new Date(d) : d;
@@ -168,6 +194,25 @@ const DEMO_POLICY = {
 };
 
 const DEMO_PROGRESS_STORAGE_KEY = "hackku.demo.progress.v1";
+const HIDDEN_FRAME_INDEXES = new Set([4, 12, 15]);
+
+function isVisibleFrameIndex(index: number): boolean {
+  return index >= 0 && index < FRAMES.length && !HIDDEN_FRAME_INDEXES.has(index);
+}
+
+function getNearestVisibleFrameIndex(index: number): number {
+  if (isVisibleFrameIndex(index)) return index;
+
+  for (let next = index + 1; next < FRAMES.length; next += 1) {
+    if (isVisibleFrameIndex(next)) return next;
+  }
+
+  for (let prev = index - 1; prev >= 0; prev -= 1) {
+    if (isVisibleFrameIndex(prev)) return prev;
+  }
+
+  return 0;
+}
 
 const DEMO_BUNDLES = [
   { label: "A", description: "MXP direct · Marriott Scala. Full compliance, hotel exception needed.", flightId: "lh8904", hotelId: "marriott-scala", totalCostUsd: 2340, savingsVsStandard: 0, complianceFlags: ["hotel_over_cap"] },
@@ -200,7 +245,7 @@ async function patchTrip(tripId: string, data: Record<string, unknown>) {
 async function executeFrameAction(
   frameIdx: number,
   tripId: string,
-  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveHotels?: Hotel[] | null }
+  sel: { flight: number; hotel: number; selectedReturn?: number; bundle: number | null; liveFlightGroups?: FlightGroup[] | null; liveDisplayFlights?: DisplayFlightGroup[] | null; liveHotels?: Hotel[] | null; tripData?: TripData | null; skipPatch?: boolean }
 ) {
   const liveGroup = sel.liveFlightGroups?.[sel.flight];
   const flight = liveGroup?.outbound ?? DEMO_FLIGHT_GROUPS[sel.flight] ?? DEMO_FLIGHT_GROUPS[0];
@@ -221,12 +266,61 @@ async function executeFrameAction(
     case 4:
       await patchTrip(tripId, { selectedBundle: bundle });
       break;
-    case 5:
-      await patchTrip(tripId, {
-        status: "pending_approval",
-        approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
-      });
+    case 5: {
+      const td = sel.tripData;
+      const homeCode = td?.originCity ? (CITY_TO_AIRPORT[td.originCity.toLowerCase()] ?? td.originCity.substring(0, 3).toUpperCase()) : "ORD";
+      const destCode = td?.city ? (CITY_TO_AIRPORT[td.city.toLowerCase()] ?? td.city.substring(0, 3).toUpperCase()) : "MXP";
+      const destCity = td?.city ?? "Milan";
+      const destCountry = expandCountry(td?.country ?? "Italy");
+      const dateRange = td?.departure && td?.returnDate ? fmtDateRange(td.departure, td.returnDate) : "Sep 14–19, 2025";
+      const flightNum = sel.liveDisplayFlights?.[sel.flight]?.flightNumber ?? liveGroup?.outbound?.outbound?.flightNumber ?? DEMO_FLIGHT_GROUPS[sel.flight]?.flightNumber ?? "LH 8904";
+      const flightPrice = liveGroup?.outbound?.priceUsd ?? 687;
+      const hotelData = (sel.liveHotels?.[sel.hotel] as any) ?? DEMO_HOTELS[sel.hotel] ?? DEMO_HOTELS[0];
+      const hotelName: string = hotelData?.name ?? "not selected";
+      const hotelRate: number = (hotelData as Hotel)?.nightlyRateUsd ?? (hotelData as any)?.pricePerNightUsd ?? 0;
+      const nights = td?.departure && td?.returnDate
+        ? Math.round((new Date(td.returnDate).getTime() - new Date(td.departure).getTime()) / 86400000)
+        : 5;
+      const hotelTotal = hotelRate * nights;
+      const overCap = hotelRate > 200;
+      const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL;
+      if (managerEmail && managerEmail !== "PLACEHOLDER") {
+        const hotelLine = hotelRate > 0
+          ? `Hotel: ${hotelName} · $${hotelRate}/night x ${nights} = $${hotelTotal}${overCap ? `\nNote: Hotel is $${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.` : ""}`
+          : "Hotel: not selected";
+        const emailBody = [
+          "Hi,",
+          "",
+          `I'm requesting approval for a business trip to ${destCity}, ${destCountry}, ${dateRange} for an on-site client meeting.`,
+          "",
+          `Flight: ${flightNum}, ${homeCode} to ${destCode} · $${flightPrice} (nonstop)`,
+          hotelLine,
+          "",
+          `Total estimated: $${flightPrice + hotelTotal}. Please let me know if you have any questions.`,
+          "",
+          "Thanks,",
+          "Lockey",
+        ].join("\n");
+        const gmailRes = await fetch("/api/auth/gmail-send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: managerEmail, subject: `Travel Approval - ${destCity}, ${dateRange}`, body: emailBody }),
+        });
+        if (!gmailRes.ok) {
+          const gmailErr = await gmailRes.json().catch(() => ({}));
+          console.error("[slide6] gmail-send failed", gmailRes.status, gmailErr);
+          throw new Error(gmailErr.error ?? `gmail-send ${gmailRes.status}`);
+        }
+        console.log("[slide6] email sent to", managerEmail);
+      }
+      if (!sel.skipPatch) {
+        await patchTrip(tripId, {
+          status: "pending_approval",
+          approvalThread: { gmailThreadId: "demo-thread-001", status: "pending", reason: null },
+        });
+      }
       break;
+    }
     case 6: {
       const altHotel = sel.liveHotels?.find((h) => !h.overPolicyCap) ?? sel.liveHotels?.[1] ?? DEMO_HOTELS[1];
       await patchTrip(tripId, {
@@ -257,60 +351,6 @@ async function executeFrameAction(
       break;
     case 14:
       await patchTrip(tripId, { status: "archived", totalSpendUsd: "2187.00" });
-      break;
-    default:
-      break;
-  }
-}
-
-async function revertFrameAction(frameIdx: number, tripId: string, liveHotels?: Hotel[] | null) {
-  switch (frameIdx) {
-    case 1:
-      await patchTrip(tripId, { flights: [] });
-      break;
-    case 2:
-      await patchTrip(tripId, { hotels: [] });
-      break;
-    case 3:
-      await patchTrip(tripId, { policyFindings: null });
-      break;
-    case 4:
-      await patchTrip(tripId, { selectedBundle: null });
-      break;
-    case 5:
-      await patchTrip(tripId, {
-        status: "draft",
-        approvalThread: { gmailThreadId: null, status: null, reason: null },
-      });
-      break;
-    case 6:
-      await patchTrip(tripId, {
-        hotels: [liveHotels?.[0] ?? DEMO_HOTELS[0]],
-        approvalThread: { gmailThreadId: "demo-thread-001", status: "rejected", reason: "Hotel exceeds $200 nightly cap" },
-      });
-      break;
-    case 7:
-      await patchTrip(tripId, { status: "pending_approval" });
-      break;
-    case 8:
-      await patchTrip(tripId, { status: "approved" });
-      break;
-    case 9:
-      await patchTrip(tripId, { flights: [REBOOKED_FLIGHT] });
-      break;
-    case 10:
-      await patchTrip(tripId, {
-        approvalThread: { gmailThreadId: "demo-thread-001", status: "approved", reason: null },
-      });
-      break;
-    case 11:
-    case 13:
-      break;
-    case 12:
-      await patchTrip(tripId, { receipts: [] });
-      break;
-    case 14:
-      await patchTrip(tripId, { status: "active", totalSpendUsd: "0" });
       break;
     default:
       break;
@@ -429,7 +469,7 @@ function FlightPicker({
                 {g.returns.map((r, ri) => (
                   <button
                     className={[styles.returnCard, retSel === ri ? styles.returnCardSelected : ""].join(" ")}
-                    key={r.id}
+                    key={`${r.id}-${ri}`}
                     onClick={() => selectReturn(ri)}
                     type="button"
                   >
@@ -445,6 +485,177 @@ function FlightPicker({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function formatTripDateLabel(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+function getTripLengthDays(start: string, end: string) {
+  const startDate = new Date(`${start}T12:00:00`);
+  const endDate = new Date(`${end}T12:00:00`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
+  return Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000));
+}
+
+function parseRouteAirports(route: string) {
+  return route
+    .split(/\s*(?:→|â†’|->)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getStopDetail(route: string) {
+  const airports = parseRouteAirports(route);
+  const vias = airports.slice(1, -1);
+  if (vias.length === 0) return "Nonstop";
+  return `${vias.length === 1 ? "1 stop" : `${vias.length} stops`} · ${vias.join(", ")}`;
+}
+
+function FlightPickerV2({
+  value, onOutboundChange, returnValue, onReturnChange, groups, tripData,
+}: {
+  value?: number;
+  onOutboundChange?: (i: number) => void;
+  returnValue?: number;
+  onReturnChange?: (i: number) => void;
+  groups?: DisplayFlightGroup[] | null;
+  tripData?: TripData | null;
+}) {
+  const [localSel, setLocalSel] = useState(0);
+  const [localRetSel, setLocalRetSel] = useState(0);
+  const sel = value ?? localSel;
+  const retSel = returnValue ?? localRetSel;
+  const activeTrip = tripData ?? DEMO_DEFAULTS;
+  const list = (groups?.length ? groups : DEMO_FLIGHT_GROUPS).map(g => {
+    const homeAirport = activeTrip.originCity ? (CITY_TO_AIRPORT[activeTrip.originCity.toLowerCase()] ?? activeTrip.originCity.substring(0, 3).toUpperCase()) : "ORD";
+    if (g.route.startsWith("ORD") && homeAirport !== "ORD") {
+      return { ...g, route: g.route.replace("ORD", homeAirport) };
+    }
+    return g;
+  });
+  const tripLengthDays = getTripLengthDays(activeTrip.departure, activeTrip.returnDate);
+
+  function selectOutbound(i: number) {
+    (onOutboundChange ?? setLocalSel)(i);
+    (onReturnChange ?? setLocalRetSel)(0);
+  }
+
+  function selectReturn(i: number) {
+    (onReturnChange ?? setLocalRetSel)(i);
+  }
+
+  const tags: Record<number, string> = {};
+  if (list.length > 0) {
+    tags[0] = list[0].tag ?? "Best pick";
+    const cheapestIdx = list.reduce((ci, g, i) => {
+      const gPrice = g.returns[0]?.totalPriceUsd ?? Infinity;
+      const cPrice = list[ci].returns[0]?.totalPriceUsd ?? Infinity;
+      return gPrice < cPrice ? i : ci;
+    }, 0);
+    if (cheapestIdx !== 0) tags[cheapestIdx] = list[cheapestIdx].tag ?? "Cheapest";
+  }
+
+  return (
+    <div className={styles.fpWrap}>
+      {/* Route + date header */}
+      <div className={styles.fpHeader}>
+        <span className={styles.fpRoute}>{activeTrip.originCity} → {activeTrip.city}</span>
+        <span className={styles.fpHeaderMeta}>
+          {formatTripDateLabel(activeTrip.departure)} – {formatTripDateLabel(activeTrip.returnDate)}
+          {tripLengthDays ? ` · ${tripLengthDays} nights` : ""}
+        </span>
+      </div>
+
+      {/* Outbound + inline returns */}
+      <div className={styles.fpCards}>
+        {list.map((g, i) => {
+          const isSelected = sel === i;
+          const airports = parseRouteAirports(g.route);
+          const depCode = airports[0] ?? "";
+          const arrCode = airports[airports.length - 1] ?? "";
+          const minPrice = g.returns.reduce((m, r) => Math.min(m, r.totalPriceUsd), Infinity);
+          return (
+            <div key={g.id} className={styles.fpFlightGroup}>
+              <button
+                className={[styles.fpCard, isSelected ? styles.fpCardSelected : ""].join(" ")}
+                onClick={() => selectOutbound(i)}
+                type="button"
+              >
+                <div className={styles.fpCardTop}>
+                  <span className={styles.fpAirline}>{g.carrier} · {g.flightNumber}</span>
+                  {tags[i] && (
+                    <span className={[styles.cardTag, isSelected ? styles.cardTagSelected : ""].join(" ")}>
+                      {tags[i]}
+                    </span>
+                  )}
+                </div>
+                <div className={styles.fpTimes}>
+                  <span className={styles.fpTimeVal}>{g.dep}</span>
+                  <div className={styles.fpArrowWrap}>
+                    <div className={styles.fpArrowLine} />
+                    <Plane className={styles.fpArrowPlane} size={11} />
+                    <div className={styles.fpArrowLine} />
+                  </div>
+                  <span className={styles.fpTimeVal}>{g.arr}</span>
+                </div>
+                <div className={styles.fpAirports}>
+                  <span className={styles.fpAirport}>{depCode}</span>
+                  <span className={[styles.fpAirport, styles.fpAirportRight].join(" ")}>{arrCode}</span>
+                </div>
+                <div className={styles.fpCardBottom}>
+                  <span className={styles.fpStopsMeta}>{getStopDetail(g.route)} · {g.dur}</span>
+                  {minPrice !== Infinity && <span className={styles.fpFromPrice}>from ${minPrice}</span>}
+                </div>
+              </button>
+
+              {isSelected && g.returns.length > 0 && (
+                <div className={styles.fpReturnsInline}>
+                  <span className={styles.fpReturnInlineLabel}>↩ Return</span>
+                  <div className={styles.fpReturnRows}>
+                    {g.returns.map((r, ri) => {
+                      const isRetSel = retSel === ri;
+                      return (
+                        <button
+                          key={`${r.id}-${ri}`}
+                          className={[styles.fpReturnRow, isRetSel ? styles.fpReturnRowSelected : ""].join(" ")}
+                          onClick={() => selectReturn(ri)}
+                          type="button"
+                        >
+                          <div className={[styles.fpRadioDot, isRetSel ? styles.fpRadioDotSelected : ""].join(" ")}>
+                            {isRetSel && <div className={styles.fpRadioInner} />}
+                          </div>
+                          <div className={styles.fpReturnRowBody}>
+                            <div className={styles.fpReturnRowTimeLine}>
+                              <span className={styles.fpReturnTime}>{r.dep}</span>
+                              <div className={styles.fpArrowWrap}>
+                                <div className={styles.fpArrowLine} />
+                                <Plane className={styles.fpArrowPlane} size={10} />
+                                <div className={styles.fpArrowLine} />
+                              </div>
+                              <span className={styles.fpReturnTime}>{r.arr}</span>
+                            </div>
+                            <div className={styles.fpReturnRowBottom}>
+                              <span className={styles.fpReturnRowMeta}>
+                                {r.returnDate} · {r.flightNumber}{r.returnVia ? ` · ${r.returnVia}` : ""} · {r.dur}
+                              </span>
+                              <span className={styles.fpReturnRowPrice}>${r.totalPriceUsd}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -469,7 +680,17 @@ function FlightSearchState({
   );
 }
 
-function ComplianceReport() {
+function ComplianceReport({ selectedHotel, liveHotels, selectedFlight, liveFlights, tripData }: { selectedHotel?: number; liveHotels?: Hotel[] | null; selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null; tripData?: TripData | null }) {
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "Marriott Scala";
+  const hotelRate: number = (hotelData as Hotel)?.nightlyRateUsd ?? (hotelData as any)?.pricePerNightUsd ?? 247;
+  const overCap = hotelRate > 200;
+  const flightNum: string = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000)
+    : 5;
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
+  const destCity = tripData?.city ?? "Milan";
   return (
     <div className={styles.complianceList}>
       <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
@@ -479,79 +700,154 @@ function ComplianceReport() {
           <div className={styles.complianceBody}>US citizens must apply ≥ 15 days before departure</div>
         </div>
       </div>
-      <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
-        <span className={styles.complianceIcon}>⚠️</span>
-        <div>
-          <div className={styles.complianceTitle}>Hotel Exception Needed</div>
-          <div className={styles.complianceBody}>Marriott Scala at $247/night exceeds the $200 Milan cap</div>
+      {overCap && (
+        <div className={[styles.complianceItem, styles.complianceWarn].join(" ")}>
+          <span className={styles.complianceIcon}>⚠️</span>
+          <div>
+            <div className={styles.complianceTitle}>Hotel Exception Needed</div>
+            <div className={styles.complianceBody}>{hotelName} at ${hotelRate}/night exceeds the $200 {destCity} cap</div>
+          </div>
         </div>
-      </div>
+      )}
       <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
         <span className={styles.complianceIcon}>✓</span>
         <div>
           <div className={styles.complianceTitle}>Flight within budget</div>
-          <div className={styles.complianceBody}>LH 8904 at $687 · approved cap is $800</div>
+          <div className={styles.complianceBody}>{flightNum} · approved cap is $800</div>
         </div>
       </div>
       <div className={[styles.complianceItem, styles.complianceOk].join(" ")}>
         <span className={styles.complianceIcon}>✓</span>
         <div>
           <div className={styles.complianceTitle}>Travel dates policy-compliant</div>
-          <div className={styles.complianceBody}>Sep 14 to 19 · 5-night stay · within 10-day maximum</div>
+          <div className={styles.complianceBody}>{dateRange} · {nights}-night stay · within 10-day maximum</div>
         </div>
       </div>
     </div>
   );
 }
 
-function ApprovalEmail() {
+function ApprovalEmail({ tripData, selectedHotel, liveHotels, selectedFlight }: { tripData?: TripData | null; selectedHotel?: number; liveHotels?: Hotel[] | null; selectedFlight?: number }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const destCode = tripData?.city ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? tripData.city.substring(0, 3).toUpperCase()) : "MXP";
+  const destCity = tripData?.city ?? "Milan";
+  const destCountry = expandCountry(tripData?.country ?? "Italy");
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL || "PLACEHOLDER";
+
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "not selected";
+  const hotelRate: number = (hotelData as Hotel)?.nightlyRateUsd ?? (hotelData as any)?.pricePerNightUsd ?? 0;
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000)
+    : 5;
+  const hotelTotal = hotelRate * nights;
+  const overCap = hotelRate > 200;
+
+  const flightGroup = DEMO_FLIGHT_GROUPS[selectedFlight ?? 0] ?? DEMO_FLIGHT_GROUPS[0];
+  const flightNum = flightGroup.flightNumber;
+
   return (
     <div className={styles.emailDraft}>
-      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Travel Approval - Milan, Sep 14-19</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{managerEmail}</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Travel Approval - {destCity}, {dateRange}</span></div>
       <div className={styles.emailBody}>
-        <p>Hi Sarah,</p>
-        <p>I&#39;m requesting approval for a business trip to <strong>Milan, Italy, Sep 14-19, 2025</strong> for an on-site client meeting.</p>
-        <p><strong>Flight:</strong> LH 8904, ORD to MXP · $687 (nonstop)<br />
-        <strong>Hotel:</strong> Marriott Scala · $247/night x 5 = $1,235<br />
-        <strong>Note:</strong> Hotel is $47 over the $200 cap - closest preferred vendor to client office.</p>
-        <p>Total estimated: $2,010. Please let me know if you have any questions.</p>
+        <p>Hi,</p>
+        <p>I&#39;m requesting approval for a business trip to <strong>{destCity}, {destCountry}, {dateRange}</strong> for an on-site client meeting.</p>
+        <p>
+          <strong>Flight:</strong> {flightNum}, {homeCode} to {destCode} (nonstop)<br />
+          {hotelRate > 0 ? (
+            <><strong>Hotel:</strong> {hotelName} · ${hotelRate}/night x {nights} = ${hotelTotal}<br /></>
+          ) : (
+            <><strong>Hotel:</strong> not selected<br /></>
+          )}
+          {overCap && <><strong>Note:</strong> Hotel is ${hotelRate - 200} over the $200 cap - closest preferred vendor to client office.</>}
+        </p>
+        <p>Total estimated: ${hotelRate > 0 ? hotelTotal : 0}. Please let me know if you have any questions.</p>
         <p>Thanks,<br />Lockey</p>
       </div>
     </div>
   );
 }
 
-function HotelComparison() {
+function HotelComparison({ selectedHotel, liveHotels }: { selectedHotel?: number; liveHotels?: Hotel[] | null }) {
+  const rejIdx = selectedHotel ?? 0;
+  const rejData = (liveHotels?.[rejIdx] as any) ?? DEMO_HOTELS[rejIdx] ?? DEMO_HOTELS[0];
+  const rejName: string = rejData?.name ?? "Marriott Scala";
+  const rejRate: number = (rejData as Hotel)?.nightlyRateUsd ?? (rejData as any)?.pricePerNightUsd ?? 247;
+  const rejDist: number = (rejData as Hotel)?.distanceFromOfficeKm ?? (rejData as any)?.distanceKm ?? 0.4;
+  const altIdx = liveHotels
+    ? (liveHotels.findIndex((h, i) => i !== rejIdx && !h.overPolicyCap) ?? 1)
+    : rejIdx === 0 ? 1 : 0;
+  const altData = (liveHotels?.[altIdx < 0 ? 1 : altIdx] as any) ?? DEMO_HOTELS[altIdx < 0 ? 1 : altIdx] ?? DEMO_HOTELS[1];
+  const altName: string = altData?.name ?? "AC Hotel Milan";
+  const altRate: number = (altData as Hotel)?.nightlyRateUsd ?? (altData as any)?.pricePerNightUsd ?? 189;
+  const altDist: number = (altData as Hotel)?.distanceFromOfficeKm ?? (altData as any)?.distanceKm ?? 1.2;
   return (
     <div className={styles.compareGrid}>
       <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
         <div className={styles.compareBadge}>Rejected ✗</div>
-        <div className={styles.compareName}>Marriott Scala</div>
-        <div className={styles.comparePrice}>$247 / night</div>
+        <div className={styles.compareName}>{rejName}</div>
+        <div className={styles.comparePrice}>${rejRate} / night</div>
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
-        <div className={styles.compareMeta}>0.4 km from office</div>
-        <div className={styles.compareReason}>$47 over the $200 cap</div>
+        <div className={styles.compareMeta}>{rejDist} km from office</div>
+        <div className={styles.compareReason}>${rejRate - 200} over the $200 cap</div>
       </div>
       <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
         <div className={styles.compareBadge}>Alternative ✓</div>
-        <div className={styles.compareName}>AC Hotel Milan</div>
-        <div className={styles.comparePrice}>$189 / night</div>
+        <div className={styles.compareName}>{altName}</div>
+        <div className={styles.comparePrice}>${altRate} / night</div>
         <div className={styles.compareMeta}>⭐ Preferred vendor</div>
-        <div className={styles.compareMeta}>1.2 km from office</div>
-        <div className={styles.compareReason}>Saves $290 total · fully compliant</div>
+        <div className={styles.compareMeta}>{altDist} km from office</div>
+        <div className={styles.compareReason}>Saves ${(rejRate - altRate) * 5} total · fully compliant</div>
       </div>
     </div>
   );
 }
 
-function PrepChecklist() {
+function FlightComparison({ tripData, liveFlights, onChange }: { tripData?: TripData | null, liveFlights?: DisplayFlightGroup[] | null, onChange?: (i: number) => void }) {
+  // Find a cheaper flight than the current "Best pick"
+  const baselineCost = liveFlights?.[0]?.returns?.[0]?.totalPriceUsd ?? 687;
+  const compliantFlight = liveFlights?.find(f => (f.returns?.[0]?.totalPriceUsd ?? Infinity) < baselineCost) || liveFlights?.[1] || DEMO_FLIGHT_GROUPS[2];
+
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareBadge}>Rejected ✗</div>
+        <div className={styles.compareName}>{liveFlights?.[0]?.flightNumber ?? "LH 8904"}</div>
+        <div className={styles.comparePrice}>${baselineCost} total</div>
+        <div className={styles.compareMeta}>⭐ Best flight times</div>
+        <div className={styles.compareMeta}>Nonstop</div>
+        <div className={styles.compareReason}>{tripData?.approvalThread?.reason || "Flight over budget"}</div>
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareBadge}>Alternative ✓</div>
+        <div className={styles.compareName}>{compliantFlight.flightNumber}</div>
+        <div className={styles.comparePrice}>${compliantFlight.returns?.[0]?.totalPriceUsd ?? 607} total</div>
+        <div className={styles.compareMeta}>Alternative carrier</div>
+        <div className={styles.compareMeta}>1 Stop</div>
+        <div className={styles.compareReason}>Saves $${baselineCost - (compliantFlight.returns?.[0]?.totalPriceUsd ?? 607)} · fully compliant</div>
+      </div>
+    </div>
+  );
+}
+
+function PrepChecklist({ selectedHotel, liveHotels, tripData }: { selectedHotel?: number; liveHotels?: Hotel[] | null; tripData?: TripData | null }) {
   const [done, setDone] = useState<Set<number>>(new Set());
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "Marriott Scala";
+  const hotelAddress: string = (hotelData as Hotel)?.address ?? (hotelData as any)?.address ?? "Via della Spiga 31";
+  const checkIn = tripData?.departure
+    ? new Date(tripData.departure).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+    : "Sep 14";
+  const passportExpiry = tripData?.passportExpiry
+    ? new Date(tripData.passportExpiry).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })
+    : "Jan 2025";
   const items = [
     { text: "Apply for Type-C Visa at italyvisa.com", urgent: true },
-    { text: "Renew passport after trip (expires Jan 2025)", urgent: true },
+    { text: `Renew passport after trip (expires ${passportExpiry})`, urgent: true },
     { text: "Pack for 24°C, light rain expected on days 2 to 4" },
-    { text: "Marriott Scala · Via della Spiga 31 · Check-in Sep 14 at 3:00 PM" },
+    { text: `${hotelName} · ${hotelAddress} · Check-in ${checkIn} at 3:00 PM` },
     { text: "Confirm travel insurance coverage" },
   ];
   function toggle(i: number) {
@@ -578,14 +874,20 @@ function PrepChecklist() {
   );
 }
 
-function LiveDashboard() {
+function LiveDashboard({ selectedFlight, liveFlights, selectedHotel, liveHotels, tripData }: { selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null; selectedHotel?: number; liveHotels?: Hotel[] | null; tripData?: TripData | null }) {
+  const flightNum = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
+  const depTime = liveFlights?.[selectedFlight ?? 0]?.dep ?? "8:45 AM";
+  const destCity = tripData?.city ?? "Milan";
+  const destCode = tripData?.city ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? "MXP") : "MXP";
+  const hotelData = (liveHotels?.[selectedHotel ?? 0] as any) ?? DEMO_HOTELS[selectedHotel ?? 0] ?? DEMO_HOTELS[0];
+  const hotelName: string = hotelData?.name ?? "Marriott Scala";
   return (
     <div className={styles.dashboard}>
       {[
-        { icon: "✈️", title: "LH 8904 · Gate B22", sub: "Boards 8:15 AM · Departs 8:45 AM", badge: "On time" },
-        { icon: "🌤️", title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight", badge: "" },
-        { icon: "🏨", title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM", badge: "Ready" },
-        { icon: "🚗", title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM to make your gate", badge: "" },
+        { icon: "✈️", title: `${flightNum} · Gate B22`, sub: `Boards ${depTime} · Departs ${depTime}`, badge: "On time" },
+        { icon: "🌤️", title: `${destCity} · 24 °C`, sub: "Partly cloudy · Low 18 °C tonight", badge: "" },
+        { icon: "🏨", title: `${hotelName} · Room 412`, sub: "Check-in ready from 3:00 PM", badge: "Ready" },
+        { icon: "🚗", title: `Traffic to ${destCode} · 32 min`, sub: "Leave by 7:00 AM to make your gate", badge: "" },
       ].map(item => (
         <div className={styles.dashCard} key={item.title}>
           <span className={styles.dashIcon}>{item.icon}</span>
@@ -600,19 +902,23 @@ function LiveDashboard() {
   );
 }
 
-function FlightRebooking() {
+function FlightRebooking({ tripData, selectedFlight, liveFlights }: { tripData?: TripData | null; selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const destCode = tripData?.city ? (CITY_TO_AIRPORT[tripData.city.toLowerCase()] ?? "MXP") : "MXP";
+  const flightNum = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
+  const depTime = liveFlights?.[selectedFlight ?? 0]?.dep ?? "8:45 AM";
   return (
     <div className={styles.rebooking}>
       <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
         <div className={styles.rebookBadge}>Original · Cancelled ✗</div>
-        <div className={styles.rebookFlight}>LH 8904 &nbsp;·&nbsp; ORD → MXP</div>
-        <div className={styles.rebookTime}>Departs 8:45 AM</div>
-        <div className={styles.rebookMeta}>Thunderstorm at ORD · missed connection</div>
+        <div className={styles.rebookFlight}>{flightNum} &nbsp;·&nbsp; {homeCode} → {destCode}</div>
+        <div className={styles.rebookTime}>Departs {depTime}</div>
+        <div className={styles.rebookMeta}>Thunderstorm at {homeCode} · missed connection</div>
       </div>
       <div className={styles.rebookArrow}>↓ rebooked automatically</div>
       <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
         <div className={styles.rebookBadge}>New booking · Confirmed ✓</div>
-        <div className={styles.rebookFlight}>LH 9012 &nbsp;·&nbsp; ORD → MXP</div>
+        <div className={styles.rebookFlight}>LH 9012 &nbsp;·&nbsp; {homeCode} → MXP</div>
         <div className={styles.rebookTime}>Departs 9:00 PM</div>
         <div className={styles.rebookMeta}>Same carrier · No change fee · Seat 14A · Hotel notified ✓</div>
       </div>
@@ -620,15 +926,20 @@ function FlightRebooking() {
   );
 }
 
-function ExceptionEmail() {
+function ExceptionEmail({ tripData, selectedFlight, liveFlights }: { tripData?: TripData | null; selectedFlight?: number; liveFlights?: DisplayFlightGroup[] | null }) {
+  const managerEmail = process.env.NEXT_PUBLIC_MANAGER_EMAIL ?? "mgr.sarah@lockton.com";
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const homeCity = tripData?.originCity ?? "Chicago";
+  const destCity = tripData?.city ?? "Milan";
+  const flightNum = liveFlights?.[selectedFlight ?? 0]?.flightNumber ?? DEMO_FLIGHT_GROUPS[selectedFlight ?? 0]?.flightNumber ?? "LH 8904";
   return (
     <div className={styles.emailDraft}>
-      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>mgr.sarah@lockton.com</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>To</span><span className={styles.emailVal}>{managerEmail}</span></div>
       <div className={styles.emailField}><span className={styles.emailKey}>Priority</span><span className={[styles.emailVal, styles.emailUrgent].join(" ")}>HIGH - Action required</span></div>
-      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - Milan Rebooking</span></div>
+      <div className={styles.emailField}><span className={styles.emailKey}>Subject</span><span className={styles.emailVal}>Emergency Exception - {destCity} Rebooking</span></div>
       <div className={styles.emailBody}>
-        <p>Hi Sarah,</p>
-        <p><strong>LH 8904 was cancelled due to a thunderstorm</strong> at O&#39;Hare. The only available rebooking is LH 9012 at <strong>$1,067</strong>, which is $380 over the approved $687 budget.</p>
+        <p>Hi,</p>
+        <p><strong>{flightNum} was cancelled due to a thunderstorm</strong> at {homeCity}. The only available rebooking is LH 9012 at <strong>$1,067</strong>, which is $380 over the approved budget.</p>
         <p>Force majeure - requesting emergency exception. Hotel hold expires in 2 hours.</p>
         <p>Lockey</p>
       </div>
@@ -729,10 +1040,13 @@ function ContactCards() {
   );
 }
 
-function SpendSummary() {
+function SpendSummary({ tripData }: { tripData?: TripData | null }) {
+  const nights = tripData?.departure && tripData?.returnDate
+    ? Math.round((new Date(tripData.returnDate).getTime() - new Date(tripData.departure).getTime()) / 86400000)
+    : 5;
   const cats = [
     { name: "Flights", spent: 687, budget: 800 },
-    { name: "Hotel (5 nights)", spent: 945, budget: 1000 },
+    { name: `Hotel (${nights} nights)`, spent: 945, budget: 1000 },
     { name: "Meals", spent: 312, budget: 375 },
     { name: "Transport", spent: 243, budget: 165 },
   ];
@@ -758,11 +1072,12 @@ function SpendSummary() {
   );
 }
 
-function PrivacySummary() {
+function PrivacySummary({ tripData }: { tripData?: TripData | null }) {
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
   return (
     <div className={styles.privacyList}>
       {[
-        { icon: "📍", label: "Location tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
+        { icon: "📍", label: "Location tracking", detail: `Active ${dateRange} only`, status: "Stopped" },
         { icon: "💳", label: "Financial data", detail: "Card numbers sanitized before storage", status: "Done" },
         { icon: "🔑", label: "OAuth tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
         { icon: "📅", label: "Data retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
@@ -810,28 +1125,32 @@ function BundlePicker({ value, onChange }: { value?: number | null; onChange?: (
 
 // ── Action visual components ────────────────────────────────────
 
-function TripConfirmed() {
+function TripConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const city = tripData?.city ?? "Milan";
+  const dateRange = tripData?.departure && tripData?.returnDate ? fmtDateRange(tripData.departure, tripData.returnDate) : "Sep 14–19, 2025";
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
         <span className={styles.confirmEmoji}>✅</span>
         <div className={styles.confirmTitle}>Trip Draft Saved</div>
-        <div className={styles.confirmBody}>Milan · Sep 14 to 19 · Trip #TRP-20250914 is now active in your travel dashboard.</div>
+        <div className={styles.confirmBody}>{city} · {dateRange} · Trip is now active in your travel dashboard.</div>
       </div>
     </div>
   );
 }
 
-function FlightConfirmed() {
+function FlightConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const homeCity = tripData?.originCity || "Chicago";
   return (
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
-        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>{homeCode}</div><div className={styles.eticketCity}>{homeCity}</div></div>
         <div className={styles.eticketPlane}>✈</div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
-        {[["Flight","LH 8904"],["Date","Sep 14, 2025"],["Departs","8:45 AM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Class","Economy"]].map(([k,v]) => (
+        {[["Flight", "LH 8904"], ["Date", "Sep 14, 2025"], ["Departs", "8:45 AM"], ["Seat", "14A (Window)"], ["PNR", "XKMR74"], ["Class", "Economy"]].map(([k, v]) => (
           <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
         ))}
       </div>
@@ -886,7 +1205,8 @@ function VisaGuide() {
   );
 }
 
-function BundleConfirmed() {
+function BundleConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
   return (
     <div className={styles.itinerary}>
       <div className={styles.itineraryHeader}>
@@ -894,7 +1214,7 @@ function BundleConfirmed() {
         <div className={styles.itineraryTotal}>$2,010</div>
       </div>
       {[
-        { icon: "✈️", label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
+        { icon: "✈️", label: "Flight", val: `LH 8904 · ${homeCode} → MXP`, sub: "Sep 14 · 8:45 AM · $687" },
         { icon: "🏨", label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
         { icon: "📋", label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
       ].map(item => (
@@ -983,16 +1303,18 @@ function LiveConfirmed() {
   );
 }
 
-function RebookingConfirmed() {
+function RebookingConfirmed({ tripData }: { tripData?: TripData | null }) {
+  const homeCode = tripData?.originCity ? (CITY_TO_AIRPORT[tripData.originCity.toLowerCase()] ?? tripData.originCity.substring(0, 3).toUpperCase()) : "ORD";
+  const homeCity = tripData?.originCity || "Chicago";
   return (
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
-        <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
+        <div className={styles.eticketAirport}><div className={styles.eticketCode}>{homeCode}</div><div className={styles.eticketCity}>{homeCity}</div></div>
         <div className={styles.eticketPlane}>✈</div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
-        {[["Flight","LH 9012"],["Date","Sep 14, 2025"],["Departs","9:00 PM"],["Seat","14A (Window)"],["PNR","XKMR74"],["Change fee","None"]].map(([k,v]) => (
+        {[["Flight", "LH 9012"], ["Date", "Sep 14, 2025"], ["Departs", "9:00 PM"], ["Seat", "14A (Window)"], ["PNR", "XKMR74"], ["Change fee", "None"]].map(([k, v]) => (
           <div className={styles.eticketItem} key={k}><div className={styles.eticketKey}>{k}</div><div className={styles.eticketVal}>{v}</div></div>
         ))}
       </div>
@@ -1074,7 +1396,7 @@ function TripArchived() {
         <div className={styles.confirmBody}>Expense report drafted and sent to mgr.sarah@lockton.com for final sign-off.</div>
       </div>
       <div className={styles.archiveSummary}>
-        {[["Total spent","$2,187"],["Under budget by","$153"],["Receipts logged","7"],["Days on trip","5"]].map(([k,v]) => (
+        {[["Total spent", "$2,187"], ["Under budget by", "$153"], ["Receipts logged", "7"], ["Days on trip", "5"]].map(([k, v]) => (
           <div className={styles.archiveRow} key={k}>
             <span className={styles.archiveKey}>{k}</span>
             <span className={styles.archiveVal}>{v}</span>
@@ -1100,22 +1422,22 @@ function DataCleared() {
 // ── Frame definitions ──────────────────────────────────────────
 
 const FRAMES: DemoFrame[] = [
-  { tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
-  { tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
-  { tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
-  { tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
-  { tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
-  { tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
-  { tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
-  { tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
-  { tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
-  { tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
-  { tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
-  { tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel and your daily meal allowance to keep you covered.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupport, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
-  { tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
-  { tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCards, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
-  { tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
-  { tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
+  { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're departing from, where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
+  { frameNumber: 2, tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
+  { frameNumber: 3, tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
+  { frameNumber: 4, tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
+  { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
+  { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
+  { frameNumber: 7, tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
+  { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
+  { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
+  { frameNumber: 11, tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
+  { frameNumber: 12, tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel and your daily meal allowance to keep you covered.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupport, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
+  { frameNumber: 13, tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
+  { frameNumber: 14, tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCards, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
+  { frameNumber: 15, tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
+  { frameNumber: 16, tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
 ];
 
 // ── Roadmap data ───────────────────────────────────────────────
@@ -1165,7 +1487,7 @@ const ROADMAP_PHASES = [
 ];
 
 function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number; frameCompleted: Record<number, boolean> }) {
-  const allSteps = ROADMAP_PHASES.flatMap((p) => p.steps);
+  const allSteps = ROADMAP_PHASES.flatMap((p) => p.steps).filter((step) => isVisibleFrameIndex(step.index));
   const total = allSteps.length;
 
   return (
@@ -1174,7 +1496,7 @@ function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number
       {ROADMAP_PHASES.map((phase) => (
         <div key={phase.label}>
           <div className={styles.roadmapPhaseLabel}>{phase.label}</div>
-          {phase.steps.map((step) => {
+          {phase.steps.filter((step) => isVisibleFrameIndex(step.index)).map((step) => {
             const isDone = !!frameCompleted[step.index];
             const isCurrent = currentIndex === step.index;
             const globalIdx = allSteps.findIndex((s) => s.index === step.index);
@@ -1462,7 +1784,7 @@ function PhoneShell({
               <div className={styles.chatMessages} ref={chatScrollRef}>
                 {chatMessages.length === 0 ? (
                   <div className={styles.chatEmpty}>
-                    <span>Start a conversation with Kelli</span>
+                    <span>Start a conversation with Lockey</span>
                   </div>
                 ) : (
                   chatMessages.map((msg, i) => (
@@ -1474,7 +1796,7 @@ function PhoneShell({
                         <div className={styles.chatAvatarWrap}>
                           <div className={styles.chatAvatar}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                            <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                           </div>
                         </div>
                       )}
@@ -1495,7 +1817,7 @@ function PhoneShell({
                     <div className={styles.chatAvatarWrap}>
                       <div className={styles.chatAvatar}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                        <img alt="Lockey" src="/lockey-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                       </div>
                     </div>
                     <div className={styles.chatBubble}>
@@ -1518,7 +1840,7 @@ function PhoneShell({
                         onChatSend();
                       }
                     }}
-                    placeholder="Message Kelli…"
+                    placeholder="Message Lockey…"
                     type="text"
                     value={chatInput}
                   />
@@ -1571,7 +1893,7 @@ function PhoneShell({
                 <Pencil size={22} />
               </button>
               <button
-                aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
                 className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
                 disabled={isProcessing}
                 onClick={onMicClick}
@@ -1628,10 +1950,10 @@ function PhoneShell({
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
-      <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
-      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z" />
     </svg>
   );
 }
@@ -1672,6 +1994,7 @@ function LoginScreen() {
 // ── Page ───────────────────────────────────────────────────────
 
 export default function DemoPage() {
+  const visibleFrames = FRAMES.map((frame, index) => ({ ...frame, index })).filter(({ index }) => isVisibleFrameIndex(index));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [overlayReady, setOverlayReady] = useState(false);
   const [overlayDismissed, setOverlayDismissed] = useState(false);
@@ -1713,7 +2036,7 @@ export default function DemoPage() {
     fetch("/api/users/me")
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((data: { name: string }) => setUserProfile(data))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const travelerName = userProfile?.name ?? session?.user?.name ?? undefined;
@@ -1746,7 +2069,8 @@ export default function DemoPage() {
         }
 
         if (typeof snapshot.currentIndex === "number") {
-          setCurrentIndex(Math.max(0, Math.min(FRAMES.length - 1, snapshot.currentIndex)));
+          const savedIndex = Math.max(0, Math.min(FRAMES.length - 1, snapshot.currentIndex));
+          setCurrentIndex(getNearestVisibleFrameIndex(savedIndex));
         }
         if (typeof snapshot.overlayReady === "boolean") setOverlayReady(snapshot.overlayReady);
         if (typeof snapshot.overlayDismissed === "boolean") setOverlayDismissed(snapshot.overlayDismissed);
@@ -1768,7 +2092,9 @@ export default function DemoPage() {
       }
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -1835,7 +2161,7 @@ export default function DemoPage() {
 
     void run();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated, status]);
 
   // Fetch real flights when entering frame 1 (flight picker)
@@ -1843,7 +2169,7 @@ export default function DemoPage() {
     if (!isProgressHydrated) return;
     if (currentIndex !== 1) return;
     const trip = tripData ?? DEMO_DEFAULTS;
-    const homeAirport = CITY_TO_AIRPORT[trip.originCity?.toLowerCase() ?? ""] ?? "ORD";
+    const homeAirport = trip.originCity ? (CITY_TO_AIRPORT[trip.originCity.toLowerCase()] ?? trip.originCity.substring(0, 3).toUpperCase()) : "ORD";
     const destAirport = CITY_TO_AIRPORT[trip.city.toLowerCase()] ?? "MXP";
     let cancelled = false;
     queueMicrotask(() => {
@@ -1912,7 +2238,7 @@ export default function DemoPage() {
       });
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
 
   // Fetch real hotels when entering frame 2 (hotel picker)
@@ -1936,11 +2262,81 @@ export default function DemoPage() {
       .then((data: { hotels: Hotel[] }) => {
         if (!cancelled && data.hotels?.length) setLiveHotels(data.hotels.slice(0, 6));
       })
-      .catch(() => {}); // silently fall back to DEMO_HOTELS
+      .catch(() => { }); // silently fall back to DEMO_HOTELS
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, isProgressHydrated]);
+
+  // Register Web Push Service Worker
+  useEffect(() => {
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      navigator.serviceWorker.register("/sw.js").then((swReg) => {
+        console.log("✨ Service Worker registered:", swReg);
+
+        // Helper block so dev can grab the push subscription easily from dev tools
+        swReg.pushManager.getSubscription().then(sub => {
+          if (!sub) {
+            console.log("🔔 No push subscription found. Run `subscribeToPush()` in this console to generate your token for testing.");
+            // @ts-ignore
+            window.subscribeToPush = async () => {
+              const permission = await Notification.requestPermission();
+              if (permission === "granted") {
+                const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                if (!vapidKey) return console.error("NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set in .env.local!");
+                const newSub = await swReg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: vapidKey
+                });
+                console.log("✅ Push Subscription Object (COPY THIS AND PASTE IN WEBHOOK SIMULATION JSON):", JSON.stringify(newSub));
+              } else {
+                console.error("Push permission denied");
+              }
+            }
+          } else {
+            console.log("✅ Push Subscription Object (COPY THIS AND PASTE IN WEBHOOK SIMULATION JSON):", JSON.stringify(sub));
+            // @ts-ignore
+            window.subscribeToPush = () => console.log(JSON.stringify(sub));
+          }
+        });
+      }).catch(err => console.error("Service Worker registration failed:", err));
+    }
+  }, []);
+
+  // Expose an auto-simulator for testing
+  useEffect(() => {
+    // @ts-ignore
+    window.simulateWebhook = async () => {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") return console.error("Push permission denied");
+
+        const swReg = await navigator.serviceWorker.ready;
+        let sub = await swReg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await swReg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+          });
+        }
+
+        console.log("🚀 Firing simulated webhook to backend...");
+        const res = await fetch("/api/webhooks/gmail-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tripId: tripId || "609cabc12345678901234567", // Mock or use active trip
+            managerReplyText: "I'm rejecting this trip. The flight LH 8904 is way too expensive.",
+            pushSubscription: sub
+          })
+        });
+        const data = await res.json();
+        console.log("✅ Webhook processed! Response:", data);
+      } catch (e) {
+        console.error("Test failed:", e);
+      }
+    };
+  }, [tripId]);
 
   // ── Voice input (Gemini STT) ─────────────────────────────────
 
@@ -2004,8 +2400,8 @@ export default function DemoPage() {
       // detects audio above SPEECH_THRESHOLD, and the silence timer
       // only triggers when levels drop below SILENCE_THRESHOLD.
       const SILENCE_THRESHOLD = 30;   // fan noise sits ~5-20
-      const SPEECH_THRESHOLD  = 35;   // must exceed this to arm
-      const SILENCE_MS        = 2200; // ms of quiet before auto-stop
+      const SPEECH_THRESHOLD = 35;   // must exceed this to arm
+      const SILENCE_MS = 2200; // ms of quiet before auto-stop
       let silenceStart: number | null = null;
       let speechDetected = false;
 
@@ -2162,6 +2558,19 @@ export default function DemoPage() {
           const trip = (await res.json()) as { _id: string };
           setTripId(trip._id);
         }
+      } else if (currentIndex === 5) {
+        // Email send doesn't need a DB trip — run it unconditionally, patch if we have a tripId
+        await executeFrameAction(5, tripId ?? "_no_trip_", {
+          flight: selectedFlight,
+          hotel: selectedHotel,
+          selectedReturn,
+          bundle: selectedBundle,
+          liveFlightGroups: liveFlightResults,
+          liveDisplayFlights: liveFlights,
+          liveHotels,
+          tripData,
+          skipPatch: !tripId,
+        });
       } else if (tripId) {
         await executeFrameAction(currentIndex, tripId, {
           flight: selectedFlight,
@@ -2169,7 +2578,9 @@ export default function DemoPage() {
           selectedReturn,
           bundle: selectedBundle,
           liveFlightGroups: liveFlightResults,
+          liveDisplayFlights: liveFlights,
           liveHotels,
+          tripData,
         });
       }
 
@@ -2190,37 +2601,12 @@ export default function DemoPage() {
     window.location.reload();
   }
 
-  async function handleBack() {
-    if (isProcessing || currentIndex === 0) return;
-
-    if (frameCompleted[currentIndex] && tripId) {
-      setIsProcessing(true);
-      try {
-        await revertFrameAction(currentIndex, tripId, liveHotels);
-        setFrameCompleted((prev) => {
-          const next = { ...prev };
-          delete next[currentIndex];
-          return next;
-        });
-      } catch (err) {
-        console.error("Revert error:", err);
-      } finally {
-        setIsProcessing(false);
-      }
-    }
-
+  function handleFrameSelect(nextIndex: number) {
+    if (isProcessing || nextIndex === currentIndex || !isVisibleFrameIndex(nextIndex)) return;
     stopSpeaking();
     setOverlayReady(false);
     setOverlayDismissed(false);
-    setCurrentIndex((v) => Math.max(0, v - 1));
-  }
-
-  function handleNext() {
-    if (!frameCompleted[currentIndex] || isProcessing) return;
-    stopSpeaking();
-    setOverlayReady(false);
-    setOverlayDismissed(false);
-    setCurrentIndex((v) => Math.min(FRAMES.length - 1, v + 1));
+    setCurrentIndex(nextIndex);
   }
 
   if (status === "unauthenticated") {
@@ -2274,10 +2660,25 @@ export default function DemoPage() {
             />
           );
         }
-        return <FlightPicker groups={liveFlights} onOutboundChange={setSelectedFlight} onReturnChange={setSelectedReturn} returnValue={selectedReturn} value={selectedFlight} />;
+        return (
+          <FlightPickerV2
+            groups={liveFlights}
+            onOutboundChange={setSelectedFlight}
+            onReturnChange={setSelectedReturn}
+            returnValue={selectedReturn}
+            tripData={tripData}
+            value={selectedFlight}
+          />
+        );
       case 2: return <DynamicHotelMap hotels={liveHotels || []} onChange={setSelectedHotel} value={selectedHotel} />;
       case 4: return <BundlePicker value={selectedBundle} onChange={setSelectedBundle} />;
-      default: { const V = frame.Visual; return <V />; }
+      case 5: return <ApprovalEmail tripData={tripData} selectedHotel={selectedHotel} liveHotels={liveHotels} selectedFlight={selectedFlight} />;
+      case 6:
+        if (tripData?.approvalThread?.flaggedItems?.includes("flight")) {
+          return <FlightComparison tripData={tripData} liveFlights={liveFlights} onChange={setSelectedFlight} />
+        }
+        return <HotelComparison selectedHotel={selectedHotel} liveHotels={liveHotels} />;
+      default: { const V = frame.Visual as React.ComponentType<any>; return <V tripData={tripData} selectedFlight={selectedFlight} selectedHotel={selectedHotel} selectedBundle={selectedBundle} liveHotels={liveHotels} liveFlights={liveFlights} liveFlightResults={liveFlightResults} />; }
     }
   }
 
@@ -2336,28 +2737,30 @@ export default function DemoPage() {
         showEllipsis={showEllipsis}
       />
       <div className={styles.nav}>
-        <div className={styles.navRow}>
-          <button
-            className={[styles.navButton, styles.navButtonSecondary].join(" ")}
-            disabled={currentIndex === 0 || isProcessing}
-            onClick={() => void handleBack()}
-            type="button"
-          >
-            Back
-          </button>
-          <button
-            className={[styles.navButton, styles.navButtonPrimary].join(" ")}
-            disabled={currentIndex === FRAMES.length - 1 || !frameCompleted[currentIndex] || isProcessing}
-            onClick={handleNext}
-            type="button"
-          >
-            Next
-          </button>
+        <div className={styles.frameNavGrid}>
+          {visibleFrames.map(({ frameNumber, index, sheetTitle }) => {
+            const isCurrent = currentIndex === index;
+            const isDone = !!frameCompleted[index];
+
+            return (
+              <button
+                key={frameNumber}
+                aria-current={isCurrent ? "step" : undefined}
+                className={[
+                  styles.frameNavButton,
+                  isCurrent ? styles.frameNavButtonCurrent : "",
+                  isDone ? styles.frameNavButtonDone : "",
+                ].join(" ")}
+                disabled={isProcessing}
+                onClick={() => handleFrameSelect(index)}
+                title={sheetTitle}
+                type="button"
+              >
+                <span className={styles.frameNavNumber}>{frameNumber}</span>
+              </button>
+            );
+          })}
         </div>
-        <span className={styles.counter}>
-          {currentIndex + 1} <span className={styles.counterOf}>of</span> {FRAMES.length}
-          {tripId && <span className={styles.counterOf}> · Trip saved</span>}
-        </span>
       </div>
     </main>
   );

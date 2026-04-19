@@ -12,20 +12,22 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await connectToDatabase();
-    
+    const [, session] = await Promise.all([
+      connectToDatabase(),
+      getServerSession(authOptions),
+    ]);
+
     let userId: Types.ObjectId | string | undefined;
-    const session = await getServerSession(authOptions);
-    
+
     if (session?.user?.email) {
       const userDoc = await User.findOne({ email: session.user.email }).select("_id").lean<{ _id: Types.ObjectId }>();
       if (userDoc) {
         userId = userDoc._id;
       }
     }
-    
+
     if (!userId) {
-      const defaultUser = await User.findOne({ email: "kelli.thompson@lockton.com" }).select("_id").lean<{ _id: Types.ObjectId }>();
+      const defaultUser = await User.findOne({ email: "lockey.thompson@lockton.com" }).select("_id").lean<{ _id: Types.ObjectId }>();
       userId = defaultUser ? defaultUser._id : new Types.ObjectId();
     }
 
