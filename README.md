@@ -1,6 +1,6 @@
-# Kelli: AI Travel Concierge
+# Lockey: AI Travel Concierge
 
-Kelli is an AI-powered corporate travel assistant built for HackKU. A 2D mascot guides a corporate traveler through the entire travel lifecycle, from booking and approvals to live disruption handling and post-trip expense reporting.
+Lockey is an AI-powered corporate travel assistant built for HackKU. A 2D mascot guides a corporate traveler through the entire travel lifecycle, from booking and approvals to live disruption handling and post-trip expense reporting.
 
 ---
 
@@ -93,11 +93,11 @@ Atlas UI: Database -> Browse Collections -> Create Index / Search Indexes
 `scripts/seed-mongodb.ts` — Run after Atlas is configured.
 
 Seeds:
-- `users`: Kelli Thompson (passport expiring soon!) + manager
+- `users`: Lockey Thompson (passport expiring soon!) + manager
 - `policies`: 6 cities with Gemini-generated embeddings
 - `preferred_vendors`: 9 GeoJSON hotels across 6 cities
 - `visa_requirements`: US citizen rules for IT, GB, FR, JP, CA, MX
-- `trips`: Demo trip (Kelli -> Milan, draft status)
+- `trips`: Demo trip (Lockey -> Milan, draft status)
 
 ---
 
@@ -227,7 +227,7 @@ Gmail scan for missed receipts -> Gemini extracts -> appended to trip. Gemini ge
 
 | Collection | Type | Purpose |
 |---|---|---|
-| `users` | Standard | Kelli's profile + passport |
+| `users` | Standard | Lockey's profile + passport |
 | `trips` | Standard (Polymorphic) | Core document, status drives all UI |
 | `policies` | Standard + Vector Search | Budget caps + embedded handbook text |
 | `preferred_vendors` | Standard + 2dsphere | GeoJSON hotel locations |
@@ -248,7 +248,7 @@ All six require no visa for US citizens, which simplifies the demo. Visa require
 
 1. Sign in with Google OAuth
 2. Enter **Milan, Italy** + Sep 14-19 dates
-3. Passport warning fires (Kelli's expires Mar 2026, within 6 months)
+3. Passport warning fires (Lockey's expires Mar 2026, within 6 months)
 4. Flight search runs -> Fair Grid shows 3 results across MCI airports
 5. Hotel geo search -> Marriott (preferred, 0.8km) appears with map
 6. Policy summary: no visa, hotel $185 = within $200 cap

@@ -38,13 +38,13 @@ async function main() {
 
   // Step 2: Seed users
   await db.collection("users").deleteMany({})
-  const kelliId = new ObjectId()
+  const LockeyId = new ObjectId()
   const managerId = new ObjectId()
   await db.collection("users").insertMany([
     {
-      _id: kelliId,
-      name: "Kelli Thompson",
-      email: "kelli.thompson@lockton.com",
+      _id: LockeyId,
+      name: "Lockey Thompson",
+      email: "lockey.thompson@lockton.com",
       citizenship: "US",
       passport: {
         number: "XXXXXXXXX",
@@ -66,7 +66,7 @@ async function main() {
       homeAirports: ["MCI"],
     },
   ])
-  console.log("✅ Seeded users: Kelli Thompson + James Walker")
+  console.log("✅ Seeded users: Lockey Thompson + James Walker")
 
   // Step 3: Seed policies with Gemini embeddings
   await db.collection("policies").deleteMany({})
@@ -88,10 +88,10 @@ async function main() {
   await db.collection("visa_requirements").createIndex({ destinationCountry: 1, citizenship: 1 })
   console.log("✅ Seeded visa requirements")
 
-  // Step 6: Seed demo trip (Kelli → Milan, draft)
-  await db.collection("trips").deleteMany({ userId: kelliId })
+  // Step 6: Seed demo trip (Lockey → Milan, draft)
+  await db.collection("trips").deleteMany({ userId: lockeyId })
   await db.collection("trips").insertOne({
-    userId: kelliId,
+    userId: lockeyId,
     status: "draft",
     destination: { city: "Milan", country: "IT", officeLat: 45.4654, officeLng: 9.1866 },
     dates: { departure: new Date("2025-09-14"), return: new Date("2025-09-19") },
@@ -106,7 +106,7 @@ async function main() {
     createdAt: new Date(),
     updatedAt: new Date(),
   })
-  console.log("✅ Seeded demo trip for Kelli → Milan")
+  console.log("✅ Seeded demo trip for Lockey → Milan")
 
   // Step 7: Seed demo alternative flights for crisis rebooking (Frame 10-11)
   await db.collection("demo_alternatives").deleteMany({})
