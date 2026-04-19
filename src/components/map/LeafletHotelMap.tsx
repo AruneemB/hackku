@@ -62,9 +62,12 @@ export default function LeafletHotelMap({
   value?: number;
   onChange?: (i: number) => void;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [localSel, setLocalSel] = useState(0);
   const sel = value ?? localSel;
   const setSel = onChange ?? setLocalSel;
+
+  useEffect(() => { setMounted(true); }, []);
 
   const defaultHotels: HotelPin[] = [
     { label: "1", name: "Marriott Scala", dist: "0.4 km", price: "$247", preferred: true, lat: officeLat, lng: officeLng + 0.005 },
@@ -89,12 +92,10 @@ export default function LeafletHotelMap({
     ...displayHotels.map((h) => [h.lat, h.lng] as L.LatLngTuple),
   ];
 
-  const officeIcon = createOfficeIcon();
-
   return (
     <div className={styles.mapWrap}>
       <div className={styles.hotelMapContainer}>
-        <MapContainer
+        {!mounted ? null : <MapContainer
           center={[officeLat, officeLng]}
           zoom={13}
           style={{ height: 220, width: "100%" }}
@@ -105,7 +106,7 @@ export default function LeafletHotelMap({
           scrollWheelZoom={false}
         >
           <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-          <Marker position={[officeLat, officeLng]} icon={officeIcon}>
+          <Marker position={[officeLat, officeLng]} icon={createOfficeIcon()}>
             <Popup><strong>Client Office</strong></Popup>
           </Marker>
           {displayHotels.map((h, i) => (
@@ -121,7 +122,7 @@ export default function LeafletHotelMap({
             </Marker>
           ))}
           <MapBounds bounds={bounds} />
-        </MapContainer>
+        </MapContainer>}
       </div>
 
       <div className={styles.mapLegend}>

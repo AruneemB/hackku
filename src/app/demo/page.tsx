@@ -474,7 +474,9 @@ function TripCard({ tripData, travelerName }: { tripData?: TripData | null; trav
       </div>
       {showWarning && (
         <div className={styles.alertBox}>
-          <span className={styles.alertIcon}>⚠️</span>
+          <span className={styles.alertIcon}>
+            <ShieldAlert size={18} strokeWidth={2.1} />
+          </span>
           <div>
             <div className={styles.alertTitle}>Passport expires {expiryStr}</div>
             <div className={styles.alertBody}>Within 6 months of travel — renewal recommended</div>
@@ -679,7 +681,7 @@ function FlightPickerV2({
                   <span className={styles.fpTimeVal}>{g.dep}</span>
                   <div className={styles.fpArrowWrap}>
                     <div className={styles.fpArrowLine} />
-                    <Plane className={styles.fpArrowPlane} size={11} />
+                    <Plane className={styles.fpArrowPlane} size={13} />
                     <div className={styles.fpArrowLine} />
                   </div>
                   <span className={styles.fpTimeVal}>{g.arr}</span>
@@ -743,7 +745,7 @@ function FlightSearchState({
 }: {
   title: string;
   body: string;
-  icon: string;
+  icon: React.ReactNode;
 }) {
   return (
     <div className={styles.alertBox}>
@@ -1134,8 +1136,14 @@ function ReceiptCapture() {
         <span>TOTAL</span><span>€87.50</span>
       </div>
       <div className={styles.receiptTags}>
-        <span className={styles.receiptTag}>✓ Categorized: Meals</span>
-        <span className={styles.receiptTag}>✓ PII sanitized</span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Categorized: Meals
+        </span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          PII sanitized
+        </span>
       </div>
     </div>
   );
@@ -1677,10 +1685,10 @@ function PrivacySummary() {
   return (
     <div className={styles.privacyList}>
       {[
-        { icon: "📍", label: "Location Tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
-        { icon: "💳", label: "Financial Data", detail: "Card numbers sanitized before storage", status: "Done" },
-        { icon: "🔑", label: "OAuth Tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
-        { icon: "📅", label: "Data Retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
+        { icon: <MapPin size={18} strokeWidth={2.1} />, label: "Location Tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
+        { icon: <Wallet size={18} strokeWidth={2.1} />, label: "Financial Data", detail: "Card numbers sanitized before storage", status: "Done" },
+        { icon: <ShieldCheck size={18} strokeWidth={2.1} />, label: "OAuth Tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Data Retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
       ].map(item => (
         <div className={styles.privacyItem} key={item.label}>
           <span className={styles.privacyIcon}>{item.icon}</span>
@@ -1702,7 +1710,7 @@ function BundlePicker({ value, onChange }: { value?: number | null; onChange?: (
   const bundles = [
     { name: "Path A", badge: "Policy-safe", price: "$2,340", detail: "MXP direct · Marriott Scala", note: "Requires hotel sign-off" },
     { name: "Path B", badge: "Save $500", price: "$1,840", detail: "BGY airport · AC Hotel 1.2 km", note: "Fully compliant, no exceptions" },
-    { name: "Path C", badge: "⚡ Recommended", price: "$2,010", detail: "Weekend stay · Marriott Scala", note: "Best overall value" },
+    { name: "Path C", badge: "Recommended", price: "$2,010", detail: "Weekend stay · Marriott Scala", note: "Best overall value" },
   ];
   return (
     <div className={styles.cards}>
@@ -1729,7 +1737,9 @@ function TripConfirmed() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>✅</span>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Trip Draft Saved</div>
         <div className={styles.confirmBody}>Milan · Sep 14 to 19 · Trip #TRP-20250914 is now active in your travel dashboard.</div>
       </div>
@@ -1742,7 +1752,9 @@ function FlightConfirmed() {
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
         <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
-        <div className={styles.eticketPlane}>✈</div>
+        <div className={styles.eticketPlane}>
+          <Plane size={22} strokeWidth={2} />
+        </div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
@@ -1758,11 +1770,11 @@ function HotelConfirmed() {
   return (
     <div className={styles.confirmList}>
       {[
-        { icon: "🏨", label: "Hotel", val: "Marriott Scala, Milan" },
-        { icon: "📅", label: "Check-in", val: "Sep 14 · 3:00 PM" },
-        { icon: "📅", label: "Check-out", val: "Sep 19 · 12:00 noon" },
-        { icon: "🔑", label: "Conf. #", val: "MR-20250914-7741" },
-        { icon: "💰", label: "Total", val: "$1,235 (5 nights)" },
+        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala, Milan" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-in", val: "Sep 14 · 3:00 PM" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-out", val: "Sep 19 · 12:00 noon" },
+        { icon: <Tag size={18} strokeWidth={2.1} />, label: "Conf. #", val: "MR-20250914-7741" },
+        { icon: <DollarSign size={18} strokeWidth={2.1} />, label: "Total", val: "$1,235 (5 nights)" },
       ].map(item => (
         <div className={styles.confirmRow} key={item.label}>
           <span className={styles.confirmIcon}>{item.icon}</span>
@@ -1832,9 +1844,9 @@ function BundleConfirmed() {
         <div className={styles.itineraryTotal}>$2,010</div>
       </div>
       {[
-        { icon: "✈️", label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
-        { icon: "🏨", label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
-        { icon: "📋", label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
+        { icon: <Plane size={18} strokeWidth={2.1} />, label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
+        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
+        { icon: <ShieldCheck size={18} strokeWidth={2.1} />, label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
       ].map(item => (
         <div className={styles.itineraryRow} key={item.label}>
           <span className={styles.itineraryIcon}>{item.icon}</span>
@@ -1852,7 +1864,9 @@ function ApprovalWatching() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📬</span>
+        <span className={styles.confirmEmoji}>
+          <SendIcon size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Watching for Reply</div>
         <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds.</div>
       </div>
@@ -1869,7 +1883,7 @@ function ResubmitEmail() {
   if (sent) {
     return (
       <div className={styles.sentBanner}>
-        <span>✓</span>
+        <CheckCircle2 size={18} strokeWidth={2.1} />
         <span>Resubmission sent to mgr.sarah@lockton.com</span>
       </div>
     );
@@ -1893,7 +1907,9 @@ function TripReady() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>🎒</span>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>You&#39;re Ready to Travel</div>
         <div className={styles.confirmBody}>All checklist items reviewed. Documents, bookings, and reminders are in order.</div>
       </div>
@@ -1909,7 +1925,9 @@ function LiveConfirmed() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📡</span>
+        <span className={styles.confirmEmoji}>
+          <Route size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Live Monitoring Active</div>
         <div className={styles.confirmBody}>Gate, weather, hotel, and traffic updates will push to your device automatically throughout the trip.</div>
       </div>
@@ -1926,7 +1944,9 @@ function RebookingConfirmed() {
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
         <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
-        <div className={styles.eticketPlane}>✈</div>
+        <div className={styles.eticketPlane}>
+          <Plane size={22} strokeWidth={2} />
+        </div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
@@ -1943,7 +1963,9 @@ function ExceptionPending() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>⏳</span>
+        <span className={styles.confirmEmoji}>
+          <ShieldAlert size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Exception Pending</div>
         <div className={styles.confirmBody}>Urgent request sent. Sarah typically responds within 30 minutes for force majeure cases.</div>
       </div>
@@ -1963,18 +1985,18 @@ function TransportConfirmed({
   liveData: TransportApiResult | null;
 }) {
   const transportMeta = [
-    { icon: "🚕", name: "Company taxi", getTime: (data: TransportApiResult) => data.taxi.minutes, getCost: (data: TransportApiResult) => data.taxi.cost },
-    { icon: "🚇", name: "Metro M1 → M3", getTime: (data: TransportApiResult) => data.metro.minutes, getCost: () => "$2.50" },
-    { icon: "🚶", name: "Walk", getTime: (data: TransportApiResult) => data.walk.minutes, getCost: () => "Free" },
+    { icon: <CarFront size={18} strokeWidth={2.1} />, name: "Company taxi", getTime: (data: TransportApiResult) => data.taxi.minutes, getCost: (data: TransportApiResult) => data.taxi.cost },
+    { icon: <TrainFront size={18} strokeWidth={2.1} />, name: "Metro M1 → M3", getTime: (data: TransportApiResult) => data.metro.minutes, getCost: () => "$2.50" },
+    { icon: <Footprints size={18} strokeWidth={2.1} />, name: "Walk", getTime: (data: TransportApiResult) => data.walk.minutes, getCost: () => "Free" },
   ];
   const chosen = transportMeta[selectedIndex] ?? transportMeta[0];
-  const eta = liveData ? `${chosen.getTime(liveData)} · ${chosen.getCost(liveData)}` : "18 min · $14";
+  const eta = liveData ? chosen.getTime(liveData) : "18 min";
   const rows = [
     { icon: chosen.icon, label: "Transport", val: chosen.name },
-    { icon: "📍", label: "Pickup", val: "MXP Arrivals Hall B" },
-    { icon: "🏨", label: "Drop-off", val: "Marriott Scala, Milan" },
-    { icon: "⏱", label: "ETA", val: eta },
-    { icon: "📞", label: "Driver", val: "+39 02 555 0122" },
+    { icon: <MapPin size={18} strokeWidth={2.1} />, label: "Pickup", val: "MXP Arrivals Hall B" },
+    { icon: <Building2 size={18} strokeWidth={2.1} />, label: "Drop-off", val: "Marriott Scala, Milan" },
+    { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "ETA", val: eta },
+    { icon: <PhoneCall size={18} strokeWidth={2.1} />, label: "Driver", val: "+39 02 555 0122" },
   ];
 
   return (
@@ -1994,13 +2016,21 @@ function ReceiptSubmitted() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>✅</span>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Submitted to Expense System</div>
         <div className={styles.confirmBody}>Ristorante Al Porto · €87.50 · Ref #EXP-20250916-09 · Categorized as &quot;Meals&quot;</div>
       </div>
       <div className={styles.receiptTags}>
-        <span className={styles.receiptTag}>✓ Within daily allowance</span>
-        <span className={styles.receiptTag}>✓ Manager notified</span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Within daily allowance
+        </span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Manager notified
+        </span>
       </div>
     </div>
   );
@@ -2011,7 +2041,9 @@ function ContactsSaved({ city }: { city: string }) {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📱</span>
+        <span className={styles.confirmEmoji}>
+          <PhoneCall size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Contacts Saved</div>
         <div className={styles.confirmBody}>Corporate Travel Desk and {embassy.name} added to your emergency contacts for this trip.</div>
       </div>
@@ -2023,7 +2055,9 @@ function TripArchived() {
   return (
     <div className={styles.archiveWrap}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📁</span>
+        <span className={styles.confirmEmoji}>
+          <ReceiptText size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Trip #TRP-20250914 Archived</div>
         <div className={styles.confirmBody}>Expense report drafted and sent to mgr.sarah@lockton.com for final sign-off.</div>
       </div>
@@ -2043,7 +2077,9 @@ function DataCleared() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>🔒</span>
+        <span className={styles.confirmEmoji}>
+          <ShieldCheck size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Your Data Is Protected</div>
         <div className={styles.confirmBody}>Location tracking stopped. Financial data sanitized. OAuth tokens expired. Trip data scheduled for deletion Dec 18.</div>
       </div>
@@ -2115,48 +2151,48 @@ const ROADMAP_PHASES = [
   {
     label: "Start",
     steps: [
-      { index: 0, label: "Load Lockey", icon: "🦊" },
+      { index: 0, label: "Load Lockey", icon: <Ellipsis size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Planning",
     steps: [
-      { index: 0, label: "Share Trip Details", icon: "✈️" },
-      { index: 1, label: "Choose a Flight", icon: "🛫" },
-      { index: 2, label: "Find a Hotel", icon: "🏨" },
-      { index: 3, label: "Compliance Check", icon: "📋" },
-      { index: 4, label: "Choose Bundle", icon: "📦" },
+      { index: 0, label: "Share Trip Details", icon: <Route size={16} strokeWidth={2.2} /> },
+      { index: 1, label: "Choose a Flight", icon: <Plane size={16} strokeWidth={2.2} /> },
+      { index: 2, label: "Find a Hotel", icon: <HotelIcon size={16} strokeWidth={2.2} /> },
+      { index: 3, label: "Compliance Check", icon: <ShieldCheck size={16} strokeWidth={2.2} /> },
+      { index: 4, label: "Choose Bundle", icon: <Tag size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Approval",
     steps: [
-      { index: 5, label: "Submit for Approval", icon: "📬" },
-      { index: 6, label: "Handle Rejection", icon: "🔄" },
+      { index: 5, label: "Submit for Approval", icon: <SendIcon size={16} strokeWidth={2.2} /> },
+      { index: 6, label: "Handle Rejection", icon: <ShieldAlert size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Pre-Trip",
     steps: [
-      { index: 7, label: "Travel Checklist", icon: "🗒️" },
+      { index: 7, label: "Travel Checklist", icon: <CheckCircle2 size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Live Travel",
     steps: [
-      { index: 8, label: "Live Mode Active", icon: "📡" },
-      { index: 9, label: "Handle Disruption", icon: "⚡" },
-      { index: 10, label: "Emergency Exception", icon: "🚨" },
-      { index: 11, label: "Arrival & Transport", icon: "🚕" },
-      { index: 12, label: "Capture Receipts", icon: "📸" },
-      { index: 13, label: "Human Support", icon: "📞" },
+      { index: 8, label: "Live Mode Active", icon: <Route size={16} strokeWidth={2.2} /> },
+      { index: 9, label: "Handle Disruption", icon: <ShieldAlert size={16} strokeWidth={2.2} /> },
+      { index: 10, label: "Emergency Exception", icon: <PhoneCall size={16} strokeWidth={2.2} /> },
+      { index: 11, label: "Arrival & Transport", icon: <CarFront size={16} strokeWidth={2.2} /> },
+      { index: 12, label: "Capture Receipts", icon: <ReceiptText size={16} strokeWidth={2.2} /> },
+      { index: 13, label: "Human Support", icon: <PhoneCall size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Post-Trip",
     steps: [
-      { index: 14, label: "Expense Summary", icon: "💰" },
-      { index: 15, label: "Data & Privacy", icon: "🔒" },
+      { index: 14, label: "Expense Summary", icon: <DollarSign size={16} strokeWidth={2.2} /> },
+      { index: 15, label: "Data & Privacy", icon: <ShieldCheck size={16} strokeWidth={2.2} /> },
     ],
   },
 ];
@@ -2190,7 +2226,7 @@ function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number
                   isDone ? styles.roadmapStepDone : isCurrent ? styles.roadmapStepCurrent : styles.roadmapStepUpcoming,
                 ].join(" ")}>
                   <div className={styles.roadmapStepDot}>
-                    {isDone ? "✓" : step.icon}
+                    {isDone ? <CheckCircle2 size={16} strokeWidth={2.2} /> : step.icon}
                   </div>
                   <div className={styles.roadmapStepInfo}>
                     <span className={styles.roadmapStepLabel}>{step.label}</span>
@@ -2657,7 +2693,9 @@ function PhoneShell({
                         <div className={styles.chatBubble}>{msg.content}</div>
                         {msg.role === "assistant" && i === lastAssistantIdx && msg.frameIndex !== undefined && (
                           <button className={styles.chatCard} onClick={onOpenSheet} type="button">
-                            <span className={styles.chatCardIcon}>📋</span>
+                            <span className={styles.chatCardIcon}>
+                              <ArrowRight size={15} strokeWidth={2.2} />
+                            </span>
                             <span className={styles.chatCardText}>{FRAMES[msg.frameIndex]?.sheetTitle}</span>
                           </button>
                         )}
@@ -3660,7 +3698,7 @@ export default function DemoPage() {
           return (
             <FlightSearchState
               body="Running Fair Grid across live dates and nearby airports."
-              icon="⏳"
+              icon={<PlaneTakeoff size={18} strokeWidth={2.1} />}
               title="Searching Live Flights"
             />
           );
@@ -3669,7 +3707,7 @@ export default function DemoPage() {
           return (
             <FlightSearchState
               body={flightSearchMessage}
-              icon="⚠️"
+              icon={<ShieldAlert size={18} strokeWidth={2.1} />}
               title="Live Flight Search Required"
             />
           );
@@ -3678,7 +3716,7 @@ export default function DemoPage() {
           return (
             <FlightSearchState
               body="No live flight options are loaded yet."
-              icon="🛫"
+              icon={<Route size={18} strokeWidth={2.1} />}
               title="Waiting for Fair Grid"
             />
           );
