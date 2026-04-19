@@ -3,7 +3,33 @@
 import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { ArrowBigLeft, DollarSign, Ellipsis, Pencil, Plane, ReceiptText, Send as SendIcon, Tag } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowBigLeft,
+  Building2,
+  CalendarClock,
+  CarFront,
+  CheckCircle2,
+  CloudSun,
+  DollarSign,
+  Ellipsis,
+  Footprints,
+  Hotel as HotelIcon,
+  MapPin,
+  MoveDown,
+  Pencil,
+  Plane,
+  PlaneTakeoff,
+  PhoneCall,
+  ReceiptText,
+  Route,
+  ShieldAlert,
+  ShieldCheck,
+  Send as SendIcon,
+  Tag,
+  TrainFront,
+  Wallet,
+} from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { DemoReceiptCapture, type DemoReceiptCapturePayload } from "@/components/receipts/DemoReceiptCapture";
 import { SpeechBubble } from "@/components/mascot/SpeechBubble";
@@ -64,6 +90,7 @@ type DemoProgressSnapshot = {
   selectedHotel: number;
   selectedReturn: number;
   selectedBundle: number | null;
+  selectedTransport: number;
   liveWeather: WeatherForecast | null;
 };
 
@@ -1082,91 +1109,6 @@ function ExceptionEmail({ rebooking }: { rebooking: RebookingData }) {
   );
 }
 
-function ArrivalSupport({
-  value,
-  onChange,
-  onDataLoaded,
-}: {
-  value: number;
-  onChange: (i: number) => void;
-  onDataLoaded: (data: TransportApiResult) => void;
-}) {
-  const [liveData, setLiveData] = useState<TransportApiResult | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/transport/distance?hotel=Via+della+Spiga+31%2C+Milan&airport=MXP")
-      .then((r) => r.json())
-      .then((data: TransportApiResult) => {
-        if (cancelled) return;
-        setLiveData(data);
-        onDataLoaded(data);
-      })
-      .catch(() => { /* fall back to defaults */ })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [onDataLoaded]);
-
-  const options = [
-    {
-      icon: "🚕",
-      name: "Company taxi",
-      time: loading ? "…" : (liveData?.taxi.minutes ?? "18 min"),
-      cost: loading ? "…" : (liveData?.taxi.cost ?? "$14"),
-      preferred: true,
-    },
-    {
-      icon: "🚇",
-      name: "Metro M1 → M3",
-      time: loading ? "…" : (liveData?.metro.minutes ?? "35 min"),
-      cost: liveData?.metro.cost ?? "$2.50",
-      preferred: false,
-    },
-    {
-      icon: "🚶",
-      name: "Walk",
-      time: loading ? "…" : (liveData?.walk.minutes ?? "28 min"),
-      cost: "Free",
-      preferred: false,
-    },
-  ];
-
-  const distLabel = loading
-    ? "loading…"
-    : `${liveData?.distanceKm ?? 2.3} km from MXP`;
-
-  return (
-    <div className={styles.arrival}>
-      <div className={styles.arrivalDest}>
-        <span className={styles.arrivalPin}>📍</span>
-        <div>
-          <div className={styles.arrivalName}>Marriott Scala</div>
-          <div className={styles.arrivalAddr}>Via della Spiga 31, Milan · {distLabel}</div>
-        </div>
-      </div>
-      <div className={styles.cards}>
-        {options.map((o, i) => (
-          <button className={[styles.card, value === i ? styles.cardSelected : ""].join(" ")} key={o.name} onClick={() => onChange(i)} type="button">
-            <div className={styles.cardRow}>
-              <span className={styles.cardLabel}>{o.icon}  {o.name}</span>
-              {o.preferred && <span className={styles.cardTag}>Preferred</span>}
-            </div>
-            <div className={styles.cardRow}>
-              <span className={styles.cardMeta}>{o.time}</span>
-              <span className={styles.cardPrice}>{o.cost}</span>
-            </div>
-          </button>
-        ))}
-      </div>
-      <div className={styles.allowanceRow}>
-        <span>💰 Meal allowance today</span>
-        <strong>$75 remaining</strong>
-      </div>
-    </div>
-  );
-}
-
 function ReceiptCapture() {
   return (
     <div className={styles.receipt}>
@@ -1258,25 +1200,396 @@ function getEmbassy(city: string): EmbassyInfo {
   return US_EMBASSIES[key] ?? EMBASSY_FALLBACK;
 }
 
-function ContactCards({ city }: { city: string }) {
-  const embassy = getEmbassy(city);
+function ComplianceReportRefined({
+  visa,
+  hotelName,
+  hotelNightlyRateUsd,
+  hotelCapUsd = 200,
+  flightNumber,
+  flightTotalUsd,
+  flightCapUsd = 800,
+  departure,
+  returnDate,
+}: {
+  visa?: DemoVisaInfo | null;
+  hotelName?: string;
+  hotelNightlyRateUsd?: number;
+  hotelCapUsd?: number;
+  flightNumber?: string;
+  flightTotalUsd?: number;
+  flightCapUsd?: number;
+  departure?: string;
+  returnDate?: string;
+}) {
+  const visaRequired = visa?.visaRequired ?? false;
+  const visaType = visa?.visaType ?? "Visa";
+  const leadDays = visa?.minApplicationLeadDays ?? null;
+  const applyUrl = visa?.applicationUrl ?? null;
+  const hotelOverCap = hotelNightlyRateUsd != null && hotelNightlyRateUsd > hotelCapUsd;
+  const hotelExcess = hotelNightlyRateUsd != null ? Math.round(hotelNightlyRateUsd - hotelCapUsd) : 0;
+  const flightOverCap = flightTotalUsd != null && flightTotalUsd > flightCapUsd;
+
+  let nights = 0;
+  let tripWindow = "";
+  if (departure && returnDate) {
+    const dep = new Date(`${departure}T12:00:00`);
+    const ret = new Date(`${returnDate}T12:00:00`);
+    nights = Math.round((ret.getTime() - dep.getTime()) / 86_400_000);
+    tripWindow = `${fmtDate(dep)} - ${fmtDate(ret)}`;
+  }
+
+  const stayLimit = visa?.stayLimitDays ?? null;
+  const stayOverLimit = stayLimit != null && nights > stayLimit;
+  const issueCount = [visaRequired, hotelOverCap, flightOverCap, stayOverLimit].filter(Boolean).length;
+
+  const checks: Array<{
+    key: string;
+    tone: "warn" | "ok";
+    icon: React.ReactNode;
+    label: string;
+    title: string;
+    body: string;
+    detail?: string;
+    ctaLabel?: string;
+    ctaHref?: string | null;
+  }> = [
+    {
+      key: "visa",
+      tone: visaRequired ? "warn" : "ok",
+      icon: visaRequired ? <ShieldAlert size={18} strokeWidth={2.1} /> : <ShieldCheck size={18} strokeWidth={2.1} />,
+      label: "Visa",
+      title: visaRequired ? `${visaType} required` : "No visa blocker",
+      body:
+        leadDays != null
+          ? `Apply at least ${leadDays} days before departure.`
+          : visa?.notes ?? "Entry requirements are already clear for this destination.",
+      detail: visaRequired ? visa?.notes ?? "Check current consular processing times." : undefined,
+      ctaLabel: applyUrl ? "Open visa form" : undefined,
+      ctaHref: applyUrl,
+    },
+    {
+      key: "hotel",
+      tone: hotelOverCap ? "warn" : "ok",
+      icon: <HotelIcon size={18} strokeWidth={2.1} />,
+      label: "Hotel",
+      title: hotelOverCap ? "Exception needed" : "Within nightly policy",
+      body: `${hotelName ?? "Selected hotel"} · ${hotelNightlyRateUsd ?? hotelCapUsd}/night`,
+      detail: hotelOverCap
+        ? `$${hotelExcess} over the $${hotelCapUsd}/night cap.`
+        : `Aligned with the $${hotelCapUsd}/night cap.`,
+    },
+    {
+      key: "flight",
+      tone: flightOverCap ? "warn" : "ok",
+      icon: <PlaneTakeoff size={18} strokeWidth={2.1} />,
+      label: "Flight",
+      title: flightOverCap ? "Price needs review" : "Flight approved",
+      body: flightTotalUsd != null ? `${flightNumber ?? "Selected flight"} · $${flightTotalUsd}` : `Flight cap · $${flightCapUsd}`,
+      detail: flightTotalUsd != null
+        ? flightOverCap
+          ? `$${Math.round(flightTotalUsd - flightCapUsd)} above the approved cap.`
+          : `Still within the $${flightCapUsd} cap.`
+        : undefined,
+    },
+    ...(nights > 0
+      ? [{
+          key: "stay",
+          tone: (stayOverLimit ? "warn" : "ok") as "warn" | "ok",
+          icon: <CalendarClock size={18} strokeWidth={2.1} />,
+          label: "Dates",
+          title: stayOverLimit ? "Stay limit exceeded" : "Dates look compliant",
+          body: `${nights} night trip${tripWindow ? ` · ${tripWindow}` : ""}`,
+          detail: stayLimit != null
+            ? stayOverLimit
+              ? `Over the ${stayLimit}-day entry window.`
+              : `Within the ${stayLimit}-day entry window.`
+            : "No visa stay limit is blocking these dates.",
+        }]
+      : []),
+  ];
+
+  const incomplete = checks.filter((c) => c.tone === "warn");
+  const complete = checks.filter((c) => c.tone === "ok");
+
   return (
-    <div className={styles.contactCards}>
-      <div className={styles.contactCard}>
-        <div className={styles.contactEmoji}>📞</div>
-        <div className={styles.contactBody}>
-          <div className={styles.contactName}>Corporate Travel Desk</div>
-          <div className={styles.contactDetail}>+1 (800) 555-0199</div>
-          <div className={styles.contactDetail}>Available 24 / 7</div>
+    <div className={styles.cvList}>
+      {incomplete.length > 0 && (
+        <div className={styles.cvSection}>
+          <div className={styles.cvSectionLabel}>Needs Attention</div>
+          {incomplete.map((item) => (
+            <div className={styles.cvRow} key={item.key}>
+              <div className={[styles.cvDot, styles.cvDotWarn].join(" ")}>{item.icon}</div>
+              <div>
+                <div className={styles.cvRowTitle}>{item.title}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {complete.length > 0 && (
+        <div className={styles.cvSection}>
+          <div className={styles.cvSectionLabel}>Complete</div>
+          {complete.map((item) => (
+            <div className={styles.cvRow} key={item.key}>
+              <div className={[styles.cvDot, styles.cvDotOk].join(" ")}>{item.icon}</div>
+              <div>
+                <div className={styles.cvRowTitle}>{item.title}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HotelComparisonRefined() {
+  const options = [
+    {
+      key: "rejected",
+      tone: "warn" as const,
+      label: "Current request",
+      title: "Marriott Scala",
+      price: "$247 / night",
+      stats: ["Preferred vendor", "0.4 km from office"],
+      note: "$47 over the $200 policy cap.",
+    },
+    {
+      key: "approved",
+      tone: "ok" as const,
+      label: "Recommended switch",
+      title: "AC Hotel Milan",
+      price: "$189 / night",
+      stats: ["Preferred vendor", "1.2 km from office"],
+      note: "Saves $290 total and stays fully compliant.",
+    },
+  ];
+
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareName}>Marriott Scala</div>
+        <div className={styles.comparePrice}>$247 / night</div>
+        <div className={styles.compareMeta}>Preferred vendor · 0.4 km from office</div>
+        <div className={styles.compareReason}>$47 over the $200 cap</div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "2px 0" }}>
+        <MoveDown size={20} strokeWidth={2} color="var(--cc-body, #5a6672)" />
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareName}>AC Hotel Milan</div>
+        <div className={styles.comparePrice}>$189 / night</div>
+        <div className={styles.compareMeta}>Preferred vendor · 1.2 km from office</div>
+        <div className={styles.compareReason}>Saves $290 total</div>
+      </div>
+    </div>
+  );
+}
+
+function LiveDashboardRefined() {
+  const signals = [
+    { key: "flight", icon: <Plane size={18} strokeWidth={2.1} />, title: "LH 8904 · Gate B22", sub: "On time · Boards 8:15 AM" },
+    { key: "weather", icon: <CloudSun size={18} strokeWidth={2.1} />, title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight" },
+    { key: "hotel", icon: <Building2 size={18} strokeWidth={2.1} />, title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM" },
+    { key: "ground", icon: <CarFront size={18} strokeWidth={2.1} />, title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM for a comfortable buffer" },
+  ];
+
+  return (
+    <div className={styles.dashboard}>
+      {signals.map((s) => (
+        <div className={styles.dashCard} key={s.key}>
+          <span className={styles.dashIcon}>{s.icon}</span>
+          <div className={styles.dashText}>
+            <div className={styles.dashTitle}>{s.title}</div>
+            <div className={styles.dashSub}>{s.sub}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlightRebookingRefined({ rebooking }: { rebooking: RebookingData }) {
+  const { cancelled, rebooked } = rebooking;
+  const carrierChanged = cancelled.carrier !== rebooked.carrier;
+
+  return (
+    <div className={styles.rebooking}>
+      <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
+        <div className={styles.rebookBadge}>Cancelled</div>
+        <div className={styles.rebookFlight}>{cancelled.flightNumber}</div>
+        <div className={styles.rebookTime}>{cancelled.route} · departs {cancelled.dep}</div>
+        <div className={styles.rebookMeta}>{cancelled.carrier} · ${cancelled.priceUsd.toLocaleString()} original total</div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
+        <MoveDown size={20} strokeWidth={2} color="var(--cc-body, #5a6672)" />
+      </div>
+      <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
+        <div className={styles.rebookBadge}>Confirmed Replacement</div>
+        <div className={styles.rebookFlight}>{rebooked.flightNumber}</div>
+        <div className={styles.rebookTime}>{rebooked.route} · departs {rebooked.dep}</div>
+        <div className={styles.rebookMeta}>
+          {rebooked.carrier} · seat {rebooked.seat}{carrierChanged ? ` · switched from ${cancelled.carrier}` : ""}
         </div>
       </div>
-      <div className={styles.contactCard}>
-        <div className={styles.contactEmoji}>🏛️</div>
-        <div className={styles.contactBody}>
-          <div className={styles.contactName}>{embassy.name}</div>
-          <div className={styles.contactDetail}>{embassy.address}</div>
-          <div className={styles.contactDetail}>{embassy.hours}</div>
+      <div className={styles.infoGrid} style={{ marginTop: 16, borderTop: "1px solid rgba(159, 171, 183, 0.2)", paddingTop: 16 }}>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Cost impact</span>
+          <span className={[styles.infoVal, styles.spendOver].join(" ")}>${rebooked.overageUsd} over budget</span>
         </div>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Change fee</span>
+          <span className={styles.infoVal}>${rebooked.changeFeeUsd}</span>
+        </div>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Hotel</span>
+          <span className={styles.infoVal}>Reservation protected</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArrivalSupportRefined({
+  value,
+  onChange,
+  onDataLoaded,
+}: {
+  value: number;
+  onChange: (i: number) => void;
+  onDataLoaded: (data: TransportApiResult) => void;
+}) {
+  const [liveData, setLiveData] = useState<TransportApiResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/transport/distance?hotel=Via+della+Spiga+31%2C+Milan&airport=MXP")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: TransportApiResult) => {
+        if (cancelled) return;
+        setLiveData(data);
+        onDataLoaded(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onDataLoaded]);
+
+  const distLabel = loading ? "Loading route..." : `${liveData?.distanceKm ?? 2.3} km from MXP`;
+
+  // Each option carries a `link` — the external URL that opens when the user
+  // selects that row and taps "Got It" (or immediately on row tap, TBD).
+  // Intent: selecting an option opens the relevant booking / directions page
+  // so the traveller can complete the journey step without leaving the flow.
+  //   - Company taxi  → deep-link into the corporate Uber/taxi booking portal
+  //   - Metro         → Google Maps transit directions to the hotel
+  //   - Walk          → Google Maps walking directions to the hotel
+  // TODO: replace placeholder hrefs with real URLs once booking partners confirmed.
+  const options = [
+    { icon: <CarFront size={18} strokeWidth={2.1} />, name: "Company taxi", time: loading ? "..." : liveData?.taxi.minutes ?? "18 min", cost: loading ? "..." : liveData?.taxi.cost ?? "$14", preferred: true, note: "Fastest pickup option from arrivals.", link: "https://m.uber.com/ul/" },
+    { icon: <TrainFront size={18} strokeWidth={2.1} />, name: "Metro M1 to M3", time: loading ? "..." : liveData?.metro.minutes ?? "35 min", cost: liveData?.metro.cost ?? "$2.50", preferred: false, note: "Lowest cost route into the city center.", link: "https://maps.google.com/?dirflg=r&destination=Marriott+Scala+Milan" },
+    { icon: <Footprints size={18} strokeWidth={2.1} />, name: "Walk", time: loading ? "..." : liveData?.walk.minutes ?? "28 min", cost: liveData?.walk.cost ?? "Free", preferred: false, note: "Best if you want to stay nearby on foot.", link: "https://maps.google.com/?dirflg=w&destination=Marriott+Scala+Milan" },
+  ];
+
+  return (
+    <div className={styles.arrival}>
+      <div className={styles.fpHeader}>
+        <span className={styles.fpRoute}>Marriott Scala</span>
+        <span className={styles.fpHeaderMeta}>Via della Spiga 31, Milan · {distLabel}</span>
+      </div>
+      <div className={styles.fpReturnRows}>
+        {options.map((option, i) => {
+          const isSel = value === i;
+          return (
+            <button
+              key={option.name}
+              className={[styles.fpReturnRow, isSel ? styles.fpReturnRowSelected : ""].join(" ")}
+              // Selecting a row marks it active AND opens the option's link in a
+              // new tab so the user can continue (book the taxi, open Maps, etc.).
+              // If we want a single confirm tap instead, move window.open() to the
+              // "Got It" button handler at the frame level and pass `options[sel].link`
+              // up via a callback prop.
+              onClick={() => { onChange(i); window.open(option.link, "_blank", "noopener,noreferrer"); }}
+              type="button"
+            >
+              <div className={[styles.fpRadioDot, isSel ? styles.fpRadioDotSelected : ""].join(" ")}>
+                {isSel && <div className={styles.fpRadioInner} />}
+              </div>
+              <div className={styles.fpReturnRowBody}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 600, color: "var(--cc-text-primary)" }}>
+                    {option.name}
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--cc-text-primary)", flexShrink: 0 }}>{option.time}</span>
+                </div>
+                <div className={styles.fpReturnRowBottom}>
+                  <span className={styles.fpReturnRowMeta}>{option.note}</span>
+                  <span className={styles.fpReturnRowPrice}>{option.cost}</span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ContactCardsRefined({ city }: { city: string }) {
+  const embassy = getEmbassy(city);
+  const contacts = [
+    {
+      key: "travel-desk",
+      icon: <PhoneCall size={18} strokeWidth={2.1} />,
+      label: "Corporate Travel Desk",
+      title: "+1 (800) 555-0199",
+      detail: "Available 24 / 7 for booking support and disruptions.",
+    },
+    {
+      key: "embassy",
+      icon: <Building2 size={18} strokeWidth={2.1} />,
+      label: "Nearest Embassy",
+      title: embassy.name,
+      detail: `${embassy.address} · ${embassy.hours}`,
+    },
+  ];
+
+  return (
+    <div className={styles.refinedSheet}>
+      <div className={styles.refinedHero}>
+        <div className={styles.refinedHeroTop}>
+          <div>
+            <div className={styles.refinedEyebrow}>Support Contacts</div>
+            <div className={styles.refinedHeroTitle}>Important Help Lines for {city}</div>
+          </div>
+          <span className={[styles.refinedPill, styles.refinedPillOk].join(" ")}>Saved</span>
+        </div>
+        <div className={styles.refinedHeroBody}>
+          The fastest route back to support is already pinned here if anything changes on the ground.
+        </div>
+      </div>
+      <div className={styles.refinedGrid}>
+        {contacts.map((contact) => (
+          <div className={[styles.refinedCard, styles.refinedCardNeutral].join(" ")} key={contact.key}>
+            <div className={styles.refinedCardTop}>
+              <span className={styles.refinedIcon}>{contact.icon}</span>
+              <div className={styles.refinedCardHeading}>
+                <div className={styles.refinedCardLabel}>{contact.label}</div>
+                <div className={styles.refinedCardTitle}>{contact.title}</div>
+              </div>
+            </div>
+            <div className={styles.refinedCardBody}>{contact.detail}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1364,10 +1677,10 @@ function PrivacySummary() {
   return (
     <div className={styles.privacyList}>
       {[
-        { icon: "📍", label: "Location tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
-        { icon: "💳", label: "Financial data", detail: "Card numbers sanitized before storage", status: "Done" },
-        { icon: "🔑", label: "OAuth tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
-        { icon: "📅", label: "Data retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
+        { icon: "📍", label: "Location Tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
+        { icon: "💳", label: "Financial Data", detail: "Card numbers sanitized before storage", status: "Done" },
+        { icon: "🔑", label: "OAuth Tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
+        { icon: "📅", label: "Data Retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
       ].map(item => (
         <div className={styles.privacyItem} key={item.label}>
           <span className={styles.privacyIcon}>{item.icon}</span>
@@ -1649,16 +1962,13 @@ function TransportConfirmed({
   selectedIndex: number;
   liveData: TransportApiResult | null;
 }) {
-  const TRANSPORT_META = [
-    { icon: "🚕", name: "Company taxi", getTime: (d: TransportApiResult) => d.taxi.minutes, getCost: (d: TransportApiResult) => d.taxi.cost },
-    { icon: "🚇", name: "Metro M1 → M3", getTime: (d: TransportApiResult) => d.metro.minutes, getCost: () => "$2.50" },
-    { icon: "🚶", name: "Walk", getTime: (d: TransportApiResult) => d.walk.minutes, getCost: () => "Free" },
+  const transportMeta = [
+    { icon: "🚕", name: "Company taxi", getTime: (data: TransportApiResult) => data.taxi.minutes, getCost: (data: TransportApiResult) => data.taxi.cost },
+    { icon: "🚇", name: "Metro M1 → M3", getTime: (data: TransportApiResult) => data.metro.minutes, getCost: () => "$2.50" },
+    { icon: "🚶", name: "Walk", getTime: (data: TransportApiResult) => data.walk.minutes, getCost: () => "Free" },
   ];
-  const chosen = TRANSPORT_META[selectedIndex] ?? TRANSPORT_META[0];
-  const eta = liveData
-    ? `${chosen.getTime(liveData)} · ${chosen.getCost(liveData)}`
-    : "18 min · $14";
-
+  const chosen = transportMeta[selectedIndex] ?? transportMeta[0];
+  const eta = liveData ? `${chosen.getTime(liveData)} · ${chosen.getCost(liveData)}` : "18 min · $14";
   const rows = [
     { icon: chosen.icon, label: "Transport", val: chosen.name },
     { icon: "📍", label: "Pickup", val: "MXP Arrivals Hall B" },
@@ -1669,7 +1979,7 @@ function TransportConfirmed({
 
   return (
     <div className={styles.confirmList}>
-      {rows.map(item => (
+      {rows.map((item) => (
         <div className={styles.confirmRow} key={item.label}>
           <span className={styles.confirmIcon}>{item.icon}</span>
           <span className={styles.confirmLabel}>{item.label}</span>
@@ -1787,14 +2097,14 @@ const FRAMES: DemoFrame[] = [
   { frameNumber: 4, tone: "empathetic", message: "I ran a compliance check and found two things to sort out. You'll need a Type-C visa, and the hotel requires a quick approval.", sheetTitle: "Compliance Check Complete", options: ["Apply for Visa", "Adjust"], Visual: ComplianceReport, actionTitle: "Visa Application Guide", ActionVisual: VisaGuide },
   { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
   { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
-  { frameNumber: 7, tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparison, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
+  { frameNumber: 7, tone: "empathetic", message: "Your manager flagged the hotel cost. I've found a compliant lower-cost option that should get the green light.", sheetTitle: "Recovery Option Prepared", options: ["Resubmit", "Adjust"], Visual: HotelComparisonRefined, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
   { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
-  { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
-  { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
+  { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboardRefined, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
+  { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebookingRefined, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
   { frameNumber: 11, tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
-  { frameNumber: 12, tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel and your daily meal allowance to keep you covered.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupport, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
+  { frameNumber: 12, tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupportRefined, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
   { frameNumber: 13, tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
-  { frameNumber: 14, tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCards, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
+  { frameNumber: 14, tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCardsRefined, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
   { frameNumber: 15, tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
   { frameNumber: 16, tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
 ];
@@ -2078,6 +2388,12 @@ function PhoneShell({
     }
   }, [chatMessages]);
 
+  useEffect(() => {
+    if (chatMode && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMode]);
+
   function resetReceiptFlow() {
     receiptScanRequestRef.current += 1;
     setReceiptScanState("idle");
@@ -2322,7 +2638,7 @@ function PhoneShell({
               <div className={styles.chatMessages} ref={chatScrollRef}>
                 {chatMessages.length === 0 ? (
                   <div className={styles.chatEmpty}>
-                    <span>Start a conversation with Kelli</span>
+                    <span>Start a conversation with Lockey</span>
                   </div>
                 ) : (
                   chatMessages.map((msg, i) => (
@@ -2333,7 +2649,7 @@ function PhoneShell({
                       {msg.role === "assistant" && (
                         <div className={styles.chatAvatarWrap}>
                           <div className={styles.chatAvatar}>
-                            <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                            <img alt="Lockey" src="/mascot/happy.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                           </div>
                         </div>
                       )}
@@ -2353,7 +2669,7 @@ function PhoneShell({
                   <div className={[styles.chatMsg, styles.chatMsgAssistant].join(" ")}>
                     <div className={styles.chatAvatarWrap}>
                       <div className={styles.chatAvatar}>
-                        <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
+                        <img alt="Lockey" src="/mascot/happy.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                       </div>
                     </div>
                     <div className={styles.chatBubble}>
@@ -2376,7 +2692,7 @@ function PhoneShell({
                         onChatSend();
                       }
                     }}
-                    placeholder="Message Kelli…"
+                    placeholder="Message Lockey…"
                     type="text"
                     value={chatInput}
                   />
@@ -2435,7 +2751,7 @@ function PhoneShell({
               {isLiveTravelFrame ? (
                 <div className={styles.controlsCenter}>
                   <button
-                    aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                    aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
                     className={[styles.iconButton, styles.primaryButtonSmall, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
                     disabled={isProcessing}
                     onClick={onMicClick}
@@ -2454,7 +2770,7 @@ function PhoneShell({
                 </div>
               ) : (
                 <button
-                  aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                  aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Lockey"}
                   className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
                   disabled={isProcessing}
                   onClick={onMicClick}
@@ -2512,10 +2828,10 @@ function PhoneShell({
                   </div>
                   <div className={styles.confirmList}>
                     {false ? [
-                      { icon: "🏷️", label: "Category", val: toTitleCase(receiptScanResult.category) },
-                      { icon: "💶", label: "Original", val: `${receiptScanResult.amount} ${receiptScanResult.currency}` },
-                      { icon: "💵", label: "USD Total", val: `$${receiptScanResult.totalUsd}` },
-                      { icon: "🎯", label: "Confidence", val: `${Math.round(receiptScanResult.confidence * 100)}%` },
+                      { icon: "🏷️", label: "Category", val: toTitleCase(receiptScanResult!.category) },
+                      { icon: "💶", label: "Original", val: `${receiptScanResult!.amount} ${receiptScanResult!.currency}` },
+                      { icon: "💵", label: "USD Total", val: `$${receiptScanResult!.totalUsd}` },
+                      { icon: "🎯", label: "Confidence", val: `${Math.round(receiptScanResult!.confidence * 100)}%` },
                     ].map((item) => (
                       <div className={styles.confirmRow} key={item.label}>
                         <span className={styles.confirmIcon}>{item.icon}</span>
@@ -2628,26 +2944,29 @@ function LoginScreen() {
   return (
     <div className={styles.phone}>
       <section className={styles.shell}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: "0 8px 22px" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 42, marginBottom: 8 }}>✈️</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--cc-text-primary, #fff)" }}>Lockey</div>
-            <div style={{ fontSize: 13, color: "var(--cc-body, #8a9baa)", marginTop: 4 }}>AI Travel Concierge · Lockton</div>
+        <div className={styles.loginContent}>
+          <div className={styles.loginBrand}>
+            <Image
+              alt="Lockey fox mascot"
+              className={styles.loginMascot}
+              height={120}
+              priority
+              src="/mascot/greeting.png"
+              width={120}
+            />
+            <div className={styles.loginTitle}>Lockey</div>
+            <div className={styles.loginSubtitle}>AI Travel Concierge · Lockton</div>
           </div>
           <button
-            onClick={() => { setLoading(true); void signIn("google", { callbackUrl: "/demo" }); }}
+            className={styles.loginSignInButton}
             disabled={loading}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              background: "#fff", color: "#1a2530", fontWeight: 600, fontSize: 15,
-              border: "none", borderRadius: 14, padding: "13px 28px", cursor: loading ? "default" : "pointer",
-              opacity: loading ? 0.7 : 1, transition: "opacity 150ms",
-            }}
+            onClick={() => { setLoading(true); void signIn("google", { callbackUrl: "/demo" }); }}
+            type="button"
           >
             <GoogleIcon />
             {loading ? "Signing in…" : "Sign in with Google"}
           </button>
-          <p style={{ fontSize: 11, color: "var(--cc-body, #8a9baa)", textAlign: "center", maxWidth: 200, lineHeight: 1.5 }}>
+          <p className={styles.loginDisclaimer}>
             Authorizes Gmail access for travel approvals and receipt scanning.
           </p>
         </div>
@@ -2756,6 +3075,7 @@ export default function DemoPage() {
         if (typeof snapshot.selectedBundle === "number" || snapshot.selectedBundle === null) {
           setSelectedBundle(snapshot.selectedBundle);
         }
+        if (typeof snapshot.selectedTransport === "number") setSelectedTransport(snapshot.selectedTransport);
         if (snapshot.liveWeather) setLiveWeather(snapshot.liveWeather);
       } catch {
         window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
@@ -2786,6 +3106,7 @@ export default function DemoPage() {
       selectedHotel,
       selectedReturn,
       selectedBundle,
+      selectedTransport,
       liveWeather,
     };
 
@@ -2802,6 +3123,7 @@ export default function DemoPage() {
     selectedFlight,
     selectedHotel,
     selectedReturn,
+    selectedTransport,
     tripData,
     tripId,
     liveWeather,
@@ -3381,7 +3703,7 @@ export default function DemoPage() {
         const hotelName = liveHotel?.name ?? demoHotel.name;
         const hotelRate = liveHotel?.nightlyRateUsd ?? demoHotel.pricePerNightUsd;
         return (
-          <ComplianceReport
+          <ComplianceReportRefined
             visa={visaInfo}
             hotelName={hotelName}
             hotelNightlyRateUsd={hotelRate}
@@ -3419,7 +3741,7 @@ export default function DemoPage() {
         const returnFlight = group.returns?.[selectedReturn] ?? group.returns?.[0];
         const origPrice = returnFlight?.totalPriceUsd ?? group.returns?.[0]?.totalPriceUsd ?? 1067;
         const rebooking = buildRebookingData(group, origPrice);
-        if (currentIndex === 10) return <FlightRebooking rebooking={rebooking} />;
+        if (currentIndex === 10) return <FlightRebookingRefined rebooking={rebooking} />;
         return <ExceptionEmail rebooking={rebooking} />;
       }
       case 12:
@@ -3427,13 +3749,13 @@ export default function DemoPage() {
           return <TransportConfirmed selectedIndex={selectedTransport} liveData={liveTransportData} />;
         }
         return (
-          <ArrivalSupport
+          <ArrivalSupportRefined
             value={selectedTransport}
             onChange={setSelectedTransport}
             onDataLoaded={setLiveTransportData}
           />
         );
-      case 14: return <ContactCards city={tripData?.city ?? DEMO_DEFAULTS.city} />;
+      case 14: return <ContactCardsRefined city={tripData?.city ?? DEMO_DEFAULTS.city} />;
       case 15: return <SpendSummary tripId={tripId} />;
       default: { const V = frame.Visual; return <V />; }
     }
