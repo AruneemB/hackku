@@ -3,7 +3,33 @@
 import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { ArrowBigLeft, DollarSign, Ellipsis, Pencil, Plane, ReceiptText, Send as SendIcon, Tag } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowBigLeft,
+  Building2,
+  CalendarClock,
+  CarFront,
+  CheckCircle2,
+  CloudSun,
+  DollarSign,
+  Ellipsis,
+  Footprints,
+  Hotel as HotelIcon,
+  MapPin,
+  MoveDown,
+  Pencil,
+  Plane,
+  PlaneTakeoff,
+  PhoneCall,
+  ReceiptText,
+  Route,
+  ShieldAlert,
+  ShieldCheck,
+  Send as SendIcon,
+  Tag,
+  TrainFront,
+  Wallet,
+} from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
 import { DemoReceiptCapture, type DemoReceiptCapturePayload } from "@/components/receipts/DemoReceiptCapture";
 import { SpeechBubble } from "@/components/mascot/SpeechBubble";
@@ -111,6 +137,7 @@ type DemoProgressSnapshot = {
   selectedHotel: number;
   selectedReturn: number;
   selectedBundle: number | null;
+  selectedTransport: number;
   liveWeather: WeatherForecast | null;
 };
 
@@ -747,7 +774,9 @@ function TripCard({ tripData, travelerName }: { tripData?: TripData | null; trav
       </div>
       {showWarning && (
         <div className={styles.alertBox}>
-          <span className={styles.alertIcon}>⚠️</span>
+          <span className={styles.alertIcon}>
+            <ShieldAlert size={18} strokeWidth={2.1} />
+          </span>
           <div>
             <div className={styles.alertTitle}>Passport expires {expiryStr}</div>
             <div className={styles.alertBody}>Within 6 months of travel — renewal recommended</div>
@@ -952,7 +981,7 @@ function FlightPickerV2({
                   <span className={styles.fpTimeVal}>{g.dep}</span>
                   <div className={styles.fpArrowWrap}>
                     <div className={styles.fpArrowLine} />
-                    <Plane className={styles.fpArrowPlane} size={11} />
+                    <Plane className={styles.fpArrowPlane} size={13} />
                     <div className={styles.fpArrowLine} />
                   </div>
                   <span className={styles.fpTimeVal}>{g.arr}</span>
@@ -1016,7 +1045,7 @@ function FlightSearchState({
 }: {
   title: string;
   body: string;
-  icon: string;
+  icon: React.ReactNode;
 }) {
   return (
     <div className={styles.alertBox}>
@@ -1746,8 +1775,14 @@ function ReceiptCapture() {
         <span>TOTAL</span><span>€87.50</span>
       </div>
       <div className={styles.receiptTags}>
-        <span className={styles.receiptTag}>✓ Categorized: Meals</span>
-        <span className={styles.receiptTag}>✓ PII sanitized</span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Categorized: Meals
+        </span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          PII sanitized
+        </span>
       </div>
     </div>
   );
@@ -1812,25 +1847,396 @@ function getEmbassy(city: string): EmbassyInfo {
   return US_EMBASSIES[key] ?? EMBASSY_FALLBACK;
 }
 
-function ContactCards({ city }: { city: string }) {
-  const embassy = getEmbassy(city);
+function ComplianceReportRefined({
+  visa,
+  hotelName,
+  hotelNightlyRateUsd,
+  hotelCapUsd = 200,
+  flightNumber,
+  flightTotalUsd,
+  flightCapUsd = 800,
+  departure,
+  returnDate,
+}: {
+  visa?: DemoVisaInfo | null;
+  hotelName?: string;
+  hotelNightlyRateUsd?: number;
+  hotelCapUsd?: number;
+  flightNumber?: string;
+  flightTotalUsd?: number;
+  flightCapUsd?: number;
+  departure?: string;
+  returnDate?: string;
+}) {
+  const visaRequired = visa?.visaRequired ?? false;
+  const visaType = visa?.visaType ?? "Visa";
+  const leadDays = visa?.minApplicationLeadDays ?? null;
+  const applyUrl = visa?.applicationUrl ?? null;
+  const hotelOverCap = hotelNightlyRateUsd != null && hotelNightlyRateUsd > hotelCapUsd;
+  const hotelExcess = hotelNightlyRateUsd != null ? Math.round(hotelNightlyRateUsd - hotelCapUsd) : 0;
+  const flightOverCap = flightTotalUsd != null && flightTotalUsd > flightCapUsd;
+
+  let nights = 0;
+  let tripWindow = "";
+  if (departure && returnDate) {
+    const dep = new Date(`${departure}T12:00:00`);
+    const ret = new Date(`${returnDate}T12:00:00`);
+    nights = Math.round((ret.getTime() - dep.getTime()) / 86_400_000);
+    tripWindow = `${fmtDate(dep)} - ${fmtDate(ret)}`;
+  }
+
+  const stayLimit = visa?.stayLimitDays ?? null;
+  const stayOverLimit = stayLimit != null && nights > stayLimit;
+  const issueCount = [visaRequired, hotelOverCap, flightOverCap, stayOverLimit].filter(Boolean).length;
+
+  const checks: Array<{
+    key: string;
+    tone: "warn" | "ok";
+    icon: React.ReactNode;
+    label: string;
+    title: string;
+    body: string;
+    detail?: string;
+    ctaLabel?: string;
+    ctaHref?: string | null;
+  }> = [
+    {
+      key: "visa",
+      tone: visaRequired ? "warn" : "ok",
+      icon: visaRequired ? <ShieldAlert size={18} strokeWidth={2.1} /> : <ShieldCheck size={18} strokeWidth={2.1} />,
+      label: "Visa",
+      title: visaRequired ? `${visaType} required` : "No visa blocker",
+      body:
+        leadDays != null
+          ? `Apply at least ${leadDays} days before departure.`
+          : visa?.notes ?? "Entry requirements are already clear for this destination.",
+      detail: visaRequired ? visa?.notes ?? "Check current consular processing times." : undefined,
+      ctaLabel: applyUrl ? "Open visa form" : undefined,
+      ctaHref: applyUrl,
+    },
+    {
+      key: "hotel",
+      tone: hotelOverCap ? "warn" : "ok",
+      icon: <HotelIcon size={18} strokeWidth={2.1} />,
+      label: "Hotel",
+      title: hotelOverCap ? "Exception needed" : "Within nightly policy",
+      body: `${hotelName ?? "Selected hotel"} · ${hotelNightlyRateUsd ?? hotelCapUsd}/night`,
+      detail: hotelOverCap
+        ? `$${hotelExcess} over the $${hotelCapUsd}/night cap.`
+        : `Aligned with the $${hotelCapUsd}/night cap.`,
+    },
+    {
+      key: "flight",
+      tone: flightOverCap ? "warn" : "ok",
+      icon: <PlaneTakeoff size={18} strokeWidth={2.1} />,
+      label: "Flight",
+      title: flightOverCap ? "Price needs review" : "Flight approved",
+      body: flightTotalUsd != null ? `${flightNumber ?? "Selected flight"} · $${flightTotalUsd}` : `Flight cap · $${flightCapUsd}`,
+      detail: flightTotalUsd != null
+        ? flightOverCap
+          ? `$${Math.round(flightTotalUsd - flightCapUsd)} above the approved cap.`
+          : `Still within the $${flightCapUsd} cap.`
+        : undefined,
+    },
+    ...(nights > 0
+      ? [{
+          key: "stay",
+          tone: (stayOverLimit ? "warn" : "ok") as "warn" | "ok",
+          icon: <CalendarClock size={18} strokeWidth={2.1} />,
+          label: "Dates",
+          title: stayOverLimit ? "Stay limit exceeded" : "Dates look compliant",
+          body: `${nights} night trip${tripWindow ? ` · ${tripWindow}` : ""}`,
+          detail: stayLimit != null
+            ? stayOverLimit
+              ? `Over the ${stayLimit}-day entry window.`
+              : `Within the ${stayLimit}-day entry window.`
+            : "No visa stay limit is blocking these dates.",
+        }]
+      : []),
+  ];
+
+  const incomplete = checks.filter((c) => c.tone === "warn");
+  const complete = checks.filter((c) => c.tone === "ok");
+
   return (
-    <div className={styles.contactCards}>
-      <div className={styles.contactCard}>
-        <div className={styles.contactEmoji}>📞</div>
-        <div className={styles.contactBody}>
-          <div className={styles.contactName}>Corporate Travel Desk</div>
-          <div className={styles.contactDetail}>+1 (800) 555-0199</div>
-          <div className={styles.contactDetail}>Available 24 / 7</div>
+    <div className={styles.cvList}>
+      {incomplete.length > 0 && (
+        <div className={styles.cvSection}>
+          <div className={styles.cvSectionLabel}>Needs Attention</div>
+          {incomplete.map((item) => (
+            <div className={styles.cvRow} key={item.key}>
+              <div className={[styles.cvDot, styles.cvDotWarn].join(" ")}>{item.icon}</div>
+              <div>
+                <div className={styles.cvRowTitle}>{item.title}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {complete.length > 0 && (
+        <div className={styles.cvSection}>
+          <div className={styles.cvSectionLabel}>Complete</div>
+          {complete.map((item) => (
+            <div className={styles.cvRow} key={item.key}>
+              <div className={[styles.cvDot, styles.cvDotOk].join(" ")}>{item.icon}</div>
+              <div>
+                <div className={styles.cvRowTitle}>{item.title}</div>
+                <div className={styles.cvRowSub}>{item.body}{item.detail ? ` · ${item.detail}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HotelComparisonRefined() {
+  const options = [
+    {
+      key: "rejected",
+      tone: "warn" as const,
+      label: "Current request",
+      title: "Marriott Scala",
+      price: "$247 / night",
+      stats: ["Preferred vendor", "0.4 km from office"],
+      note: "$47 over the $200 policy cap.",
+    },
+    {
+      key: "approved",
+      tone: "ok" as const,
+      label: "Recommended switch",
+      title: "AC Hotel Milan",
+      price: "$189 / night",
+      stats: ["Preferred vendor", "1.2 km from office"],
+      note: "Saves $290 total and stays fully compliant.",
+    },
+  ];
+
+  return (
+    <div className={styles.compareGrid}>
+      <div className={[styles.compareCard, styles.compareRejected].join(" ")}>
+        <div className={styles.compareName}>Marriott Scala</div>
+        <div className={styles.comparePrice}>$247 / night</div>
+        <div className={styles.compareMeta}>Preferred vendor · 0.4 km from office</div>
+        <div className={styles.compareReason}>$47 over the $200 cap</div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "2px 0" }}>
+        <MoveDown size={20} strokeWidth={2} color="var(--cc-body, #5a6672)" />
+      </div>
+      <div className={[styles.compareCard, styles.compareApproved].join(" ")}>
+        <div className={styles.compareName}>AC Hotel Milan</div>
+        <div className={styles.comparePrice}>$189 / night</div>
+        <div className={styles.compareMeta}>Preferred vendor · 1.2 km from office</div>
+        <div className={styles.compareReason}>Saves $290 total</div>
+      </div>
+    </div>
+  );
+}
+
+function LiveDashboardRefined() {
+  const signals = [
+    { key: "flight", icon: <Plane size={18} strokeWidth={2.1} />, title: "LH 8904 · Gate B22", sub: "On time · Boards 8:15 AM" },
+    { key: "weather", icon: <CloudSun size={18} strokeWidth={2.1} />, title: "Milan · 24 °C", sub: "Partly cloudy · Low 18 °C tonight" },
+    { key: "hotel", icon: <Building2 size={18} strokeWidth={2.1} />, title: "Marriott Scala · Room 412", sub: "Check-in ready from 3:00 PM" },
+    { key: "ground", icon: <CarFront size={18} strokeWidth={2.1} />, title: "Traffic to MXP · 32 min", sub: "Leave by 7:00 AM for a comfortable buffer" },
+  ];
+
+  return (
+    <div className={styles.dashboard}>
+      {signals.map((s) => (
+        <div className={styles.dashCard} key={s.key}>
+          <span className={styles.dashIcon}>{s.icon}</span>
+          <div className={styles.dashText}>
+            <div className={styles.dashTitle}>{s.title}</div>
+            <div className={styles.dashSub}>{s.sub}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlightRebookingRefined({ rebooking }: { rebooking: RebookingData }) {
+  const { cancelled, rebooked } = rebooking;
+  const carrierChanged = cancelled.carrier !== rebooked.carrier;
+
+  return (
+    <div className={styles.rebooking}>
+      <div className={[styles.rebookCard, styles.rebookOld].join(" ")}>
+        <div className={styles.rebookBadge}>Cancelled</div>
+        <div className={styles.rebookFlight}>{cancelled.flightNumber}</div>
+        <div className={styles.rebookTime}>{cancelled.route} · departs {cancelled.dep}</div>
+        <div className={styles.rebookMeta}>{cancelled.carrier} · ${cancelled.priceUsd.toLocaleString()} original total</div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}>
+        <MoveDown size={20} strokeWidth={2} color="var(--cc-body, #5a6672)" />
+      </div>
+      <div className={[styles.rebookCard, styles.rebookNew].join(" ")}>
+        <div className={styles.rebookBadge}>Confirmed Replacement</div>
+        <div className={styles.rebookFlight}>{rebooked.flightNumber}</div>
+        <div className={styles.rebookTime}>{rebooked.route} · departs {rebooked.dep}</div>
+        <div className={styles.rebookMeta}>
+          {rebooked.carrier} · seat {rebooked.seat}{carrierChanged ? ` · switched from ${cancelled.carrier}` : ""}
         </div>
       </div>
-      <div className={styles.contactCard}>
-        <div className={styles.contactEmoji}>🏛️</div>
-        <div className={styles.contactBody}>
-          <div className={styles.contactName}>{embassy.name}</div>
-          <div className={styles.contactDetail}>{embassy.address}</div>
-          <div className={styles.contactDetail}>{embassy.hours}</div>
+      <div className={styles.infoGrid} style={{ marginTop: 16, borderTop: "1px solid rgba(159, 171, 183, 0.2)", paddingTop: 16 }}>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Cost impact</span>
+          <span className={[styles.infoVal, styles.spendOver].join(" ")}>${rebooked.overageUsd} over budget</span>
         </div>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Change fee</span>
+          <span className={styles.infoVal}>${rebooked.changeFeeUsd}</span>
+        </div>
+        <div className={styles.infoRow}>
+          <span className={styles.infoKey}>Hotel</span>
+          <span className={styles.infoVal}>Reservation protected</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArrivalSupportRefined({
+  value,
+  onChange,
+  onDataLoaded,
+}: {
+  value: number;
+  onChange: (i: number) => void;
+  onDataLoaded: (data: TransportApiResult) => void;
+}) {
+  const [liveData, setLiveData] = useState<TransportApiResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/transport/distance?hotel=Via+della+Spiga+31%2C+Milan&airport=MXP")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: TransportApiResult) => {
+        if (cancelled) return;
+        setLiveData(data);
+        onDataLoaded(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onDataLoaded]);
+
+  const distLabel = loading ? "Loading route..." : `${liveData?.distanceKm ?? 2.3} km from MXP`;
+
+  // Each option carries a `link` — the external URL that opens when the user
+  // selects that row and taps "Got It" (or immediately on row tap, TBD).
+  // Intent: selecting an option opens the relevant booking / directions page
+  // so the traveller can complete the journey step without leaving the flow.
+  //   - Company taxi  → deep-link into the corporate Uber/taxi booking portal
+  //   - Metro         → Google Maps transit directions to the hotel
+  //   - Walk          → Google Maps walking directions to the hotel
+  // TODO: replace placeholder hrefs with real URLs once booking partners confirmed.
+  const options = [
+    { icon: <CarFront size={18} strokeWidth={2.1} />, name: "Company taxi", time: loading ? "..." : liveData?.taxi.minutes ?? "18 min", cost: loading ? "..." : liveData?.taxi.cost ?? "$14", preferred: true, note: "Fastest pickup option from arrivals.", link: "https://m.uber.com/ul/" },
+    { icon: <TrainFront size={18} strokeWidth={2.1} />, name: "Metro M1 to M3", time: loading ? "..." : liveData?.metro.minutes ?? "35 min", cost: liveData?.metro.cost ?? "$2.50", preferred: false, note: "Lowest cost route into the city center.", link: "https://maps.google.com/?dirflg=r&destination=Marriott+Scala+Milan" },
+    { icon: <Footprints size={18} strokeWidth={2.1} />, name: "Walk", time: loading ? "..." : liveData?.walk.minutes ?? "28 min", cost: liveData?.walk.cost ?? "Free", preferred: false, note: "Best if you want to stay nearby on foot.", link: "https://maps.google.com/?dirflg=w&destination=Marriott+Scala+Milan" },
+  ];
+
+  return (
+    <div className={styles.arrival}>
+      <div className={styles.fpHeader}>
+        <span className={styles.fpRoute}>Marriott Scala</span>
+        <span className={styles.fpHeaderMeta}>Via della Spiga 31, Milan · {distLabel}</span>
+      </div>
+      <div className={styles.fpReturnRows}>
+        {options.map((option, i) => {
+          const isSel = value === i;
+          return (
+            <button
+              key={option.name}
+              className={[styles.fpReturnRow, isSel ? styles.fpReturnRowSelected : ""].join(" ")}
+              // Selecting a row marks it active AND opens the option's link in a
+              // new tab so the user can continue (book the taxi, open Maps, etc.).
+              // If we want a single confirm tap instead, move window.open() to the
+              // "Got It" button handler at the frame level and pass `options[sel].link`
+              // up via a callback prop.
+              onClick={() => { onChange(i); window.open(option.link, "_blank", "noopener,noreferrer"); }}
+              type="button"
+            >
+              <div className={[styles.fpRadioDot, isSel ? styles.fpRadioDotSelected : ""].join(" ")}>
+                {isSel && <div className={styles.fpRadioInner} />}
+              </div>
+              <div className={styles.fpReturnRowBody}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 600, color: "var(--cc-text-primary)" }}>
+                    {option.name}
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--cc-text-primary)", flexShrink: 0 }}>{option.time}</span>
+                </div>
+                <div className={styles.fpReturnRowBottom}>
+                  <span className={styles.fpReturnRowMeta}>{option.note}</span>
+                  <span className={styles.fpReturnRowPrice}>{option.cost}</span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ContactCardsRefined({ city }: { city: string }) {
+  const embassy = getEmbassy(city);
+  const contacts = [
+    {
+      key: "travel-desk",
+      icon: <PhoneCall size={18} strokeWidth={2.1} />,
+      label: "Corporate Travel Desk",
+      title: "+1 (800) 555-0199",
+      detail: "Available 24 / 7 for booking support and disruptions.",
+    },
+    {
+      key: "embassy",
+      icon: <Building2 size={18} strokeWidth={2.1} />,
+      label: "Nearest Embassy",
+      title: embassy.name,
+      detail: `${embassy.address} · ${embassy.hours}`,
+    },
+  ];
+
+  return (
+    <div className={styles.refinedSheet}>
+      <div className={styles.refinedHero}>
+        <div className={styles.refinedHeroTop}>
+          <div>
+            <div className={styles.refinedEyebrow}>Support Contacts</div>
+            <div className={styles.refinedHeroTitle}>Important Help Lines for {city}</div>
+          </div>
+          <span className={[styles.refinedPill, styles.refinedPillOk].join(" ")}>Saved</span>
+        </div>
+        <div className={styles.refinedHeroBody}>
+          The fastest route back to support is already pinned here if anything changes on the ground.
+        </div>
+      </div>
+      <div className={styles.refinedGrid}>
+        {contacts.map((contact) => (
+          <div className={[styles.refinedCard, styles.refinedCardNeutral].join(" ")} key={contact.key}>
+            <div className={styles.refinedCardTop}>
+              <span className={styles.refinedIcon}>{contact.icon}</span>
+              <div className={styles.refinedCardHeading}>
+                <div className={styles.refinedCardLabel}>{contact.label}</div>
+                <div className={styles.refinedCardTitle}>{contact.title}</div>
+              </div>
+            </div>
+            <div className={styles.refinedCardBody}>{contact.detail}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1918,10 +2324,10 @@ function PrivacySummary() {
   return (
     <div className={styles.privacyList}>
       {[
-        { icon: "📍", label: "Location tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
-        { icon: "💳", label: "Financial data", detail: "Card numbers sanitized before storage", status: "Done" },
-        { icon: "🔑", label: "OAuth tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
-        { icon: "📅", label: "Data retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
+        { icon: <MapPin size={18} strokeWidth={2.1} />, label: "Location Tracking", detail: "Active Sep 14 to 19 only", status: "Stopped" },
+        { icon: <Wallet size={18} strokeWidth={2.1} />, label: "Financial Data", detail: "Card numbers sanitized before storage", status: "Done" },
+        { icon: <ShieldCheck size={18} strokeWidth={2.1} />, label: "OAuth Tokens", detail: "Encrypted at rest in Atlas", status: "Secured" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Data Retention", detail: "90-day policy per company guidelines", status: "Expires Dec 18" },
       ].map(item => (
         <div className={styles.privacyItem} key={item.label}>
           <span className={styles.privacyIcon}>{item.icon}</span>
@@ -1943,7 +2349,7 @@ function BundlePicker({ value, onChange }: { value?: number | null; onChange?: (
   const bundles = [
     { name: "Path A", badge: "Policy-safe", price: "$2,340", detail: "MXP direct · Marriott Scala", note: "Requires hotel sign-off" },
     { name: "Path B", badge: "Save $500", price: "$1,840", detail: "BGY airport · AC Hotel 1.2 km", note: "Fully compliant, no exceptions" },
-    { name: "Path C", badge: "⚡ Recommended", price: "$2,010", detail: "Weekend stay · Marriott Scala", note: "Best overall value" },
+    { name: "Path C", badge: "Recommended", price: "$2,010", detail: "Weekend stay · Marriott Scala", note: "Best overall value" },
   ];
   return (
     <div className={styles.cards}>
@@ -1970,7 +2376,9 @@ function TripConfirmed() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>✅</span>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Trip Draft Saved</div>
         <div className={styles.confirmBody}>Milan · Sep 14 to 19 · Trip #TRP-20250914 is now active in your travel dashboard.</div>
       </div>
@@ -1983,7 +2391,9 @@ function FlightConfirmed() {
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
         <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
-        <div className={styles.eticketPlane}>✈</div>
+        <div className={styles.eticketPlane}>
+          <Plane size={22} strokeWidth={2} />
+        </div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
@@ -1999,11 +2409,11 @@ function HotelConfirmed() {
   return (
     <div className={styles.confirmList}>
       {[
-        { icon: "🏨", label: "Hotel", val: "Marriott Scala, Milan" },
-        { icon: "📅", label: "Check-in", val: "Sep 14 · 3:00 PM" },
-        { icon: "📅", label: "Check-out", val: "Sep 19 · 12:00 noon" },
-        { icon: "🔑", label: "Conf. #", val: "MR-20250914-7741" },
-        { icon: "💰", label: "Total", val: "$1,235 (5 nights)" },
+        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala, Milan" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-in", val: "Sep 14 · 3:00 PM" },
+        { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "Check-out", val: "Sep 19 · 12:00 noon" },
+        { icon: <Tag size={18} strokeWidth={2.1} />, label: "Conf. #", val: "MR-20250914-7741" },
+        { icon: <DollarSign size={18} strokeWidth={2.1} />, label: "Total", val: "$1,235 (5 nights)" },
       ].map(item => (
         <div className={styles.confirmRow} key={item.label}>
           <span className={styles.confirmIcon}>{item.icon}</span>
@@ -2073,9 +2483,9 @@ function BundleConfirmed() {
         <div className={styles.itineraryTotal}>$2,010</div>
       </div>
       {[
-        { icon: "✈️", label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
-        { icon: "🏨", label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
-        { icon: "📋", label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
+        { icon: <Plane size={18} strokeWidth={2.1} />, label: "Flight", val: "LH 8904 · ORD → MXP", sub: "Sep 14 · 8:45 AM · $687" },
+        { icon: <HotelIcon size={18} strokeWidth={2.1} />, label: "Hotel", val: "Marriott Scala · 5 nights", sub: "Sep 14 to 19 · $1,235" },
+        { icon: <ShieldCheck size={18} strokeWidth={2.1} />, label: "Approval", val: "Pending manager sign-off", sub: "mgr.sarah@lockton.com" },
       ].map(item => (
         <div className={styles.itineraryRow} key={item.label}>
           <span className={styles.itineraryIcon}>{item.icon}</span>
@@ -2093,7 +2503,9 @@ function ApprovalWatching() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📬</span>
+        <span className={styles.confirmEmoji}>
+          <SendIcon size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Watching for Reply</div>
         <div className={styles.confirmBody}>Email sent to mgr.sarah@lockton.com. I&#39;ll notify you the moment she responds.</div>
       </div>
@@ -2110,7 +2522,7 @@ function ResubmitEmail() {
   if (sent) {
     return (
       <div className={styles.sentBanner}>
-        <span>✓</span>
+        <CheckCircle2 size={18} strokeWidth={2.1} />
         <span>Resubmission sent to mgr.sarah@lockton.com</span>
       </div>
     );
@@ -2134,7 +2546,9 @@ function TripReady() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>🎒</span>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>You&#39;re Ready to Travel</div>
         <div className={styles.confirmBody}>All checklist items reviewed. Documents, bookings, and reminders are in order.</div>
       </div>
@@ -2150,7 +2564,9 @@ function LiveConfirmed() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📡</span>
+        <span className={styles.confirmEmoji}>
+          <Route size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Live Monitoring Active</div>
         <div className={styles.confirmBody}>Gate, weather, hotel, and traffic updates will push to your device automatically throughout the trip.</div>
       </div>
@@ -2167,7 +2583,9 @@ function RebookingConfirmed() {
     <div className={styles.eticket}>
       <div className={styles.eticketRow}>
         <div className={styles.eticketAirport}><div className={styles.eticketCode}>ORD</div><div className={styles.eticketCity}>Chicago</div></div>
-        <div className={styles.eticketPlane}>✈</div>
+        <div className={styles.eticketPlane}>
+          <Plane size={22} strokeWidth={2} />
+        </div>
         <div className={[styles.eticketAirport, styles.eticketAirportRight].join(" ")}><div className={styles.eticketCode}>MXP</div><div className={styles.eticketCity}>Milan</div></div>
       </div>
       <div className={styles.eticketGrid}>
@@ -2185,7 +2603,9 @@ function ExceptionPending() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>⏳</span>
+        <span className={styles.confirmEmoji}>
+          <ShieldAlert size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Exception Pending</div>
         <div className={styles.confirmBody}>Urgent request sent to {managerEmail}. Polling for a reply every 5 seconds.</div>
       </div>
@@ -2286,15 +2706,15 @@ function TransportConfirmed({
 
   const rows = [
     { icon: chosen.icon, label: "Transport", val: chosen.name },
-    { icon: "📍", label: "Pickup", val: "MXP Arrivals Hall B" },
-    { icon: "🏨", label: "Drop-off", val: "Marriott Scala, Milan" },
-    { icon: "⏱", label: "ETA", val: eta },
-    { icon: "📞", label: "Driver", val: "+39 02 555 0122" },
+    { icon: <MapPin size={18} strokeWidth={2.1} />, label: "Pickup", val: "MXP Arrivals Hall B" },
+    { icon: <Building2 size={18} strokeWidth={2.1} />, label: "Drop-off", val: "Marriott Scala, Milan" },
+    { icon: <CalendarClock size={18} strokeWidth={2.1} />, label: "ETA", val: eta },
+    { icon: <PhoneCall size={18} strokeWidth={2.1} />, label: "Driver", val: "+39 02 555 0122" },
   ];
 
   return (
     <div className={styles.confirmList}>
-      {rows.map(item => (
+      {rows.map((item) => (
         <div className={styles.confirmRow} key={item.label}>
           <span className={styles.confirmIcon}>{item.icon}</span>
           <span className={styles.confirmLabel}>{item.label}</span>
@@ -2309,13 +2729,21 @@ function ReceiptSubmitted() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>✅</span>
+        <span className={styles.confirmEmoji}>
+          <CheckCircle2 size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Submitted to Expense System</div>
         <div className={styles.confirmBody}>Ristorante Al Porto · €87.50 · Ref #EXP-20250916-09 · Categorized as &quot;Meals&quot;</div>
       </div>
       <div className={styles.receiptTags}>
-        <span className={styles.receiptTag}>✓ Within daily allowance</span>
-        <span className={styles.receiptTag}>✓ Manager notified</span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Within daily allowance
+        </span>
+        <span className={styles.receiptTag}>
+          <CheckCircle2 size={12} strokeWidth={2.2} />
+          Manager notified
+        </span>
       </div>
     </div>
   );
@@ -2326,7 +2754,9 @@ function ContactsSaved({ city }: { city: string }) {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📱</span>
+        <span className={styles.confirmEmoji}>
+          <PhoneCall size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Contacts Saved</div>
         <div className={styles.confirmBody}>Corporate Travel Desk and {embassy.name} added to your emergency contacts for this trip.</div>
       </div>
@@ -2338,7 +2768,9 @@ function TripArchived() {
   return (
     <div className={styles.archiveWrap}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>📁</span>
+        <span className={styles.confirmEmoji}>
+          <ReceiptText size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Trip #TRP-20250914 Archived</div>
         <div className={styles.confirmBody}>Expense report drafted and sent to mgr.sarah@lockton.com for final sign-off.</div>
       </div>
@@ -2358,7 +2790,9 @@ function DataCleared() {
   return (
     <div className={styles.actionStack}>
       <div className={styles.confirmCard}>
-        <span className={styles.confirmEmoji}>🔒</span>
+        <span className={styles.confirmEmoji}>
+          <ShieldCheck size={38} strokeWidth={1.9} />
+        </span>
         <div className={styles.confirmTitle}>Your Data Is Protected</div>
         <div className={styles.confirmBody}>Location tracking stopped. Financial data sanitized. OAuth tokens expired. Trip data scheduled for deletion Dec 18.</div>
       </div>
@@ -2414,12 +2848,12 @@ const FRAMES: DemoFrame[] = [
   { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
   { frameNumber: 7, tone: "empathetic", message: "I'm scanning your manager's inbox every few seconds. Once I see a reply, I'll tell you exactly what changes are needed so we can move fast.", sheetTitle: "Waiting for Manager Reply", options: ["Resubmit", "Adjust"], Visual: ApprovalPolling, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
   { frameNumber: 8, tone: "excited", message: "Your trip's approved! I've put together your checklist, visa link, and packing reminders so you're ready to go.", sheetTitle: "Your Travel Checklist", options: ["All Set", "Adjust"], Visual: PrepChecklist, actionTitle: "All Packed!", ActionVisual: TripReady },
-  { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboard, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
-  { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebooking, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
+  { frameNumber: 9, tone: "neutral", message: "Live mode's on. I'm tracking your gate, the weather, hotel status, and travel conditions in real time.", sheetTitle: "Live Travel Mode", options: ["Looks Right", "Adjust"], Visual: LiveDashboardRefined, actionTitle: "You're Covered", ActionVisual: LiveConfirmed },
+  { frameNumber: 10, tone: "urgent", message: "Heads up, there's a storm causing delays. I've already rebooked you on a later flight and notified your hotel.", sheetTitle: "Disruption Handled", options: ["Accept Rebooking", "Adjust"], Visual: FlightRebookingRefined, actionTitle: "New E-Ticket", ActionVisual: RebookingConfirmed },
   { frameNumber: 11, tone: "urgent", message: "The only available rebooking is over budget. I've drafted an emergency exception request to send your manager right now.", sheetTitle: "Emergency Exception", options: ["Send", "Edit Draft"], Visual: ExceptionEmail, actionTitle: "Exception Requested", ActionVisual: ExceptionPending },
-  { frameNumber: 12, tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel and your daily meal allowance to keep you covered.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupport, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
+  { frameNumber: 12, tone: "excited", message: "Welcome to Milan! Here's the fastest way to your hotel.", sheetTitle: "On-the-Ground Support", options: ["Got It", "Adjust"], Visual: ArrivalSupportRefined, actionTitle: "Transport Booked", ActionVisual: TransportConfirmed },
   { frameNumber: 13, tone: "neutral", message: "Point the camera at your receipt and I'll pull out the merchant name, total, and date automatically.", sheetTitle: "Receipt Captured", options: ["Looks Right", "Adjust"], Visual: ReceiptCapture, actionTitle: "Receipt Logged", ActionVisual: ReceiptSubmitted },
-  { frameNumber: 14, tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCards, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
+  { frameNumber: 14, tone: "empathetic", message: "Some situations need a real person. Here's the corporate travel desk and the nearest embassy, ready when you need them.", sheetTitle: "Human Support Contacts", options: ["Got It", "Dismiss"], Visual: ContactCardsRefined, actionTitle: "Contacts Saved", ActionVisual: ContactsSaved },
   { frameNumber: 15, tone: "excited", message: "Great trip! I've tallied up your final spend and put the expense report together. Ready to wrap it up?", sheetTitle: "Trip Spend Summary", options: ["Archive Trip", "Review"], Visual: SpendSummary, actionTitle: "Trip Archived", ActionVisual: TripArchived },
   { frameNumber: 16, tone: "neutral", message: "Here's a clear breakdown of how your travel data was used, what was shared, and how it's protected.", sheetTitle: "Privacy & Data Summary", options: ["Done", "Adjust"], Visual: PrivacySummary, actionTitle: "Data Protected", ActionVisual: DataCleared },
 ];
@@ -2430,48 +2864,48 @@ const ROADMAP_PHASES = [
   {
     label: "Start",
     steps: [
-      { index: 0, label: "Load Lockey", icon: "🦊" },
+      { index: 0, label: "Load Lockey", icon: <Ellipsis size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Planning",
     steps: [
-      { index: 0, label: "Share Trip Details", icon: "✈️" },
-      { index: 1, label: "Choose a Flight", icon: "🛫" },
-      { index: 2, label: "Find a Hotel", icon: "🏨" },
-      { index: 3, label: "Compliance Check", icon: "📋" },
-      { index: 4, label: "Choose Bundle", icon: "📦" },
+      { index: 0, label: "Share Trip Details", icon: <Route size={16} strokeWidth={2.2} /> },
+      { index: 1, label: "Choose a Flight", icon: <Plane size={16} strokeWidth={2.2} /> },
+      { index: 2, label: "Find a Hotel", icon: <HotelIcon size={16} strokeWidth={2.2} /> },
+      { index: 3, label: "Compliance Check", icon: <ShieldCheck size={16} strokeWidth={2.2} /> },
+      { index: 4, label: "Choose Bundle", icon: <Tag size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Approval",
     steps: [
-      { index: 5, label: "Submit for Approval", icon: "📬" },
-      { index: 6, label: "Handle Rejection", icon: "🔄" },
+      { index: 5, label: "Submit for Approval", icon: <SendIcon size={16} strokeWidth={2.2} /> },
+      { index: 6, label: "Handle Rejection", icon: <ShieldAlert size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Pre-Trip",
     steps: [
-      { index: 7, label: "Travel Checklist", icon: "🗒️" },
+      { index: 7, label: "Travel Checklist", icon: <CheckCircle2 size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Live Travel",
     steps: [
-      { index: 8, label: "Live Mode Active", icon: "📡" },
-      { index: 9, label: "Handle Disruption", icon: "⚡" },
-      { index: 10, label: "Emergency Exception", icon: "🚨" },
-      { index: 11, label: "Arrival & Transport", icon: "🚕" },
-      { index: 12, label: "Capture Receipts", icon: "📸" },
-      { index: 13, label: "Human Support", icon: "📞" },
+      { index: 8, label: "Live Mode Active", icon: <Route size={16} strokeWidth={2.2} /> },
+      { index: 9, label: "Handle Disruption", icon: <ShieldAlert size={16} strokeWidth={2.2} /> },
+      { index: 10, label: "Emergency Exception", icon: <PhoneCall size={16} strokeWidth={2.2} /> },
+      { index: 11, label: "Arrival & Transport", icon: <CarFront size={16} strokeWidth={2.2} /> },
+      { index: 12, label: "Capture Receipts", icon: <ReceiptText size={16} strokeWidth={2.2} /> },
+      { index: 13, label: "Human Support", icon: <PhoneCall size={16} strokeWidth={2.2} /> },
     ],
   },
   {
     label: "Post-Trip",
     steps: [
-      { index: 14, label: "Expense Summary", icon: "💰" },
-      { index: 15, label: "Data & Privacy", icon: "🔒" },
+      { index: 14, label: "Expense Summary", icon: <DollarSign size={16} strokeWidth={2.2} /> },
+      { index: 15, label: "Data & Privacy", icon: <ShieldCheck size={16} strokeWidth={2.2} /> },
     ],
   },
 ];
@@ -2505,7 +2939,7 @@ function RoadmapContent({ currentIndex, frameCompleted }: { currentIndex: number
                   isDone ? styles.roadmapStepDone : isCurrent ? styles.roadmapStepCurrent : styles.roadmapStepUpcoming,
                 ].join(" ")}>
                   <div className={styles.roadmapStepDot}>
-                    {isDone ? "✓" : step.icon}
+                    {isDone ? <CheckCircle2 size={16} strokeWidth={2.2} /> : step.icon}
                   </div>
                   <div className={styles.roadmapStepInfo}>
                     <span className={styles.roadmapStepLabel}>{step.label}</span>
@@ -2702,6 +3136,12 @@ function PhoneShell({
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  useEffect(() => {
+    if (chatMode && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMode]);
 
   function resetReceiptFlow() {
     receiptScanRequestRef.current += 1;
@@ -2966,7 +3406,9 @@ function PhoneShell({
                         <div className={styles.chatBubble}>{msg.content}</div>
                         {msg.role === "assistant" && i === lastAssistantIdx && msg.frameIndex !== undefined && (
                           <button className={styles.chatCard} onClick={onOpenSheet} type="button">
-                            <span className={styles.chatCardIcon}>📋</span>
+                            <span className={styles.chatCardIcon}>
+                              <ArrowRight size={15} strokeWidth={2.2} />
+                            </span>
                             <span className={styles.chatCardText}>{FRAMES[msg.frameIndex]?.sheetTitle}</span>
                           </button>
                         )}
@@ -3137,10 +3579,10 @@ function PhoneShell({
                   </div>
                   <div className={styles.confirmList}>
                     {false ? [
-                      { icon: "🏷️", label: "Category", val: toTitleCase(receiptScanResult.category) },
-                      { icon: "💶", label: "Original", val: `${receiptScanResult.amount} ${receiptScanResult.currency}` },
-                      { icon: "💵", label: "USD Total", val: `$${receiptScanResult.totalUsd}` },
-                      { icon: "🎯", label: "Confidence", val: `${Math.round(receiptScanResult.confidence * 100)}%` },
+                      { icon: "🏷️", label: "Category", val: toTitleCase(receiptScanResult!.category) },
+                      { icon: "💶", label: "Original", val: `${receiptScanResult!.amount} ${receiptScanResult!.currency}` },
+                      { icon: "💵", label: "USD Total", val: `$${receiptScanResult!.totalUsd}` },
+                      { icon: "🎯", label: "Confidence", val: `${Math.round(receiptScanResult!.confidence * 100)}%` },
                     ].map((item) => (
                       <div className={styles.confirmRow} key={item.label}>
                         <span className={styles.confirmIcon}>{item.icon}</span>
@@ -3253,26 +3695,29 @@ function LoginScreen() {
   return (
     <div className={styles.phone}>
       <section className={styles.shell}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: "0 8px 22px" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 42, marginBottom: 8 }}>✈️</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--cc-text-primary, #fff)" }}>Lockey</div>
-            <div style={{ fontSize: 13, color: "var(--cc-body, #8a9baa)", marginTop: 4 }}>AI Travel Concierge · Lockton</div>
+        <div className={styles.loginContent}>
+          <div className={styles.loginBrand}>
+            <Image
+              alt="Lockey fox mascot"
+              className={styles.loginMascot}
+              height={120}
+              priority
+              src="/mascot/greeting.png"
+              width={120}
+            />
+            <div className={styles.loginTitle}>Lockey</div>
+            <div className={styles.loginSubtitle}>AI Travel Concierge · Lockton</div>
           </div>
           <button
-            onClick={() => { setLoading(true); void signIn("google", { callbackUrl: "/demo" }); }}
+            className={styles.loginSignInButton}
             disabled={loading}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              background: "#fff", color: "#1a2530", fontWeight: 600, fontSize: 15,
-              border: "none", borderRadius: 14, padding: "13px 28px", cursor: loading ? "default" : "pointer",
-              opacity: loading ? 0.7 : 1, transition: "opacity 150ms",
-            }}
+            onClick={() => { setLoading(true); void signIn("google", { callbackUrl: "/demo" }); }}
+            type="button"
           >
             <GoogleIcon />
             {loading ? "Signing in…" : "Sign in with Google"}
           </button>
-          <p style={{ fontSize: 11, color: "var(--cc-body, #8a9baa)", textAlign: "center", maxWidth: 200, lineHeight: 1.5 }}>
+          <p className={styles.loginDisclaimer}>
             Authorizes Gmail access for travel approvals and receipt scanning.
           </p>
         </div>
@@ -3385,6 +3830,7 @@ export default function DemoPage() {
         if (typeof snapshot.selectedBundle === "number" || snapshot.selectedBundle === null) {
           setSelectedBundle(snapshot.selectedBundle);
         }
+        if (typeof snapshot.selectedTransport === "number") setSelectedTransport(snapshot.selectedTransport);
         if (snapshot.liveWeather) setLiveWeather(snapshot.liveWeather);
       } catch {
         window.localStorage.removeItem(DEMO_PROGRESS_STORAGE_KEY);
@@ -3415,6 +3861,7 @@ export default function DemoPage() {
       selectedHotel,
       selectedReturn,
       selectedBundle,
+      selectedTransport,
       liveWeather,
     };
 
@@ -3431,6 +3878,7 @@ export default function DemoPage() {
     selectedFlight,
     selectedHotel,
     selectedReturn,
+    selectedTransport,
     tripData,
     tripId,
     liveWeather,
@@ -4100,7 +4548,7 @@ export default function DemoPage() {
           return (
             <FlightSearchState
               body="Running Fair Grid across live dates and nearby airports."
-              icon="⏳"
+              icon={<PlaneTakeoff size={18} strokeWidth={2.1} />}
               title="Searching Live Flights"
             />
           );
@@ -4109,7 +4557,7 @@ export default function DemoPage() {
           return (
             <FlightSearchState
               body={flightSearchMessage}
-              icon="⚠️"
+              icon={<ShieldAlert size={18} strokeWidth={2.1} />}
               title="Live Flight Search Required"
             />
           );
@@ -4118,7 +4566,7 @@ export default function DemoPage() {
           return (
             <FlightSearchState
               body="No live flight options are loaded yet."
-              icon="🛫"
+              icon={<Route size={18} strokeWidth={2.1} />}
               title="Waiting for Fair Grid"
             />
           );
@@ -4143,7 +4591,7 @@ export default function DemoPage() {
         const hotelName = liveHotel?.name ?? demoHotel.name;
         const hotelRate = liveHotel?.nightlyRateUsd ?? demoHotel.pricePerNightUsd;
         return (
-          <ComplianceReport
+          <ComplianceReportRefined
             visa={visaInfo}
             hotelName={hotelName}
             hotelNightlyRateUsd={hotelRate}
@@ -4212,13 +4660,13 @@ export default function DemoPage() {
           return <TransportConfirmed selectedIndex={selectedTransport} liveData={liveTransportData} />;
         }
         return (
-          <ArrivalSupport
+          <ArrivalSupportRefined
             value={selectedTransport}
             onChange={setSelectedTransport}
             onDataLoaded={setLiveTransportData}
           />
         );
-      case 14: return <ContactCards city={tripData?.city ?? DEMO_DEFAULTS.city} />;
+      case 14: return <ContactCardsRefined city={tripData?.city ?? DEMO_DEFAULTS.city} />;
       case 15: return <SpendSummary tripId={tripId} />;
       default: { const V = frame.Visual; return <V />; }
     }
