@@ -2970,7 +2970,7 @@ const FRAMES: DemoFrame[] = [
   { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
   { frameNumber: 2, tone: "excited", message: "I've scanned nearby airports and a five-day window to find you the best flight options. Take a look!", sheetTitle: "Choose a Flight", options: ["Confirm Flight", "Adjust"], Visual: FlightPicker, actionTitle: "Your E-Ticket", ActionVisual: FlightConfirmed },
   { frameNumber: 3, tone: "excited", message: "I've found hotels near the client office and flagged the preferred vendors for you. Which one feels right?", sheetTitle: "Hotels Near Client Office", options: ["Looks Right", "Adjust"], Visual: DynamicHotelMap, actionTitle: "Hotel Booked", ActionVisual: HotelConfirmed },
-  { frameNumber: 4, tone: "empathetic", message: "I ran your compliance check. Let me walk you through what needs attention before we send the approval.", sheetTitle: "Compliance Check Complete", options: ["Got It", "Adjust"], Visual: ComplianceReport, actionTitle: "Compliance Guide", ActionVisual: VisaGuide },
+  { frameNumber: 4, tone: "empathetic", message: "I ran your compliance check. Let me walk you through what needs attention before we send the approval.", sheetTitle: "Compliance Check", options: ["Got It", "Adjust"], Visual: ComplianceReport, actionTitle: "Compliance Guide", ActionVisual: VisaGuide },
   { frameNumber: 5, tone: "excited", message: "Here are three ways to bundle your trip. I can optimize for policy compliance, cost savings, or proximity to the office.", sheetTitle: "Choose Your Bundle", options: ["Confirm Bundle", "Adjust"], Visual: BundlePicker, actionTitle: "Itinerary Confirmed", ActionVisual: BundleConfirmed },
   { frameNumber: 6, tone: "neutral", message: "I've drafted the approval email and set up a watch on your manager's thread so nothing slips through.", sheetTitle: "Approval Request Ready", options: ["Send", "Edit Draft"], Visual: ApprovalEmail, actionTitle: "Approval Sent", ActionVisual: ApprovalWatching },
   { frameNumber: 7, tone: "empathetic", message: "I'm scanning your manager's inbox every few seconds. Once I see a reply, I'll tell you exactly what changes are needed so we can move fast.", sheetTitle: "Waiting for Manager Reply", options: ["Send Request", "Adjust"], Visual: ApprovalPolling, actionTitle: "Resubmitting to Manager", ActionVisual: ResubmitEmail },
@@ -4061,9 +4061,15 @@ export default function DemoPage() {
       }
 
       const firstName = session?.user?.name?.split(" ")[0];
-      let message = currentIndex === 1 && firstName
-        ? `Hey, ${firstName}! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.`
-        : frame.message;
+      let message = frame.message;
+
+      if (currentIndex === 1) {
+        if (tripData?.city && tripData?.departure) {
+          message = `I've got your trip to ${tripData.city} starting ${fmtDate(tripData.departure)} all set up. Does this look right?`;
+        } else if (firstName) {
+          message = `Hey, ${firstName}! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.`;
+        }
+      }
 
       if (currentIndex === 4) {
         const country = tripData?.country ?? DEMO_DEFAULTS.country;
