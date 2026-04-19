@@ -37,9 +37,19 @@ async function getAccessToken(session: Awaited<ReturnType<typeof getServerSessio
   return (session as any).accessToken ?? null
 }
 
-async function fetchLatestFromManager(accessToken: string, managerEmail: string): Promise<string | null> {
+async function fetchLatestFromManager(
+  accessToken: string,
+  managerEmail: string,
+  sinceUnixSeconds: number | null,
+): Promise<string | null> {
   // Search for the most recent email FROM the manager email address
-  const query = encodeURIComponent(`from:${managerEmail}`)
+  // Optional `after:` filter restricts to replies sent after a known timestamp,
+  // so a stale prior reply isn't mistaken for an answer to a fresh request.
+  const filterParts = [`from:${managerEmail}`]
+  if (sinceUnixSeconds && Number.isFinite(sinceUnixSeconds)) {
+    filterParts.push(`after:${Math.floor(sinceUnixSeconds)}`)
+  }
+  const query = encodeURIComponent(filterParts.join(" "))
   const listRes = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=1`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -130,7 +140,7 @@ Only include keys in changes that the manager explicitly mentioned.`
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     const accessToken = await getAccessToken(session)
@@ -146,7 +156,11 @@ export async function GET() {
       return NextResponse.json({ found: false, noAuth: true })
     }
 
-    const emailBody = await fetchLatestFromManager(accessToken, managerEmail)
+    const sinceParam = new URL(req.url).searchParams.get("since")
+    const sinceMs = sinceParam ? Number.parseInt(sinceParam, 10) : null
+    const sinceUnixSeconds = sinceMs && Number.isFinite(sinceMs) ? Math.floor(sinceMs / 1000) : null
+
+    const emailBody = await fetchLatestFromManager(accessToken, managerEmail, sinceUnixSeconds)
 
     if (!emailBody) {
       return NextResponse.json({ found: false })
