@@ -114,13 +114,11 @@ type ConversationMessage = { role: "user" | "assistant"; content: string; frameI
 
 type DemoFrame = {
   frameNumber: number;
-  tone: Tone;
+  tone: ToneKey;
   message: string;
   sheetTitle: string;
-  options: [string, string];
+  options: string[];
   Visual: React.ComponentType<any>;
-  actionTitle: string;
-  ActionVisual: React.ComponentType<any>;
 };
 
 type DemoProgressSnapshot = {
@@ -2900,10 +2898,10 @@ function TripArchived({ tripId }: { tripId?: string | null }) {
       </div>
       <div className={styles.archiveSummary}>
         {[
-          ["Total spent", fmtUsd(d.totalSpendUsd)],
-          [isUnder ? "Under budget by" : "Over budget by", fmtUsd(Math.abs(delta))],
-          ["Receipts logged", String(d.receiptsCount)],
-          ["Days on trip", String(d.nights)],
+          ["Total Spent", fmtUsd(d.totalSpendUsd)],
+          [isUnder ? "Under Budget By" : "Over Budget By", fmtUsd(Math.abs(delta))],
+          ["Receipts Logged", String(d.receiptsCount)],
+          ["Days On Trip", String(d.nights)],
         ].map(([k, v]) => (
           <div className={styles.archiveRow} key={k}>
             <span className={styles.archiveKey}>{k}</span>
