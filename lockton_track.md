@@ -28,11 +28,11 @@ All while respecting privacy, security, and enterprise boundaries.
 
 ## 2. Traveler Persona
 
-### "Kelli" – The Business Traveler
+### "Lockey" – The Business Traveler
 
 Kelly travels for client meetings, internal events, and conferences. She is not a travel expert — she just wants the trip to go smoothly.
 
-Kelli needs:
+Lockey needs:
 
 - To know what she needs for travel (documents, policies, requirements)
 - Clear options (flights, hotels, costs, tradeoffs)
@@ -75,7 +75,7 @@ Approvals should feel invisible and guided, not bureaucratic. The Copilot should
 - Explain why something was rejected or needs changes
 - Suggest how to fix issues quickly
 
-> **From Kelli's view:** "I don't want to manage approvals — I want Copilot to help me get approved."
+> **From Lockey's view:** "I don't want to manage approvals — I want Copilot to help me get approved."
 
 #### C. During the Trip – "I'm On the Road"
 

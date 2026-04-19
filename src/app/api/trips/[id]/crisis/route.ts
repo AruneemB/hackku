@@ -190,7 +190,7 @@ export async function GET(req: NextRequest, context: CrisisRouteContext) {
     ? `${alternative.carrier} ${alternative.flightNumber} departing ${new Date(alternative.departureTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ($${alternative.priceUsd})`
     : "No automated alternative found — contact the airline desk.";
 
-  const crisisPrompt = `You are Kelli, a helpful and empathetic AI travel concierge.
+  const crisisPrompt = `You are Lockey, a helpful and empathetic AI travel concierge.
 The traveler's ${origFlightLabel} from ${origin} to ${destAirport} is delayed by ${delayMinutes} minutes, exceeding the 45-minute connection window.
 Trip: ${tripDoc.destination?.city ?? destCity}, ${tripDoc.destination?.country ?? ""}.
 

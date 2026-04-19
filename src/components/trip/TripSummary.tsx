@@ -2,7 +2,7 @@
 // COMPONENT: TripSummary
 // OWNER: Track A (Frontend & UX)
 // FRAME: 15 — Post-Trip Closure and Archiving
-// DESCRIPTION: Final screen after Kelli returns. Shows:
+// DESCRIPTION: Final screen after Lockey returns. Shows:
 //   - Total spend vs original budget (with visual progress bar)
 //   - Receipts grouped by category (meals, transport, hotel)
 //   - Gemini-drafted expense report summary

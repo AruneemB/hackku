@@ -4,7 +4,7 @@
 // FRAME: 5 — Tradeoff Presentation and Choice
 // DESCRIPTION: Renders three BundleCard components side-by-side.
 //   Manages selection state and calls /api/trips/[id] PATCH
-//   when Kelli selects a bundle. Triggers mascot to explain
+//   when Lockey selects a bundle. Triggers mascot to explain
 //   the selected bundle's tradeoffs via useMascot.say().
 //
 // PROPS:
