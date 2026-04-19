@@ -3,8 +3,9 @@
 import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { ArrowBigLeft, Ellipsis, Pencil, Plane, Send as SendIcon } from "lucide-react";
+import { ArrowBigLeft, DollarSign, Ellipsis, Pencil, Plane, ReceiptText, Send as SendIcon, Tag } from "lucide-react";
 import { Mascot } from "@/components/mascot/Mascot";
+import { DemoReceiptCapture, type DemoReceiptCapturePayload } from "@/components/receipts/DemoReceiptCapture";
 import { SpeechBubble } from "@/components/mascot/SpeechBubble";
 import { useMascot } from "@/hooks/useMascot";
 import type { FlightGroup } from "@/types/flight";
@@ -610,7 +611,6 @@ function FlightPickerV2({
 
   return (
     <div className={styles.fpWrap}>
-      {/* Route + date header */}
       <div className={styles.fpHeader}>
         <span className={styles.fpRoute}>{activeTrip.originCity} → {activeTrip.city}</span>
         <span className={styles.fpHeaderMeta}>
@@ -619,7 +619,6 @@ function FlightPickerV2({
         </span>
       </div>
 
-      {/* Outbound + inline returns */}
       <div className={styles.fpCards}>
         {list.map((g, i) => {
           const isSelected = sel === i;
@@ -1271,7 +1270,6 @@ function SpendSummary({ tripId }: { tripId?: string | null }) {
 
   return (
     <div className={styles.spendV2}>
-      {/* Hero */}
       <div className={styles.spendV2Hero}>
         <div className={styles.spendV2Amount}>${d.totalSpendUsd.toLocaleString()}</div>
         <div className={styles.spendV2Meta}>of ${d.budgetCapUsd.toLocaleString()} approved budget</div>
@@ -1288,7 +1286,6 @@ function SpendSummary({ tripId }: { tripId?: string | null }) {
         </span>
       </div>
 
-      {/* Category cards */}
       <div className={styles.spendV2Cards}>
         {d.categories.map((cat) => (
           <div className={styles.spendV2Card} key={cat.name}>
@@ -1698,6 +1695,18 @@ function FoxLoadingFrame() {
   );
 }
 
+function SheetDotsLoader() {
+  return (
+    <div aria-label="Loading" className={styles.sheetLoader} role="status">
+      <div className={styles.sheetLoaderDots}>
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
+}
+
 const FRAMES: DemoFrame[] = [
   { frameNumber: 0, tone: "neutral", message: "Lockey is loading and getting your travel workspace ready.", sheetTitle: "Lockey Is Loading", options: ["Ready", "Dismiss"], Visual: FoxLoadingFrame, actionTitle: "Lockey Ready", ActionVisual: FoxLoadingFrame },
   { frameNumber: 1, tone: "excited", message: "Hey there! Tell me where you're headed, your travel dates, and what's bringing you there and I'll get your trip started.", sheetTitle: "Your Trip", options: ["Looks Right", "Adjust"], Visual: TripCard, actionTitle: "Trip Confirmed", ActionVisual: TripConfirmed },
@@ -1827,9 +1836,9 @@ function MenuIcon() {
   );
 }
 
-function MicIcon({ active }: { active?: boolean }) {
+function MicIcon({ active, size = 36 }: { active?: boolean; size?: number }) {
   return (
-    <svg aria-hidden="true" fill="none" height="36" viewBox="0 0 24 24" width="36">
+    <svg aria-hidden="true" fill="none" height={size} viewBox="0 0 24 24" width={size}>
       <rect height="13" rx="3" stroke={active ? "#f35b4f" : "currentColor"} strokeWidth="2" width="6" x="9" y="2" />
       <path d="M12 19v3" stroke={active ? "#f35b4f" : "currentColor"} strokeLinecap="round" strokeWidth="2" />
       <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke={active ? "#f35b4f" : "currentColor"} strokeLinecap="round" strokeWidth="2" />
@@ -1900,6 +1909,18 @@ function AudioBars({ analyserNode }: { analyserNode: AnalyserNode }) {
   return <canvas height={36} ref={canvasRef} style={{ display: "block" }} width={36} />;
 }
 
+type DemoReceiptScanState = "idle" | "scanning" | "saving" | "ready" | "error";
+
+type DemoReceiptScanResult = {
+  merchant: string;
+  amount: string;
+  currency: string;
+  date: string;
+  category: string;
+  confidence: number;
+  totalUsd: string;
+};
+
 // ── PhoneShell ────────────────────────────────────────────────
 
 function PhoneShell({
@@ -1926,6 +1947,7 @@ function PhoneShell({
   roadmapOpen,
   onRoadmapOpen,
   onRoadmapClose,
+  onEnsureDemoTrip,
   currentFrameIndex,
   frameCompleted,
 }: {
@@ -1952,22 +1974,141 @@ function PhoneShell({
   roadmapOpen: boolean;
   onRoadmapOpen: () => void;
   onRoadmapClose: () => void;
+  onEnsureDemoTrip: () => Promise<string | null>;
   currentFrameIndex: number;
   frameCompleted: Record<number, boolean>;
 }) {
+  const isLiveTravelFrame = currentFrameIndex >= 9 && currentFrameIndex <= 14;
+
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
   const dragging = useRef(false);
   const roadmapSheetRef = useRef<HTMLDivElement>(null);
   const rdragStartY = useRef(0);
   const rdragging = useRef(false);
+  const receiptSheetRef = useRef<HTMLDivElement>(null);
+  const receiptScanRequestRef = useRef(0);
+  const rcDragStartY = useRef(0);
+  const rcDragging = useRef(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [receiptCaptureOpen, setReceiptCaptureOpen] = useState(false);
+  const [receiptSheetOpen, setReceiptSheetOpen] = useState(false);
+  const [receiptScanState, setReceiptScanState] = useState<DemoReceiptScanState>("idle");
+  const [receiptScanResult, setReceiptScanResult] = useState<DemoReceiptScanResult | null>(null);
+  const [receiptCapturePayload, setReceiptCapturePayload] = useState<DemoReceiptCapturePayload | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const receiptSheetLoading = receiptScanState === "scanning" || receiptScanState === "saving";
 
   useEffect(() => {
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  function resetReceiptFlow() {
+    receiptScanRequestRef.current += 1;
+    setReceiptScanState("idle");
+    setReceiptScanResult(null);
+    setReceiptCapturePayload(null);
+    setReceiptPreviewUrl(null);
+    setReceiptError(null);
+  }
+
+  function handleReceiptOpen() {
+    console.info("[demo] Receipt button clicked", { frame: currentFrameIndex });
+    onSheetClose();
+    resetReceiptFlow();
+    setReceiptSheetOpen(false);
+    setReceiptCaptureOpen(true);
+  }
+
+  function handleReceiptCameraClose() {
+    console.info("[demo] Receipt camera closed");
+    setReceiptCaptureOpen(false);
+    resetReceiptFlow();
+  }
+
+  async function handleReceiptCaptured(payload: DemoReceiptCapturePayload) {
+    const requestId = receiptScanRequestRef.current + 1;
+    receiptScanRequestRef.current = requestId;
+    console.info("[demo] Receipt image captured, opening result sheet");
+    setReceiptCaptureOpen(false);
+    setReceiptCapturePayload(payload);
+    setReceiptPreviewUrl(payload.previewDataUrl);
+    setReceiptError(null);
+    setReceiptScanResult(null);
+    setReceiptScanState("scanning");
+    setReceiptSheetOpen(true);
+
+    try {
+      const res = await fetch("/api/receipt/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: payload.imageBase64,
+          mimeType: payload.mimeType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Scan failed");
+      if (receiptScanRequestRef.current !== requestId) return;
+      console.info("[demo] Receipt scan parsed", data);
+      setReceiptScanResult(data as DemoReceiptScanResult);
+      setReceiptScanState("ready");
+    } catch (err) {
+      if (receiptScanRequestRef.current !== requestId) return;
+      console.error("[demo] Receipt scan failed", err);
+      setReceiptError(err instanceof Error ? err.message : "Failed to parse receipt");
+      setReceiptScanState("error");
+    }
+  }
+
+  async function handleReceiptConfirm() {
+    if (!receiptCapturePayload) return;
+
+    console.info("[demo] Receipt confirmation requested");
+    setReceiptError(null);
+    setReceiptScanState("saving");
+
+    try {
+      const ensuredTripId = await onEnsureDemoTrip();
+      if (!ensuredTripId) throw new Error("Trip could not be created");
+
+      const res = await fetch(`/api/trips/${ensuredTripId}/receipts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: receiptCapturePayload.imageBase64,
+          mimeType: receiptCapturePayload.mimeType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Receipt save failed");
+
+      console.info("[demo] Receipt saved to trip", data);
+      setReceiptSheetOpen(false);
+      resetReceiptFlow();
+    } catch (err) {
+      console.error("[demo] Receipt save failed", err);
+      setReceiptError(err instanceof Error ? err.message : "Failed to save receipt");
+      setReceiptScanState("ready");
+    }
+  }
+
+  function handleReceiptSheetClose() {
+    if (receiptSheetLoading) return;
+    console.info("[demo] Receipt result sheet closed");
+    setReceiptSheetOpen(false);
+    resetReceiptFlow();
+  }
+
+  function handleReceiptRetake() {
+    console.info("[demo] Receipt retake requested");
+    setReceiptSheetOpen(false);
+    resetReceiptFlow();
+    setReceiptCaptureOpen(true);
+  }
 
   function handlePointerDown(e: React.PointerEvent) {
     dragging.current = true;
@@ -2037,6 +2178,40 @@ function PhoneShell({
     }
   }
 
+  function handleRcPointerDown(e: React.PointerEvent) {
+    rcDragging.current = true;
+    rcDragStartY.current = e.clientY;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleRcPointerMove(e: React.PointerEvent) {
+    if (!rcDragging.current) return;
+    const dy = Math.max(0, e.clientY - rcDragStartY.current);
+    if (receiptSheetRef.current) {
+      receiptSheetRef.current.style.transition = "none";
+      receiptSheetRef.current.style.transform = `translateY(${dy}px)`;
+    }
+  }
+
+  function handleRcPointerUp(e: React.PointerEvent) {
+    if (!rcDragging.current) return;
+    rcDragging.current = false;
+    const dy = Math.max(0, e.clientY - rcDragStartY.current);
+    if (receiptSheetRef.current) {
+      receiptSheetRef.current.style.transition = "";
+      receiptSheetRef.current.style.transform = "";
+    }
+    if (dy > 100) handleReceiptSheetClose();
+  }
+
+  function handleRcPointerCancel() {
+    rcDragging.current = false;
+    if (receiptSheetRef.current) {
+      receiptSheetRef.current.style.transition = "";
+      receiptSheetRef.current.style.transform = "";
+    }
+  }
+
   // Last assistant message index for showing card
   const lastAssistantIdx = chatMessages.reduce<number>((acc, m, i) => m.role === "assistant" ? i : acc, -1);
 
@@ -2086,7 +2261,6 @@ function PhoneShell({
                       {msg.role === "assistant" && (
                         <div className={styles.chatAvatarWrap}>
                           <div className={styles.chatAvatar}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                           </div>
                         </div>
@@ -2107,7 +2281,6 @@ function PhoneShell({
                   <div className={[styles.chatMsg, styles.chatMsgAssistant].join(" ")}>
                     <div className={styles.chatAvatarWrap}>
                       <div className={styles.chatAvatar}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img alt="Kelli" src="/kelli-icon.png" style={{ width: 34, height: 34, objectFit: "contain", display: "block", flexShrink: 0 }} />
                       </div>
                     </div>
@@ -2187,15 +2360,37 @@ function PhoneShell({
               >
                 <Pencil size={22} />
               </button>
-              <button
-                aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
-                className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
-                disabled={isProcessing}
-                onClick={onMicClick}
-                type="button"
-              >
-                {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
-              </button>
+              {isLiveTravelFrame ? (
+                <div className={styles.controlsCenter}>
+                  <button
+                    aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                    className={[styles.iconButton, styles.primaryButtonSmall, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
+                    disabled={isProcessing}
+                    onClick={onMicClick}
+                    type="button"
+                  >
+                    {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} size={22} />}
+                  </button>
+                  <button
+                    aria-label="Scan a receipt"
+                    className={[styles.iconButton, styles.sideButton].join(" ")}
+                    onClick={handleReceiptOpen}
+                    type="button"
+                  >
+                    <ReceiptText size={22} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  aria-label={isListening ? "Stop recording" : isProcessing ? "Processing…" : "Speak to Kelli"}
+                  className={[styles.iconButton, styles.primaryButton, (isListening || isProcessing) ? styles.buttonActive : ""].join(" ")}
+                  disabled={isProcessing}
+                  onClick={onMicClick}
+                  type="button"
+                >
+                  {analyserNode ? <AudioBars analyserNode={analyserNode} /> : <MicIcon active={isListening} />}
+                </button>
+              )}
               <button
                 aria-label="Switch to chat mode"
                 className={[styles.iconButton, styles.sideButton, styles.rightButton].join(" ")}
@@ -2208,6 +2403,110 @@ function PhoneShell({
           )}
         </div>
 
+        {receiptCaptureOpen ? (
+          <DemoReceiptCapture onCapture={handleReceiptCaptured} onClose={handleReceiptCameraClose} />
+        ) : null}
+
+        <div
+          className={[styles.sheetBackdrop, styles.receiptBackdrop, receiptSheetOpen ? styles.sheetBackdropVisible : ""].join(" ")}
+          onClick={handleReceiptSheetClose}
+        />
+        <div ref={receiptSheetRef} className={[styles.sheet, styles.receiptSheet, receiptSheetOpen ? styles.sheetOpen : ""].join(" ")}>
+          <div className={styles.sheetDragArea} onPointerCancel={handleRcPointerCancel} onPointerDown={handleRcPointerDown} onPointerMove={handleRcPointerMove} onPointerUp={handleRcPointerUp}>
+            <div className={styles.sheetHandle} />
+          </div>
+          <div className={styles.sheetScroll}>
+            {receiptSheetLoading ? (
+              <SheetDotsLoader />
+            ) : (
+              <div className={styles.sheetContent}>
+              <h2 className={styles.sheetTitle}>
+                {receiptScanState === "error" ? "Receipt Scan Failed" : "Receipt Captured"}
+              </h2>
+
+              {receiptPreviewUrl ? (
+                <div style={{ borderRadius: 22, overflow: "hidden", border: "1px solid rgba(159, 171, 183, 0.18)", background: "#f6f7f8" }}>
+                  <img alt="Captured receipt" src={receiptPreviewUrl} style={{ display: "block", width: "100%", maxHeight: 210, objectFit: "contain" }} />
+                </div>
+              ) : null}
+
+                {receiptScanState === "ready" && receiptScanResult ? (
+                  <div className={styles.actionStack}>
+                  <div className={styles.confirmCard}>
+                    <div className={styles.confirmTitle}>{receiptScanResult.merchant}</div>
+                    <div className={styles.confirmBody}>
+                      {receiptScanResult.date} · {toTitleCase(receiptScanResult.category)} · {receiptScanResult.amount} {receiptScanResult.currency}
+                    </div>
+                  </div>
+                  <div className={styles.confirmList}>
+                    {false ? [
+                      { icon: "🏷️", label: "Category", val: toTitleCase(receiptScanResult.category) },
+                      { icon: "💶", label: "Original", val: `${receiptScanResult.amount} ${receiptScanResult.currency}` },
+                      { icon: "💵", label: "USD Total", val: `$${receiptScanResult.totalUsd}` },
+                      { icon: "🎯", label: "Confidence", val: `${Math.round(receiptScanResult.confidence * 100)}%` },
+                    ].map((item) => (
+                      <div className={styles.confirmRow} key={item.label}>
+                        <span className={styles.confirmIcon}>{item.icon}</span>
+                        <span className={styles.confirmLabel}>{item.label}</span>
+                        <span className={styles.confirmVal}>{item.val}</span>
+                      </div>
+                    )) : null}
+                  </div>
+                  <div className={styles.confirmList}>
+                    {[
+                      { icon: <Tag size={16} strokeWidth={2} />, label: "Category", val: toTitleCase(receiptScanResult.category) },
+                      { icon: <ReceiptText size={16} strokeWidth={2} />, label: "Original", val: `${receiptScanResult.amount} ${receiptScanResult.currency}` },
+                      { icon: <DollarSign size={16} strokeWidth={2} />, label: "USD Total", val: `$${receiptScanResult.totalUsd}` },
+                    ].map((item) => (
+                      <div className={styles.confirmRow} key={item.label}>
+                        <span className={styles.confirmIcon}>{item.icon}</span>
+                        <span className={styles.confirmLabel}>{item.label}</span>
+                        <span className={styles.confirmVal}>{item.val}</span>
+                      </div>
+                    ))}
+                  </div>
+                  </div>
+                ) : null}
+
+                {receiptScanState === "ready" && receiptError ? (
+                  <div className={styles.confirmCard}>
+                    <div className={styles.confirmTitle}>Unable to Save Receipt</div>
+                    <div className={styles.confirmBody}>{receiptError}</div>
+                  </div>
+                ) : null}
+
+                {receiptScanState === "error" ? (
+                <div className={styles.confirmCard}>
+                  <div className={styles.confirmTitle}>Try Another Photo</div>
+                  <div className={styles.confirmBody}>
+                    {receiptError ?? "The receipt couldn’t be parsed from this image. Retake it with the full page in frame."}
+                  </div>
+                </div>
+              ) : null}
+              </div>
+            )}
+          </div>
+          <div className={styles.sheetFooter}>
+            {receiptSheetLoading ? null : (
+              <div className={styles.sheetActions}>
+                {receiptScanState === "ready" ? (
+                  <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={() => void handleReceiptConfirm()} type="button">
+                    Looks Right
+                  </button>
+                ) : null}
+                {receiptScanState === "error" ? (
+                <button className={[styles.actionButton, styles.primaryAction].join(" ")} onClick={handleReceiptRetake} type="button">
+                  Try Again
+                </button>
+              ) : null}
+                <button className={[styles.actionButton, styles.secondaryAction].join(" ")} onClick={receiptScanState === "ready" ? handleReceiptRetake : handleReceiptSheetClose} type="button">
+                  {receiptScanState === "ready" ? "Adjust" : "Close"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className={[styles.sheetBackdrop, sheetOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onSheetClose} />
 
         <div ref={sheetRef} className={[styles.sheet, sheetOpen ? styles.sheetOpen : ""].join(" ")}>
@@ -2218,7 +2517,6 @@ function PhoneShell({
           <div className={styles.sheetFooter}>{sheetFooter}</div>
         </div>
 
-        {/* Roadmap overlay */}
         <div className={[styles.sheetBackdrop, styles.roadmapBackdrop, roadmapOpen ? styles.sheetBackdropVisible : ""].join(" ")} onClick={onRoadmapClose} />
         <div ref={roadmapSheetRef} className={[styles.sheet, styles.roadmapSheet, roadmapOpen ? styles.sheetOpen : ""].join(" ")}>
           <div className={styles.sheetDragArea} onPointerCancel={handleRPointerCancel} onPointerDown={handleRPointerDown} onPointerMove={handleRPointerMove} onPointerUp={handleRPointerUp}>
@@ -2872,30 +3170,21 @@ export default function DemoPage() {
     setIsProcessing(true);
     try {
       if (currentIndex === 1) {
-        const data = tripData ?? DEMO_DEFAULTS;
-        const res = await fetch("/api/trips", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            destination: { city: data.city, country: data.country, officeLat: 45.4654, officeLng: 9.1866 },
-            dates: { departure: data.departure, return: data.returnDate },
-          }),
-        });
-        if (res.ok) {
-          const trip = (await res.json()) as { _id: string };
-          setTripId(trip._id);
+        await ensureDemoTrip();
+      } else {
+        const ensuredTripId = tripId ?? await ensureDemoTrip();
+        if (ensuredTripId) {
+          await executeFrameAction(currentIndex, ensuredTripId, {
+            flight: selectedFlight,
+            hotel: selectedHotel,
+            selectedReturn,
+            bundle: selectedBundle,
+            liveFlightGroups: liveFlightResults,
+            liveHotels,
+            tripCountry: tripData?.country ?? DEMO_DEFAULTS.country,
+            visaInfo,
+          });
         }
-      } else if (tripId) {
-        await executeFrameAction(currentIndex, tripId, {
-          flight: selectedFlight,
-          hotel: selectedHotel,
-          selectedReturn,
-          bundle: selectedBundle,
-          liveFlightGroups: liveFlightResults,
-          liveHotels,
-          tripCountry: tripData?.country ?? DEMO_DEFAULTS.country,
-          visaInfo,
-        });
       }
 
       setFrameCompleted((prev) => ({ ...prev, [currentIndex]: true }));
@@ -2921,6 +3210,29 @@ export default function DemoPage() {
     setOverlayReady(false);
     setOverlayDismissed(false);
     setCurrentIndex(nextIndex);
+  }
+
+  async function ensureDemoTrip() {
+    if (tripId) return tripId;
+
+    const data = tripData ?? DEMO_DEFAULTS;
+    try {
+      const res = await fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destination: { city: data.city, country: data.country, officeLat: 45.4654, officeLng: 9.1866 },
+          dates: { departure: data.departure, return: data.returnDate },
+        }),
+      });
+
+      if (!res.ok) return null;
+      const trip = (await res.json()) as { _id: string };
+      setTripId(trip._id);
+      return trip._id;
+    } catch {
+      return null;
+    }
   }
 
   if (status === "unauthenticated") {
@@ -3043,18 +3355,21 @@ export default function DemoPage() {
   }
 
   const canConfirmCurrentFrame = true;
+  const isSheetLoading = isProcessing || (currentIndex === 2 && isFlightSearchLoading);
 
-  const scrollContent = (
+  const scrollContent = isSheetLoading ? (
+    <SheetDotsLoader />
+  ) : (
     <div className={styles.sheetContent}>
       <h2 className={styles.sheetTitle}>{frame.sheetTitle}</h2>
       {renderFrameVisual()}
     </div>
   );
 
-  const footerContent = (
+  const footerContent = isSheetLoading ? null : (
     <div className={styles.sheetActions}>
       <button
-        className={[styles.actionButton, styles.primaryAction, isProcessing ? styles.buttonLoading : ""].join(" ")}
+        className={[styles.actionButton, styles.primaryAction].join(" ")}
         disabled={isProcessing || frameCompleted[currentIndex] || !canConfirmCurrentFrame}
         onClick={() => void handlePrimary()}
         type="button"
@@ -3089,6 +3404,7 @@ export default function DemoPage() {
         onResetDemo={handleResetDemo}
         onRoadmapClose={handleRoadmapClose}
         onRoadmapOpen={handleRoadmapOpen}
+        onEnsureDemoTrip={ensureDemoTrip}
         onSheetClose={handleSheetClose}
         roadmapOpen={roadmapOpen}
         sheetFooter={footerContent}

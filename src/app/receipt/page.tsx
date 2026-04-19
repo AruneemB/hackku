@@ -51,11 +51,13 @@ export default function ReceiptScannerPage() {
   const streamRef = useRef<MediaStream | null>(null)
 
   const stopWebcam = useCallback(() => {
+    console.info("[receipt] stopping webcam stream")
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
   }, [])
 
   const startWebcam = useCallback(async () => {
+    console.info("[receipt] requesting camera access")
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
@@ -63,20 +65,29 @@ export default function ReceiptScannerPage() {
       streamRef.current = stream
       if (videoRef.current) videoRef.current.srcObject = stream
       setWebcamReady(true)
-    } catch {
+      console.info("[receipt] camera ready")
+    } catch (err) {
+      console.warn("[receipt] camera unavailable, falling back to file input", err)
       setWebcamReady(false)
     }
   }, [])
 
   useEffect(() => {
-    startWebcam()
-    return () => stopWebcam()
+    console.info("[receipt] page mounted")
+    const timer = window.setTimeout(() => {
+      void startWebcam()
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      stopWebcam()
+    }
   }, [startWebcam, stopWebcam])
 
   function captureFromWebcam() {
     const video = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return
+    console.info("[receipt] capturing frame from webcam")
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
     canvas.getContext("2d")!.drawImage(video, 0, 0)
@@ -89,6 +100,7 @@ export default function ReceiptScannerPage() {
   function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    console.info("[receipt] file selected", { name: file.name, type: file.type, size: file.size })
     const reader = new FileReader()
     reader.onload = (ev) => {
       setCapturedImage(ev.target?.result as string)
@@ -100,6 +112,7 @@ export default function ReceiptScannerPage() {
 
   async function scanWithGemini() {
     if (!capturedImage) return
+    console.info("[receipt] sending image to /api/receipt/scan")
     setError(null)
     setStep("scanning")
     try {
@@ -110,10 +123,12 @@ export default function ReceiptScannerPage() {
       })
       if (!res.ok) throw new Error((await res.json()).error ?? "Scan failed")
       const data: ScannedReceipt = await res.json()
+      console.info("[receipt] scan complete", data)
       setScanned(data)
       setCategory(data.category ?? "other")
       setStep("review")
     } catch (err) {
+      console.error("[receipt] scan failed", err)
       setError(err instanceof Error ? err.message : "Unknown error")
       setStep("preview")
     }
@@ -121,6 +136,7 @@ export default function ReceiptScannerPage() {
 
   async function saveToMongo() {
     if (!scanned) return
+    console.info("[receipt] saving parsed receipt", { merchant: scanned.merchant, category, totalUsd: scanned.totalUsd })
     setStep("saving")
     try {
       const res = await fetch("/api/receipt/save", {
@@ -137,15 +153,18 @@ export default function ReceiptScannerPage() {
       })
       if (!res.ok) throw new Error((await res.json()).error ?? "Save failed")
       const { id } = await res.json()
+      console.info("[receipt] save complete", { id })
       setSaved({ ...scanned, id, category })
       setStep("done")
     } catch (err) {
+      console.error("[receipt] save failed", err)
       setError(err instanceof Error ? err.message : "Unknown error")
       setStep("review")
     }
   }
 
   function reset() {
+    console.info("[receipt] resetting scanner")
     setCapturedImage(null)
     setScanned(null)
     setSaved(null)
@@ -252,7 +271,6 @@ export default function ReceiptScannerPage() {
         {step === "preview" && capturedImage && (
           <div className="flex flex-col gap-3">
             <div className="rounded-2xl overflow-hidden border border-gray-700">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={capturedImage}
                 alt="Captured receipt"

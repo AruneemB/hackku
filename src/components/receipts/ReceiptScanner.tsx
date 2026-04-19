@@ -21,7 +21,7 @@
 
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { useMascot } from "@/hooks/useMascot"
 import type { Receipt } from "@/types"
 
@@ -43,7 +43,14 @@ interface ScannedReceipt {
   confidence: number
 }
 
-export function ReceiptScanner({ tripId, onReceiptAdded }: ReceiptScannerProps) {
+export interface ReceiptScannerHandle {
+  openCamera: () => void
+}
+
+export const ReceiptScanner = forwardRef<ReceiptScannerHandle, ReceiptScannerProps>(function ReceiptScanner(
+  { tripId, onReceiptAdded },
+  ref
+) {
   const { say, setThinking } = useMascot()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const previewUrlRef = useRef<string | null>(null)
@@ -64,10 +71,18 @@ export function ReceiptScanner({ tripId, onReceiptAdded }: ReceiptScannerProps) 
     }
   }, [])
 
+  useImperativeHandle(ref, () => ({
+    openCamera() {
+      fileInputRef.current?.click()
+    },
+  }), [])
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
+    setError(null)
+    setScanned(null)
     setMimeType(file.type || "image/jpeg")
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     const url = URL.createObjectURL(file)
@@ -160,16 +175,17 @@ export function ReceiptScanner({ tripId, onReceiptAdded }: ReceiptScannerProps) 
           >
             📷 Capture Receipt
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFileChange}
-          />
         </div>
       )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       {/* Preview */}
       {scanState === "preview" && previewUrl && (
@@ -244,7 +260,9 @@ export function ReceiptScanner({ tripId, onReceiptAdded }: ReceiptScannerProps) 
       )}
     </div>
   )
-}
+})
+
+ReceiptScanner.displayName = "ReceiptScanner"
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
