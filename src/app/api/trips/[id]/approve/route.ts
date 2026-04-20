@@ -24,7 +24,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/google/oauth"
 import { connectToDatabase } from "@/lib/mongodb/client"
 import Trip from "@/lib/mongodb/models/Trip"
-import { sendApprovalRequest } from "@/lib/google/gmail"
+import { getManagerEmail, sendApprovalRequest } from "@/lib/google/gmail"
 
 type ApproveRouteContext = { params: Promise<{ id: string }> }
 
@@ -74,11 +74,10 @@ export async function POST(req: NextRequest, context: ApproveRouteContext) {
       "approvalThread.status": "pending",
     })
 
-    const managerEmail = process.env.MANAGER_EMAIL ?? fromEmail
     return NextResponse.json({
       success: true,
       gmailThreadId: threadId,
-      sentTo: managerEmail,
+      sentTo: getManagerEmail(),
     })
   } catch (err) {
     console.error("[approve]", err)

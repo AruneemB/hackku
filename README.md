@@ -1,109 +1,255 @@
-<div align="center">
-  <img src="public/mascot/greeting.png" alt="Lockey Mascot" width="200" />
-  <h1>Lockey</h1>
-  <p><i>Motto in progress</i></p>
+<p align="center">
+  <img src="public/lockey-icon.png" alt="Lockey mascot" width="120">
+</p>
 
-  [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
-  [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
-  [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
-  [![MongoDB Atlas](https://img.shields.io/badge/MongoDB_Atlas-Vector_Search-47A248?logo=mongodb)](https://www.mongodb.com/atlas)
-  [![Google Gemini](https://img.shields.io/badge/Google_Gemini-1.5_Pro-4285F4?logo=google-gemini)](https://ai.google.dev/)
-  [![ElevenLabs](https://img.shields.io/badge/ElevenLabs-TTS-orange)](https://elevenlabs.io/)
-</div>
+<h1 align="center">Lockey</h1>
 
----
+<p align="center">
+  <em>Your trip, handled.</em><br>
+  <em>From planning to post-trip, we've got you.</em>
+</p>
 
-## 🚀 Overview
-
-**Lockey** is an AI-powered corporate travel concierge designed to streamline the entire travel lifecycle. From the initial spark of planning to post-trip expense reporting, Lockey acts as a tireless, empathetic 2D mascot that guides travelers through policy compliance, live disruptions, and logistical hurdles.
-
-Built for **HackKU**, Lockey leverages cutting-edge AI (Google Gemini 1.5 Pro), multimodal vision, and real-time data to ensure corporate travelers stay focused on their work, while the concierge handles the rest.
+**An AI-powered corporate travel concierge built for the modern enterprise.** Lockey combines Google Gemini 1.5 Pro, MongoDB Atlas Vector Search, and a real-time crisis engine to guide business travelers through the entire trip lifecycle — surfacing policy violations before they happen, drafting manager approval emails, and automatically rebooking disrupted flights, all through a conversational 2D mascot.
 
 ---
 
-## 🧠 Inspiration
-Lockey emerged as an answer to Lockton Companies’ search for a solution to the stressful, often bureaucratic nightmare that business travel can become. Many people have stories about missed flights, confusing expense policies, or the frustration of waiting for a manager to approve a last-minute booking. Lockey is our attempt to turn those feared, disconnected tasks into a single, guided conversation with a companion that anticipates what you need before you even ask.
+## The Problem
+
+Corporate travel is a bureaucratic maze. Employees waste hours comparing flights and hotels against policy caps, chasing manager approvals over email, and scrambling to rebook when flights are delayed. Expense reports become a post-trip nightmare of lost receipts and unclear reimbursement rules.
+
+Existing tools give travelers a booking interface. None give them an intelligent companion that *understands* company policy, anticipates problems, and handles the paperwork autonomously.
+
+## Our Solution
+
+Lockey bridges this gap with three core ideas:
+
+**Policy-aware planning.** Every flight and hotel recommendation is filtered through a vector search index of the corporate travel handbook. Lockey flags over-budget hotels, missing visas, and CEO-approval requirements *before* the traveler selects anything — not after the manager rejects it.
+
+**Automated approvals.** Rather than sending a wall-of-text email, Lockey uses Gemini to draft a structured approval request with flight details, hotel rationale, and compliance flags. The manager replies "APPROVED" or "REJECTED" in plain English — Lockey parses the reply and recovers automatically if rejected.
+
+**Proactive crisis management.** When a flight is delayed, Lockey doesn't wait for the traveler to notice. It detects the disruption via a MongoDB TimeSeries collection, finds the next available alternative, calculates the cost delta, and drafts an exception request to the manager — all before the traveler has left the departure gate.
 
 ---
 
-## ✨ Key Pillars
+## How It Works
 
-- **🤖 Proactive AI Concierge**: A 2D mascot with emotional intelligence, powered by ElevenLabs TTS, that shifts its tone (neutral, excited, empathetic, urgent) based on the travel context.
-- **🗺️ Intelligent Planning**: A "Fair Grid" flight search algorithm that finds the best value by scanning multiple airports and dates, coupled with Geo-aware hotel search.
-- **🛡️ Policy & Compliance**: Real-time vector search against corporate travel handbooks to ensure every booking is within budget and compliant with visa requirements.
-- **⚡ Crisis Management**: Real-time disruption handling using MongoDB TimeSeries collections. If a flight is delayed, Lockey automatically finds alternatives and drafts exception requests.
-- **📸 Multimodal Expenses**: Snap a photo of any receipt, and Gemini 1.5 Pro extracts the merchant, amount, and currency, automatically converting it to USD and filing it.
-
----
-
-## 🛠️ Technical Deep Dive
-
-### 🔍 Vector Search & RAG
-Lockey uses **MongoDB Atlas Vector Search** to perform Retrieval-Augmented Generation (RAG). Corporate policies and visa requirements are embedded using `text-embedding-004` (now `gemini-embedding-001`) and stored in Atlas. When a user plans a trip, Lockey queries these embeddings to provide instant, context-aware policy summaries.
-
-### 📊 Fair Grid Flight Search
-The Fair Grid algorithm expands the search radius up to 100 miles and explores a 5-day window. It calculates "Saturday-night savings" and presents three distinct bundles (Standard, Savings, and Value-Add) to the traveler.
-
-### 🕒 TimeSeries & Live Mode
-Flight statuses are tracked in a **MongoDB TimeSeries collection**, allowing Lockey to monitor for delays or cancellations. When a disruption is detected, a crisis workflow is triggered, leveraging Gemini to synthesize a rebooking strategy and draft communications to managers.
-
-### 👁️ Multimodal Vision
-The expense reporting system uses **Gemini 1.5 Pro's vision capabilities** to process receipts. It identifies PII, extracts financial data, and performs currency conversion in a single pass, ensuring high accuracy even for handwritten or poorly lit receipts.
-
----
-
-## 🏗️ Architecture
-
-```mermaid
-graph TD
-    A[Next.js App Router] --> B(Mascot Context / useMascot)
-    B --> C[ElevenLabs TTS]
-    A --> D[Gemini 1.5 Pro]
-    D --> E[Atlas Vector Search]
-    A --> F[MongoDB Atlas]
-    F --> G[(TimeSeries: Flight Status)]
-    F --> H[(GeoJSON: Preferred Vendors)]
-    A --> I[External APIs]
-    I --> J[SerpAPI: Google Flights]
-    I --> K[OpenWeatherMap]
-    I --> L[Gmail API]
+```
+                         ┌─────────────────────────────────┐
+                         │          FRAME 1: ONBOARDING    │
+                         │                                 │
+                         │  1. Google OAuth sign-in        │
+                         │  2. Passport expiry check       │
+                         │     └─► 6-month Schengen rule   │
+                         │  3. Trip details collected      │
+                         │     • Destination & dates       │
+                         │     • Budget cap                │
+                         │                                 │
+                         └──────────────┬──────────────────┘
+                                        │
+                                        ▼
+                         ┌─────────────────────────────────┐
+                         │       FRAMES 2-3: SEARCH        │
+                         │                                 │
+                         │  Fair Grid Flight Search        │
+                         │     └─► ±5 day date window      │
+                         │     └─► ±100 mi airport radius  │
+                         │     └─► Saturday-night savings  │
+                         │                                 │
+                         │  Geo-aware Hotel Search         │
+                         │     └─► $geoNear MongoDB query  │
+                         │     └─► Policy cap filtering    │
+                         │     └─► Preferred vendor badges │
+                         │                                 │
+                         └──────────────┬──────────────────┘
+                                        │
+                                        ▼
+┌───────────────────────────────────────────────────────────────┐
+│                   FRAME 4: POLICY & COMPLIANCE                │
+│                                                               │
+│   Travel handbook embedded with text-embedding-004            │
+│   ┌──────────────┐   vector query   ┌──────────────────────┐  │
+│   │ Trip Details │─────────────────►│ Atlas Vector Search  │  │
+│   └──────────────┘                  └──────────┬───────────┘  │
+│                                               │               │
+│                         Relevant policy chunks returned       │
+│                                               │               │
+│                              ┌────────────────▼───────────┐   │
+│                              │  Gemini synthesizes flags   │   │
+│                              │  • hotel_over_cap           │   │
+│                              │  • requires_visa            │   │
+│                              │  • requires_ceo_approval    │   │
+│                              └────────────────────────────┘   │
+└──────────────────────────────────┬────────────────────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────────┐
+                    │     FRAME 5: BUNDLE SELECTION    │
+                    │                                  │
+                    │  Option A — Standard             │
+                    │  Option B — Savings              │
+                    │  Option C — Strategic value-add  │
+                    │                                  │
+                    │  Gemini explains each tradeoff   │
+                    │  in plain English                │
+                    └──────────────┬───────────────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────────┐
+                    │     FRAME 6: APPROVAL EMAIL      │
+                    │                                  │
+                    │  Gemini drafts structured email  │
+                    │  with flight, hotel, and flags   │
+                    │     └─► Sent via Gmail API       │
+                    │                                  │
+                    │  Poll for manager reply          │
+                    │     └─► Gemini parses response   │
+                    │     └─► APPROVED or REJECTED     │
+                    └──────────────┬───────────────────┘
+                                   │
+                         ┌─────────┴──────────┐
+                         │                    │
+                      APPROVED            REJECTED
+                         │                    │
+                         ▼                    ▼
+              ┌────────────────┐  ┌───────────────────────┐
+              │  FRAME 8-9:   │  │ REJECTION RECOVERY    │
+              │  TRIP ACTIVE  │  │                       │
+              │               │  │ Auto-find compliant   │
+              │  MongoDB       │  │ bundle within caps    │
+              │  status →      │  │ Re-submit for         │
+              │  "active"      │  │ approval              │
+              └───────┬────────┘  └───────────────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────────────┐
+        │     FRAMES 10-11: CRISIS ENGINE     │
+        │                                     │
+        │  TimeSeries collection monitors     │
+        │  flight status in real time         │
+        │                                     │
+        │  On delay / cancellation:           │
+        │  ┌──────────────────────────────┐   │
+        │  │ Find next available flight   │   │
+        │  │ Calculate cost delta         │   │
+        │  │ Draft exception request      │   │
+        │  │ Lockey shifts to urgent tone │   │
+        │  └──────────────────────────────┘   │
+        └────────────────┬────────────────────┘
+                         │
+                         ▼
+        ┌─────────────────────────────────────┐
+        │    FRAME 12: ON-GROUND SUPPORT      │
+        │                                     │
+        │  Airport → hotel distance computed  │
+        │  Transport mode recommended:        │
+        │  Walk / Rideshare / Company car     │
+        │  Uber deep link with coordinates   │
+        └────────────────┬────────────────────┘
+                         │
+                         ▼
+        ┌─────────────────────────────────────┐
+        │    FRAME 15: EXPENSE REPORTING      │
+        │                                     │
+        │  Camera / file upload               │
+        │     └─► Gemini 1.5 Pro vision       │
+        │     └─► Extract merchant, amount,   │
+        │         currency, date              │
+        │     └─► PII anonymized              │
+        │     └─► Currency → USD              │
+        │  Saved to MongoDB, filed to trip    │
+        └─────────────────────────────────────┘
 ```
 
 ---
 
-## 💻 Tech Stack
+## Technology Stack
 
-| Layer | Technology |
-|---|---|
-| **Framework** | Next.js 16 (App Router) |
-| **Language** | TypeScript |
-| **Styling** | Tailwind CSS 4 |
-| **Database** | MongoDB Atlas (Vector Search, GeoJSON, TimeSeries) |
-| **AI (Text/Vision)**| Google Gemini 1.5 Pro |
-| **AI (Voice)** | ElevenLabs TTS (4 emotional tones) |
-| **Auth** | NextAuth.js + Google OAuth |
-| **APIs** | SerpAPI, OpenWeatherMap, Gmail API |
+### Next.js 16 / TypeScript (Full-Stack)
+The app runs on Next.js App Router, using server components for data fetching and client components for the mascot, real-time polling, and interactive UI frames. TypeScript enforces type safety across all 40+ API routes and shared types.
+
+### Google Gemini 1.5 Pro (AI Engine)
+Gemini powers five distinct tasks: approval email drafting, manager reply parsing, compliance flag synthesis, receipt data extraction, and match rationale generation. The multimodal vision API handles receipt images from any angle or lighting condition.
+
+### MongoDB Atlas (Data Layer)
+Three specialized Atlas features power Lockey's intelligence:
+- **Vector Search** — the travel handbook is embedded and queried for RAG-based compliance checks
+- **GeoJSON + $geoNear** — hotel search is anchored to office coordinates from `preferred-vendors.json`
+- **TimeSeries collections** — flight status updates are stored as time series for real-time delay detection
+
+### ElevenLabs TTS (Mascot Voice)
+Lockey speaks with four emotional tones mapped to distinct ElevenLabs voice IDs: neutral (planning), excited (approval), empathetic (rejection or delay), and urgent (crisis). The mascot's facial expression and speech bubble update together.
+
+### NextAuth.js + Google OAuth 2.0
+Authentication uses Google Sign-In. The OAuth access token is persisted in the session and used directly to call the Gmail API — no intermediate token storage, no additional backend auth layer.
+
+### SerpAPI / OpenWeatherMap / Gmail API
+- **SerpAPI** — Google Flights results with real pricing and availability
+- **OpenWeatherMap** — destination forecast shown during compliance check
+- **Gmail API** — approval emails sent from the traveler's own account; manager replies polled every 5 seconds
 
 ---
 
-## 🏁 Getting Started
+## Project Structure
+
+```
+hackku/
+├── data/
+│   ├── policy/
+│   │   ├── budget-caps.json          # City hotel caps and office coordinates
+│   │   └── travel-handbook.md        # Source for vector search embeddings
+│   ├── vendors/
+│   │   └── preferred-vendors.json    # GeoJSON preferred hotel points
+│   └── visa/
+│       └── visa-requirements.json    # Visa data by country
+├── src/
+│   ├── app/
+│   │   ├── api/                      # 40+ API routes
+│   │   ├── scenario/page.tsx         # Scenario phone UI
+│   │   ├── trip/[id]/                # Trip hub routes (live, planning, post-trip)
+│   │   └── page.tsx                  # Main demo flow (15 frames)
+│   ├── components/
+│   │   ├── approval/                 # ApprovalStatus, RejectionRecovery
+│   │   ├── flights/                  # FlightCard, FlightGrid
+│   │   ├── hotels/                   # HotelCard, HotelMap
+│   │   ├── mascot/                   # Mascot, SpeechBubble, ToneIndicator
+│   │   ├── receipts/                 # ReceiptScanner, DemoReceiptCapture
+│   │   └── trip/                     # TripChecklist, TripSummary
+│   ├── hooks/
+│   │   ├── useMascot.ts              # Tone + speech management
+│   │   └── useTrip.ts                # Trip fetch and refresh
+│   ├── lib/
+│   │   ├── flights/fairGrid.ts       # Fair Grid search algorithm
+│   │   ├── gemini/                   # Gemini client, prompts, multimodal
+│   │   ├── google/gmail.ts           # Gmail send + approval parsing
+│   │   ├── hotels/                   # Geo-aware hotel search
+│   │   ├── mongodb/                  # Client, models (Trip, User, Policy…)
+│   │   └── policy/vectorSearch.ts    # RAG against travel handbook
+│   └── types/                        # Shared TypeScript interfaces
+├── scripts/
+│   ├── seed-mongodb.ts               # Populate initial data
+│   └── create-vector-index.ts        # Atlas Vector Search index setup
+└── tests/                            # Vitest test suite
+```
+
+---
+
+## Getting Started
 
 ### Prerequisites
 - Node.js 20+
-- MongoDB Atlas Cluster (Free Tier)
-- API Keys: Google AI Studio, ElevenLabs, SerpAPI, OpenWeatherMap, Google Cloud Console
+- MongoDB Atlas cluster (Free Tier works)
+- API keys: Google AI Studio, ElevenLabs, SerpAPI, OpenWeatherMap, Google Cloud Console
 
 ### Setup
 
-1. **Clone & Install**:
+1. **Clone & install**
    ```bash
-   git clone https://github.com/AruneemB/lockey.git
-   cd lockey
+   git clone https://github.com/AruneemB/hackku.git
+   cd hackku
    npm install
    ```
 
-2. **Environment Configuration**:
-   Create a `.env.local` file with the following:
+2. **Environment configuration** — create `.env.local`:
    ```env
    MONGODB_URI=your_mongodb_uri
    NEXTAUTH_SECRET=your_secret
@@ -114,32 +260,30 @@ graph TD
    ELEVENLABS_VOICE_ID=your_voice_id
    SERPAPI_KEY=your_serpapi_key
    OPENWEATHERMAP_KEY=your_openweathermap_key
+   MANAGER_EMAIL=manager@yourcompany.com
    ```
 
-3. **Database Seeding**:
+3. **Seed the database**
    ```bash
-   npm run seed          # Seeds users, policies, vendors, and visa info
-   npm run create-index  # Creates the Atlas Vector Search index
+   npm run seed          # Hotels, policies, vendors, visa data
+   npm run create-index  # Atlas Vector Search index
    ```
 
-4. **Run Dev Server**:
+4. **Run**
    ```bash
    npm run dev
    ```
 
 ---
 
-## 🎭 Demo Flow
+## Future Directions
 
-1. **Onboarding**: Sign in via Google. Lockey greets you and identifies an expiring passport.
-2. **Planning**: Search for a trip (e.g., Milan, Italy). Watch Lockey analyze 100+ flight combinations.
-3. **Compliance**: View the policy summary generated via Vector Search.
-4. **Approval**: Select a bundle. Lockey drafts a rationale and sends a Gmail approval request.
-5. **Live Mode**: Experience a simulated flight delay. Lockey's tone shifts to empathetic/urgent as it provides a rebooking solution.
-6. **Post-Trip**: Scan a physical receipt. Watch Gemini extract data and finalize the expense report.
+- **Multi-destination trips.** Chain approval and crisis logic across legs of a complex itinerary (e.g. NYC → London → Milan → home).
+- **Calendar integration.** Pull meeting schedules from Google Calendar to auto-suggest flight windows that avoid back-to-back conflicts.
+- **Expense forecasting.** Before the trip, predict total spend based on historical receipts from similar destinations and flag likely overages.
+- **Manager dashboard.** A lightweight approval portal so managers can approve, reject, or comment without leaving their email client.
+- **Offline mode.** Cache trip details, policy rules, and hotel info for areas with poor connectivity (airports, international transit).
 
 ---
 
-<div align="center">
-  Built with ❤️ for HackKU 2026
-</div>
+*Built at HackKU 2026.*

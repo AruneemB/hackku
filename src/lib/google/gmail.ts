@@ -19,6 +19,12 @@
 import type { Trip, TripBundle } from "@/types"
 import { geminiModel } from "@/lib/gemini/client"
 
+const DEFAULT_MANAGER_EMAIL = "micahtid@gmail.com"
+
+export function getManagerEmail(): string {
+  return process.env.MANAGER_EMAIL ?? process.env.NEXT_PUBLIC_MANAGER_EMAIL ?? DEFAULT_MANAGER_EMAIL
+}
+
 function fmtDate(d: Date | string) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
 }
@@ -81,7 +87,7 @@ export async function sendApprovalRequest(
   trip: Trip,
   bundle: TripBundle
 ): Promise<string> {
-  const managerEmail = process.env.MANAGER_EMAIL ?? fromEmail
+  const managerEmail = getManagerEmail()
   const dest = `${trip.destination.city}, ${trip.destination.country}`
   const dates = `${fmtDate(trip.dates.departure)} – ${fmtDate(trip.dates.return)}`
   const subject = `Trip Approval Request: ${dest}, ${dates}`

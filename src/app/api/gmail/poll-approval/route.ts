@@ -29,7 +29,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/google/oauth"
-import { parseManagerReplyWithGemini } from "@/lib/google/gmail"
+import { getManagerEmail, parseManagerReplyWithGemini } from "@/lib/google/gmail"
 
 async function getAccessToken(session: Awaited<ReturnType<typeof getServerSession>>): Promise<string | null> {
   if (!session) return null
@@ -129,7 +129,7 @@ If the trip is approved, flaggedItems should be [] and changes should be {}.
 Only include keys in changes that the manager explicitly mentioned.`
 
   const result = await geminiModel.generateContent(prompt)
-  let text = result.response.text().replace(/```json/gi, "").replace(/```/g, "").trim()
+  const text = result.response.text().replace(/```json/gi, "").replace(/```/g, "").trim()
 
   try {
     return JSON.parse(text)
@@ -145,10 +145,7 @@ export async function GET(req: Request) {
     const session = await getServerSession(authOptions)
     const accessToken = await getAccessToken(session)
 
-    const managerEmail = process.env.MANAGER_EMAIL ?? process.env.NEXT_PUBLIC_MANAGER_EMAIL
-    if (!managerEmail) {
-      return NextResponse.json({ error: "MANAGER_EMAIL not configured" }, { status: 500 })
-    }
+    const managerEmail = getManagerEmail()
 
     if (!accessToken) {
       // No OAuth token — return a demo/mock response for testing without login
