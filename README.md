@@ -9,7 +9,7 @@
   <em>From planning to post-trip, we've got you.</em>
 </p>
 
-**An AI-powered corporate travel concierge built for the modern enterprise.** Lockey combines Google Gemini 1.5 Pro, MongoDB Atlas Vector Search, and a real-time crisis engine to guide business travelers through the entire trip lifecycle — surfacing policy violations before they happen, drafting manager approval emails, and automatically rebooking disrupted flights, all through a conversational 2D mascot.
+**An AI-powered corporate travel concierge built for the modern enterprise.** Lockey combines Google Gemini 1.5 Pro, MongoDB Atlas Vector Search, and a real-time crisis engine to guide business travelers through the entire trip lifecycle—surfacing policy violations before they happen, drafting manager approval emails, and automatically rebooking disrupted flights, all through a conversational 2D mascot.
 
 ---
 
@@ -23,11 +23,11 @@ Existing tools give travelers a booking interface. None give them an intelligent
 
 Lockey bridges this gap with three core ideas:
 
-**Policy-aware planning.** Every flight and hotel recommendation is filtered through a vector search index of the corporate travel handbook. Lockey flags over-budget hotels, missing visas, and CEO-approval requirements *before* the traveler selects anything — not after the manager rejects it.
+**Policy-aware planning.** Every flight and hotel recommendation is filtered through a vector search index of the corporate travel handbook. Lockey flags over-budget hotels, missing visas, and CEO-approval requirements *before* the traveler selects anything—not after the manager rejects it.
 
-**Automated approvals.** Rather than sending a wall-of-text email, Lockey uses Gemini to draft a structured approval request with flight details, hotel rationale, and compliance flags. The manager replies "APPROVED" or "REJECTED" in plain English — Lockey parses the reply and recovers automatically if rejected.
+**Automated approvals.** Rather than sending a wall-of-text email, Lockey uses Gemini to draft a structured approval request with flight details, hotel rationale, and compliance flags. The manager replies "APPROVED" or "REJECTED" in plain English—Lockey parses the reply and recovers automatically if rejected.
 
-**Proactive crisis management.** When a flight is delayed, Lockey doesn't wait for the traveler to notice. It detects the disruption via a MongoDB TimeSeries collection, finds the next available alternative, calculates the cost delta, and drafts an exception request to the manager — all before the traveler has left the departure gate.
+**Proactive crisis management.** When a flight is delayed, Lockey doesn't wait for the traveler to notice. It detects the disruption via a MongoDB TimeSeries collection, finds the next available alternative, calculates the cost delta, and drafts an exception request to the manager—all before the traveler has left the departure gate.
 
 ---
 
@@ -74,10 +74,10 @@ Lockey bridges this gap with three core ideas:
 │                         Relevant policy chunks returned       │
 │                                               │               │
 │                              ┌────────────────▼───────────┐   │
-│                              │  Gemini synthesizes flags   │   │
-│                              │  • hotel_over_cap           │   │
-│                              │  • requires_visa            │   │
-│                              │  • requires_ceo_approval    │   │
+│                              │  Gemini synthesizes flags  │   │
+│                              │  • hotel_over_cap          │   │
+│                              │  • requires_visa           │   │
+│                              │  • requires_ceo_approval   │   │
 │                              └────────────────────────────┘   │
 └──────────────────────────────────┬────────────────────────────┘
                                    │
@@ -85,9 +85,9 @@ Lockey bridges this gap with three core ideas:
                     ┌──────────────────────────────────┐
                     │     FRAME 5: BUNDLE SELECTION    │
                     │                                  │
-                    │  Option A — Standard             │
-                    │  Option B — Savings              │
-                    │  Option C — Strategic value-add  │
+                    │  Option A—Standard               │
+                    │  Option B—Savings                │
+                    │  Option C—Strategic value-add    │
                     │                                  │
                     │  Gemini explains each tradeoff   │
                     │  in plain English                │
@@ -112,9 +112,9 @@ Lockey bridges this gap with three core ideas:
                          │                    │
                          ▼                    ▼
               ┌────────────────┐  ┌───────────────────────┐
-              │  FRAME 8-9:   │  │ REJECTION RECOVERY    │
-              │  TRIP ACTIVE  │  │                       │
-              │               │  │ Auto-find compliant   │
+              │  FRAME 8-9:    │  │ REJECTION RECOVERY    │
+              │  TRIP ACTIVE   │  │                       │
+              │                │  │ Auto-find compliant   │
               │  MongoDB       │  │ bundle within caps    │
               │  status →      │  │ Re-submit for         │
               │  "active"      │  │ approval              │
@@ -143,7 +143,7 @@ Lockey bridges this gap with three core ideas:
         │  Airport → hotel distance computed  │
         │  Transport mode recommended:        │
         │  Walk / Rideshare / Company car     │
-        │  Uber deep link with coordinates   │
+        │  Uber deep link with coordinates    │
         └────────────────┬────────────────────┘
                          │
                          ▼
@@ -172,20 +172,20 @@ Gemini powers five distinct tasks: approval email drafting, manager reply parsin
 
 ### MongoDB Atlas (Data Layer)
 Three specialized Atlas features power Lockey's intelligence:
-- **Vector Search** — the travel handbook is embedded and queried for RAG-based compliance checks
-- **GeoJSON + $geoNear** — hotel search is anchored to office coordinates from `preferred-vendors.json`
-- **TimeSeries collections** — flight status updates are stored as time series for real-time delay detection
+- **Vector Search**—the travel handbook is embedded and queried for RAG-based compliance checks
+- **GeoJSON + $geoNear**—hotel search is anchored to office coordinates from `preferred-vendors.json`
+- **TimeSeries collections**—flight status updates are stored as time series for real-time delay detection
 
 ### ElevenLabs TTS (Mascot Voice)
 Lockey speaks with four emotional tones mapped to distinct ElevenLabs voice IDs: neutral (planning), excited (approval), empathetic (rejection or delay), and urgent (crisis). The mascot's facial expression and speech bubble update together.
 
 ### NextAuth.js + Google OAuth 2.0
-Authentication uses Google Sign-In. The OAuth access token is persisted in the session and used directly to call the Gmail API — no intermediate token storage, no additional backend auth layer.
+Authentication uses Google Sign-In. The OAuth access token is persisted in the session and used directly to call the Gmail API—no intermediate token storage, no additional backend auth layer.
 
 ### SerpAPI / OpenWeatherMap / Gmail API
-- **SerpAPI** — Google Flights results with real pricing and availability
-- **OpenWeatherMap** — destination forecast shown during compliance check
-- **Gmail API** — approval emails sent from the traveler's own account; manager replies polled every 5 seconds
+- **SerpAPI**—Google Flights results with real pricing and availability
+- **OpenWeatherMap**—destination forecast shown during compliance check
+- **Gmail API**—approval emails sent from the traveler's own account; manager replies polled every 5 seconds
 
 ---
 
@@ -249,7 +249,7 @@ hackku/
    npm install
    ```
 
-2. **Environment configuration** — create `.env.local`:
+2. **Environment configuration**—create `.env.local`:
    ```env
    MONGODB_URI=your_mongodb_uri
    NEXTAUTH_SECRET=your_secret
